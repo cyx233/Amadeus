@@ -4,3 +4,7 @@ dist-server/
 .env
 *.log
 .desktop-build/
+.DS_Store
+*.local
+.claude/settings.local.json
+build.log
