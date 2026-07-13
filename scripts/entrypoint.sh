@@ -18,9 +18,9 @@ if ! sqlite3 ~/.cloudcli/auth.db "SELECT 1 FROM users LIMIT 1;" 2>/dev/null | gr
   done
   kill $PID 2>/dev/null; wait $PID 2>/dev/null || true
 
-  # Insert admin user (password irrelevant in platform mode, but valid bcrypt hash for "admin")
+  # Insert admin user with onboarding completed
   HASH='REDACTED'
-  sqlite3 ~/.cloudcli/auth.db "INSERT OR IGNORE INTO users (username, password_hash) VALUES ('admin', '$HASH');"
+  sqlite3 ~/.cloudcli/auth.db "INSERT OR IGNORE INTO users (username, password_hash, has_completed_onboarding) VALUES ('admin', '$HASH', 1);"
   echo "[entrypoint] Seeded default admin user"
 fi
 
