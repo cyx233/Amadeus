@@ -5,8 +5,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git jq ripgrep sqlite3 tree vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code CLI globally
-RUN npm install -g @anthropic-ai/claude-code@latest && npm cache clean --force
+# Install Claude Code CLI + TaskMaster globally
+RUN npm install -g @anthropic-ai/claude-code@latest task-master-ai && npm cache clean --force
 
 # Non-root user with workspace mount point
 RUN useradd -m -s /bin/bash agent \
