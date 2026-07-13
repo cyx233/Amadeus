@@ -32,8 +32,7 @@ docker compose up -d
 │  ├────────────────────────────────────────────┤  │
 │  │ ~/.claude/ volume                          │  │
 │  │  ├─ projects/  (session JSONLs = resume)   │  │
-│  │  ├─ scripts/   (DRAFT live-mem cache)      │  │
-│  │  └─ notes/     (DRAFT knowledge cache)     │  │
+│  │  └─ skills/    (rag-query, rag-ingest)     │  │
 │  └────────────────────────────────────────────┘  │
 │       │ curl                                     │
 │  ┌────▼───────────────────────────────────────┐  │
@@ -50,8 +49,7 @@ docker compose up -d
 | Long-lived agent | Docker container with `restart: unless-stopped`, sessions persisted on volume |
 | Session recovery | SDK `resume` by session ID; watchdog aborts stalled sessions; frontend reconnects via writer-swap |
 | File + code editing | CloudCLI file tree + CodeMirror editor, real-time sync with agent workspace |
-| RAG | LightRAG (hybrid graph+vector), queried via skill |
-| Live-mem cache | DRAFT plugin: task-solution scripts/notes checked before RAG, written back after sessions |
+| RAG | LightRAG (hybrid graph+vector), queried via skill — session artifacts and workspace files all indexed there |
 
 ## Session Recovery Flow
 
@@ -59,12 +57,6 @@ docker compose up -d
 2. **Agent process crash** → SDK iterator throws; CloudCLI can re-`query({ resume: sessionId })` from the same JSONL.
 3. **Container restart** → Docker restarts it; `~/.claude` volume preserves all session state; user clicks "resume" in the UI.
 4. **Hung session** → watchdog detects no messages for 5 min, aborts the session, frontend offers resume.
-
-## Live-Mem Cache (DRAFT Integration)
-
-The agent checks `~/.claude/scripts/` and `~/.claude/notes/` (via `draft-match`) before every knowledge retrieval. On cache hit, the cached script/note is used directly — no LLM call, no RAG round-trip. After task completion, `draft-auto-cache` evaluates whether to write back a new cache entry.
-
-This creates a learning loop: solved tasks become instant replays.
 
 ## Development
 

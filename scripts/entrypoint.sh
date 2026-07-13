@@ -2,7 +2,7 @@
 set -e
 
 # Ensure persistent dirs exist on the volume
-mkdir -p ~/.claude/scripts ~/.claude/notes ~/.claude/projects
+mkdir -p ~/.claude/projects
 
 # Start the session watchdog in background
 node ~/watchdog.js &

@@ -18,8 +18,8 @@ RUN chown -R agent:agent /home/agent/cloudcli-src
 USER agent
 RUN npm ci --omit=dev && npm run build 2>/dev/null || true
 
-# Install the DRAFT plugin for live-mem caching
-COPY --chown=agent:agent plugins/draft/ /home/agent/.claude/plugins/draft/
+# RAG skills
+COPY --chown=agent:agent skills/ /home/agent/.claude/skills/
 
 # Session watchdog + entrypoint
 COPY --chown=agent:agent scripts/watchdog.js /home/agent/watchdog.js
