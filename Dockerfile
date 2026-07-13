@@ -17,9 +17,6 @@ WORKDIR /home/agent/cloudcli-src
 USER agent
 RUN npm ci --omit=dev && npm run build 2>/dev/null || true
 
-# Bedrock model routing (seeded into ~/.claude on first boot)
-COPY --chown=agent:agent config/claude-settings.json /home/agent/claude-settings-seed.json
-
 # RAG skills
 COPY --chown=agent:agent skills/ /home/agent/.claude/skills/
 

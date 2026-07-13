@@ -1,0 +1,6 @@
+# Override for Bedrock/ASBX users: mount host ~/.aws into container.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.bedrock.yml up -d
+services:
+  amadeus:
+    volumes:
+      - ${HOME}/.aws:/home/agent/.aws:ro

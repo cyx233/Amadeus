@@ -7,13 +7,18 @@ services:
     ports:
       - "127.0.0.1:3001:3001"
     volumes:
-      - ${HOME}/.aws:/home/agent/.aws:ro
       - claude-data:/home/agent/.claude
       - workspace:/home/agent/workspace
     environment:
+      # Auth: provide at least one
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      # Optional: Bedrock users set these + mount ~/.aws (see README)
       - AWS_PROFILE=${AWS_PROFILE:-}
-      - AWS_REGION=${AWS_REGION:-us-west-2}
-      - AWS_DEFAULT_REGION=${AWS_REGION:-us-west-2}
+      - AWS_REGION=${AWS_REGION:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
       - DISABLE_AUTOUPDATER=1
       - LIGHTRAG_URL=http://lightrag:9621
       - NODE_ENV=production

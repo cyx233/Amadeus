@@ -6,11 +6,21 @@ Browser-based Claude Code agent platform with long-lived Docker sessions, self-r
 
 ```bash
 cp .env.example .env
-# Fill in CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY
+# Fill in ONE of: ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, or AWS creds
 
 docker compose up -d
-# Open http://localhost:3001
+open http://localhost:3001
 ```
+
+### Bedrock / ASBX users
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.bedrock.yml up -d
+```
+
+This mounts `~/.aws` read-only into the container. Set `AWS_PROFILE` and
+`AWS_REGION` in `.env`, and configure model routing in the Claude Code UI
+settings after first launch.
 
 ## Architecture
 
