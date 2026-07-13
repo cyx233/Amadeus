@@ -72,7 +72,7 @@ export default function SidebarHeader({
         className="truncate text-sm font-bold tracking-tight text-foreground"
         style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
       >
-        {t('app.title')}
+        Amadeus
       </h1>
     </div>
   );
@@ -112,15 +112,7 @@ export default function SidebarHeader({
                 }`}
               />
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground"
-              onClick={onCreateProject}
-              title={t('tooltips.createProject')}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
+            {/* Projects are auto-discovered from workspace — no manual creation */}
             <Button
               variant="ghost"
               size="sm"

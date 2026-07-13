@@ -65,6 +65,7 @@ import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
 import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
+import { createProject } from './modules/projects/services/project-management.service.js';
 import { configureWebPush } from './services/vapid-keys.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
@@ -1577,6 +1578,18 @@ async function startServer() {
     try {
         // Initialize authentication database
         await initializeDatabase();
+
+        // Auto-discover projects: each subdirectory in WORKSPACES_ROOT is a project
+        if (process.env.WORKSPACES_ROOT) {
+            try {
+                const entries = await fsPromises.readdir(process.env.WORKSPACES_ROOT, { withFileTypes: true });
+                for (const entry of entries) {
+                    if (entry.isDirectory() && !entry.name.startsWith('.')) {
+                        try { await createProject({ projectPath: `${process.env.WORKSPACES_ROOT}/${entry.name}` }); } catch {}
+                    }
+                }
+            } catch {}
+        }
 
         // Configure Web Push (VAPID keys)
         configureWebPush();

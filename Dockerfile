@@ -8,8 +8,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code@latest && npm cache clean --force
 
-# Non-root user
-RUN useradd -m -s /bin/bash agent
+# Non-root user with workspace mount point
+RUN useradd -m -s /bin/bash agent \
+    && mkdir -p /home/agent/workspace \
+    && chown agent:agent /home/agent/workspace
 
 # Install CloudCLI (the web UI)
 COPY --chown=agent:agent app/ /home/agent/cloudcli-src/
