@@ -60,7 +60,7 @@ function MainContent({
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
   const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
 
-  const shouldShowTasksTab = Boolean(tasksEnabled && isTaskMasterInstalled);
+  const shouldShowTasksTab = true; // Always show tasks tab — maps to project's tasks/ directory
   const shouldShowBrowserTab = browserUseEnabled;
 
   const {
@@ -93,11 +93,7 @@ function MainContent({
     }
   }, [selectedProject, currentProject?.projectId, setCurrentProject]);
 
-  useEffect(() => {
-    if (!shouldShowTasksTab && activeTab === 'tasks') {
-      setActiveTab('chat');
-    }
-  }, [shouldShowTasksTab, activeTab, setActiveTab]);
+  // Tasks tab is always available — no redirect needed
 
   const loadBrowserUseSettings = useCallback(async () => {
     try {
