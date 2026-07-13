@@ -125,7 +125,7 @@ export default function SidebarHeader({
           </div>
         </div>
 
-        <GitHubStarBadge />
+        {/* GitHubStarBadge removed */}
 
         {/* Search bar */}
         {showSearchTools && (

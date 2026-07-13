@@ -1,4 +1,4 @@
-import { MessageSquare, Terminal, Folder, GitBranch, ClipboardCheck, MonitorPlay, type LucideIcon } from 'lucide-react';
+import { CheckSquare, ListTodo, Folder, Terminal, GitBranch, MessageSquare, type LucideIcon } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -18,6 +18,7 @@ type BuiltInTab = {
   kind: 'builtin';
   id: AppTab;
   labelKey: string;
+  label?: string;
   icon: LucideIcon;
 };
 
@@ -33,39 +34,20 @@ type TabDefinition = BuiltInTab | PluginTab;
 
 const BASE_TABS: BuiltInTab[] = [
   { kind: 'builtin', id: 'chat',  labelKey: 'tabs.chat',  icon: MessageSquare },
-  { kind: 'builtin', id: 'files', labelKey: 'tabs.files', icon: Folder },
+  { kind: 'builtin', id: 'tasks', labelKey: 'tabs.tasks', label: 'Tasks', icon: CheckSquare },
+  { kind: 'builtin', id: 'files', labelKey: 'tabs.files', label: 'Files', icon: Folder },
   { kind: 'builtin', id: 'git',   labelKey: 'tabs.git',   icon: GitBranch },
   { kind: 'builtin', id: 'shell', labelKey: 'tabs.shell', icon: Terminal },
 ];
 
-const BROWSER_TAB: BuiltInTab = {
-  kind: 'builtin',
-  id: 'browser',
-  labelKey: 'tabs.browser',
-  icon: MonitorPlay,
-};
-
-const TASKS_TAB: BuiltInTab = {
-  kind: 'builtin',
-  id: 'tasks',
-  labelKey: 'tabs.tasks',
-  icon: ClipboardCheck,
-};
-
 export default function MainContentTabSwitcher({
   activeTab,
   setActiveTab,
-  shouldShowTasksTab,
-  shouldShowBrowserTab,
+  shouldShowTasksTab: _,
+  shouldShowBrowserTab: __,
 }: MainContentTabSwitcherProps) {
   const { t } = useTranslation();
   const { plugins } = usePlugins();
-
-  const builtInTabs: BuiltInTab[] = [
-    ...BASE_TABS,
-    ...(shouldShowBrowserTab ? [BROWSER_TAB] : []),
-    ...(shouldShowTasksTab ? [TASKS_TAB] : []),
-  ];
 
   const pluginTabs: PluginTab[] = plugins
     .filter((p) => p.enabled)
@@ -77,13 +59,15 @@ export default function MainContentTabSwitcher({
       iconFile: p.icon,
     }));
 
-  const tabs: TabDefinition[] = [...builtInTabs, ...pluginTabs];
+  const tabs: TabDefinition[] = [...BASE_TABS, ...pluginTabs];
 
   return (
     <PillBar>
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;
-        const displayLabel = tab.kind === 'builtin' ? t(tab.labelKey) : tab.label;
+        const displayLabel = tab.kind === 'builtin'
+          ? (tab.label || t(tab.labelKey))
+          : tab.label;
 
         return (
           <Tooltip key={tab.id} content={displayLabel} position="bottom">

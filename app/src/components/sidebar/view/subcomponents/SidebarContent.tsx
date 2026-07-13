@@ -217,6 +217,25 @@ export default function SidebarContent({
         t={t}
       />
 
+      {/* Project selector dropdown */}
+      <div className="flex-shrink-0 border-b border-border/40 px-3 py-2">
+        <select
+          className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary"
+          value={projectListProps.selectedProject?.projectId || ''}
+          onChange={(e) => {
+            const project = projects.find(p => p.projectId === e.target.value);
+            if (project) projectListProps.onProjectSelect(project);
+          }}
+        >
+          {projects.length === 0 && <option value="">No projects</option>}
+          {projects.map(p => (
+            <option key={p.projectId} value={p.projectId}>
+              {p.displayName || p.fullPath?.split('/').pop()}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <ScrollArea className="flex-1 overflow-y-auto overscroll-contain md:px-1.5 md:py-2">
         {showConversationSearch ? (
           isSearching && !hasPartialResults ? (
