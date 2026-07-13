@@ -60,7 +60,7 @@ function MainContent({
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
   const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
 
-  const shouldShowTasksTab = true; // Always show tasks tab — maps to project's tasks/ directory
+  const shouldShowTasksTab = true; // Always show — uses TaskMasterPanel
   const shouldShowBrowserTab = browserUseEnabled;
 
   const {
@@ -176,7 +176,11 @@ function MainContent({
             </ErrorBoundary>
           </div>
 
-          {(activeTab === 'files' || activeTab === 'tasks') && (
+          {activeTab === 'tasks' && (
+            <TaskMasterPanel isVisible={true} />
+          )}
+
+          {activeTab === 'files' && (
             <div className="h-full overflow-hidden">
               <FileTree selectedProject={selectedProject} onFileOpen={handleFileOpen} />
             </div>

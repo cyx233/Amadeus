@@ -20,6 +20,7 @@ services:
       - DISABLE_AUTOUPDATER=1
       - LIGHTRAG_URL=http://lightrag:9621
       - WORKSPACES_ROOT=/home/agent/workspace
+      - VITE_IS_PLATFORM=true
       - NODE_ENV=production
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:3001/api/health"]
