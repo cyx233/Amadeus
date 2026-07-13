@@ -41,7 +41,7 @@ services:
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
       - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-20250514}
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:9621/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9621/health')"]
       interval: 15s
       timeout: 5s
       retries: 3

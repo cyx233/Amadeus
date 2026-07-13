@@ -15,7 +15,7 @@ RUN useradd -m -s /bin/bash agent
 COPY --chown=agent:agent app/ /home/agent/cloudcli-src/
 WORKDIR /home/agent/cloudcli-src
 USER agent
-RUN npm ci --omit=dev && npm run build 2>/dev/null || true
+RUN npm ci && npm run build && npm prune --omit=dev && npm cache clean --force
 
 # RAG skills
 COPY --chown=agent:agent skills/ /home/agent/.claude/skills/
