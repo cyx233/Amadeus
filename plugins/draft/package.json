@@ -1,0 +1,13 @@
+{
+  "name": "@cyx233/draft",
+  "version": "1.0.0",
+  "description": "Task caching skills for AI coding agents",
+  "keywords": ["claude-code", "plugin", "caching", "skills"],
+  "license": "MIT",
+  "author": { "name": "cyx233" },
+  "homepage": "https://github.com/cyx233/dont-repeat-a-finished-task",
+  "repository": { "type": "git", "url": "git+https://github.com/cyx233/dont-repeat-a-finished-task.git" },
+  "files": ["skills/", "scripts/", "LICENSE"],
+  "scripts": { "test": "node --test tests/*.test.js" },
+  "publishConfig": { "access": "public" }
+}

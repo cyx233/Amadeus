@@ -1,0 +1,46 @@
+services:
+  amadeus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - claude-home:/home/agent/.claude
+      - workspace:/home/agent/workspace
+    environment:
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DISABLE_AUTOUPDATER=1
+      - LIGHTRAG_URL=http://lightrag:9621
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      lightrag:
+        condition: service_healthy
+
+  lightrag:
+    image: ghcr.io/hkuds/lightrag:latest
+    restart: unless-stopped
+    volumes:
+      - lightrag-data:/app/data
+    environment:
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-20250514}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9621/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  claude-home:
+  workspace:
+  lightrag-data:

@@ -1,0 +1,12 @@
+name: draft
+version: 1.1.0
+description: "Live-mem cache + RAG skills for Amadeus agent"
+author: cyx233
+provides_skills:
+  - draft-match
+  - draft-save
+  - draft-note
+  - draft-rm
+  - draft-auto-cache
+  - rag-query
+  - rag-ingest
