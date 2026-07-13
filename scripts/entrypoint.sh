@@ -1,13 +1,17 @@
 #!/bin/bash
 set -e
 
-# Ensure persistent dirs exist on the volume
 mkdir -p ~/.claude/projects
 
-# Start the session watchdog in background
-node ~/watchdog.js &
-WATCHDOG_PID=$!
+# Seed settings.json on first boot (the baked-in copy has Bedrock model
+# routing without host-specific paths like awsCredentialExport)
+if [ ! -f ~/.claude/settings.json ]; then
+  cp ~/claude-settings-seed.json ~/.claude/settings.json
+fi
 
-# Start CloudCLI web server (foreground — container lifecycle tied to this)
+# Start session watchdog in background
+node ~/watchdog.js &
+
+# Start CloudCLI web server (foreground)
 cd ~/cloudcli-src
 exec node dist-server/server/index.js

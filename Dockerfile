@@ -5,18 +5,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git jq ripgrep sqlite3 tree vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code CLI globally (needs root for /usr/local/lib)
+# Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code@latest && npm cache clean --force
 
-# Non-root user matching upstream sandbox conventions
+# Non-root user
 RUN useradd -m -s /bin/bash agent
 
 # Install CloudCLI (the web UI)
 COPY --chown=agent:agent app/ /home/agent/cloudcli-src/
 WORKDIR /home/agent/cloudcli-src
-RUN chown -R agent:agent /home/agent/cloudcli-src
 USER agent
 RUN npm ci --omit=dev && npm run build 2>/dev/null || true
+
+# Bedrock model routing (seeded into ~/.claude on first boot)
+COPY --chown=agent:agent config/claude-settings.json /home/agent/claude-settings-seed.json
 
 # RAG skills
 COPY --chown=agent:agent skills/ /home/agent/.claude/skills/

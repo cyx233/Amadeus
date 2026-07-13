@@ -7,11 +7,13 @@ services:
     ports:
       - "127.0.0.1:3001:3001"
     volumes:
-      - claude-home:/home/agent/.claude
+      - ${HOME}/.aws:/home/agent/.aws:ro
+      - claude-data:/home/agent/.claude
       - workspace:/home/agent/workspace
     environment:
-      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - AWS_PROFILE=${AWS_PROFILE:-}
+      - AWS_REGION=${AWS_REGION:-us-west-2}
+      - AWS_DEFAULT_REGION=${AWS_REGION:-us-west-2}
       - DISABLE_AUTOUPDATER=1
       - LIGHTRAG_URL=http://lightrag:9621
       - NODE_ENV=production
@@ -41,6 +43,6 @@ services:
       start_period: 10s
 
 volumes:
-  claude-home:
+  claude-data:
   workspace:
   lightrag-data:
