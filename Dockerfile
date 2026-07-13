@@ -20,8 +20,7 @@ RUN npm ci --omit=dev && npm run build 2>/dev/null || true
 # RAG skills
 COPY --chown=agent:agent skills/ /home/agent/.claude/skills/
 
-# Session watchdog + entrypoint
-COPY --chown=agent:agent scripts/watchdog.js /home/agent/watchdog.js
+# Entrypoint
 COPY --chown=agent:agent scripts/entrypoint.sh /home/agent/entrypoint.sh
 RUN chmod +x /home/agent/entrypoint.sh
 
