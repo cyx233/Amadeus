@@ -1,6 +1,9 @@
-# Override for Bedrock/ASBX users: mount host ~/.aws into container.
+# Bedrock auth: mount host credential file into container.
+# Run scripts/refresh-creds.sh first (or add to crontab).
 # Usage: docker compose -f docker-compose.yml -f docker-compose.bedrock.yml up -d
 services:
   amadeus:
     volumes:
-      - ${HOME}/.aws:/home/agent/.aws:ro
+      - ${HOME}/.aws/amadeus-creds.json:/home/agent/.aws/creds.json:ro
+    environment:
+      - AWS_REGION=us-west-2
