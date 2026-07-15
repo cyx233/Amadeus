@@ -15,7 +15,11 @@ type SidebarFileTreeProps = {
   onFileOpen?: (path: string) => void;
 };
 
-export default function SidebarFileTree({ selectedProject, onFileOpen }: SidebarFileTreeProps) {
+export default function SidebarFileTree({ selectedProject, onFileOpen: onFileOpenProp }: SidebarFileTreeProps) {
+  // If no onFileOpen prop, dispatch a global event that MainContent listens for
+  const onFileOpen = onFileOpenProp || ((path: string) => {
+    window.dispatchEvent(new CustomEvent('amadeus:file-open', { detail: { path } }));
+  });
   const [files, setFiles] = useState<FileNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);

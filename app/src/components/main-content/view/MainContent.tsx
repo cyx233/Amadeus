@@ -78,6 +78,16 @@ function MainContent({
     isMobile,
   });
 
+  // Listen for file-open events from sidebar file tree
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const path = (e as CustomEvent).detail?.path;
+      if (path) handleFileOpen(path);
+    };
+    window.addEventListener('amadeus:file-open', handler);
+    return () => window.removeEventListener('amadeus:file-open', handler);
+  }, [handleFileOpen]);
+
   // Resolves bare/partial file references (e.g. links inside chat messages) to
   // real project files before opening them in the in-app editor.
   const resolvedFileOpen = useFileOpenResolver(selectedProject, handleFileOpen);
@@ -150,7 +160,23 @@ function MainContent({
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className={`flex min-h-0 min-w-[200px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
+        {/* Middle: Editor */}
+        <EditorSidebar
+          editingFile={editingFile}
+          isMobile={isMobile}
+          editorExpanded={editorExpanded}
+          editorWidth={editorWidth}
+          hasManualWidth={hasManualWidth}
+          resizeHandleRef={resizeHandleRef}
+          onResizeStart={handleResizeStart}
+          onCloseEditor={handleCloseEditor}
+          onToggleEditorExpand={handleToggleEditorExpand}
+          projectPath={selectedProject.path}
+          fillSpace={!editingFile ? false : true}
+        />
+
+        {/* Right: Chat + other tabs */}
+        <div className={`flex min-h-0 min-w-[300px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
           <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
             <ErrorBoundary showDetails>
               <ChatInterface
@@ -178,12 +204,6 @@ function MainContent({
 
           {activeTab === 'tasks' && (
             <TaskMasterPanel isVisible={true} />
-          )}
-
-          {activeTab === 'files' && (
-            <div className="h-full overflow-hidden">
-              <FileTree selectedProject={selectedProject} onFileOpen={handleFileOpen} />
-            </div>
           )}
 
           {activeTab === 'shell' && (
@@ -219,20 +239,6 @@ function MainContent({
             </div>
           )}
         </div>
-
-        <EditorSidebar
-          editingFile={editingFile}
-          isMobile={isMobile}
-          editorExpanded={editorExpanded}
-          editorWidth={editorWidth}
-          hasManualWidth={hasManualWidth}
-          resizeHandleRef={resizeHandleRef}
-          onResizeStart={handleResizeStart}
-          onCloseEditor={handleCloseEditor}
-          onToggleEditorExpand={handleToggleEditorExpand}
-          projectPath={selectedProject.path}
-          fillSpace={activeTab === 'files'}
-        />
       </div>
     </div>
   );
