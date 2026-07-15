@@ -9,3 +9,4 @@ dist-server/
 .claude/settings.local.json
 build.log
 scripts/refresh-creds.sh
+gateway/htpasswd
