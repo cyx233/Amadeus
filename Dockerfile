@@ -17,7 +17,7 @@ RUN useradd -m -s /bin/bash agent \
 COPY --chown=agent:agent app/ /home/agent/cloudcli-src/
 WORKDIR /home/agent/cloudcli-src
 USER agent
-RUN VITE_IS_PLATFORM=true npm ci && VITE_IS_PLATFORM=true npm run build && npm prune --omit=dev && npm cache clean --force
+RUN npm ci && npm run build && npm prune --omit=dev && npm cache clean --force
 
 # RAG skills
 COPY --chown=agent:agent skills/ /home/agent/.claude/skills/
