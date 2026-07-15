@@ -1,5 +1,4 @@
-ARG PLATFORM=linux/arm64
-FROM --platform=${PLATFORM} node:22-slim
+FROM node:22-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential python3 python3-setuptools \
