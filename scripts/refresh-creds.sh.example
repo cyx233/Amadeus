@@ -1,0 +1,15 @@
+#!/bin/bash
+# Refresh AWS credentials for the Amadeus container.
+# Copy to scripts/refresh-creds.sh, edit the profile, then run.
+# Optionally add to crontab: */30 * * * * /path/to/refresh-creds.sh
+
+set -e
+
+OUT="${HOME}/.aws/amadeus-creds.json"
+
+# Replace with your credential command (ada, isengard, aws sso, etc.)
+your-credential-tool credentials print --profile=your-profile > "${OUT}.tmp"
+mv "${OUT}.tmp" "${OUT}"
+chmod 600 "${OUT}"
+
+echo "[$(date)] Credentials refreshed → ${OUT}"
