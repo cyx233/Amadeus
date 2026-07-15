@@ -7,14 +7,12 @@ import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
-import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
-import type { Project, LLMProvider } from '../../../types/app';
+import type { Project } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 
 import SidebarCollapsed from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
 import SidebarModals from './subcomponents/SidebarModals';
-import type { SidebarProjectListProps } from './subcomponents/SidebarProjectList';
 
 type TaskMasterSidebarContext = {
   setCurrentProject: (project: Project) => void;
@@ -26,15 +24,15 @@ function Sidebar({
   selectedProject,
   selectedSession,
   activeSessions,
-  attentionSessionIds,
+  attentionSessionIds: _attentionSessionIds,
   onProjectSelect,
   onSessionSelect,
-  onNewSession,
+  onNewSession: _onNewSession,
   onSessionDelete,
   onLoadMoreSessions,
   onProjectDelete,
   isLoading,
-  loadingProgress,
+  loadingProgress: _loadingProgress,
   onRefresh,
   onShowSettings,
   showSettings,
@@ -50,64 +48,24 @@ function Sidebar({
   );
   const { preferences, setPreference } = useUiPreferences();
   const { sidebarVisible } = preferences;
-  const { setCurrentProject, mcpServerStatus } = useTaskMaster() as TaskMasterSidebarContext;
-  const { tasksEnabled } = useTasksSettings();
+  const { setCurrentProject } = useTaskMaster() as TaskMasterSidebarContext;
   const paletteOps = usePaletteOps();
 
   const {
     isSidebarCollapsed,
-    expandedProjects,
-    editingProject,
     showNewProject,
-    editingName,
-    initialSessionsLoaded,
-    currentTime,
     isRefreshing,
-    editingSession,
-    editingSessionName,
     searchFilter,
-    searchMode,
-    setSearchMode,
-    conversationResults,
-    isSearching,
-    searchProgress,
-    clearConversationResults,
-    runningSessionsCount,
-    deletingProjects,
     deleteConfirmation,
     sessionDeleteConfirmation,
     showVersionModal,
-    filteredProjects,
-    archivedProjects,
-    archivedSessions,
-    archivedSessionsCount,
-    isArchivedSessionsLoading,
-    toggleProject,
-    handleSessionClick,
-    toggleStarProject,
-    isProjectStarred,
-    getProjectSessions,
-    loadingMoreProjects,
-    loadMoreSessionsForProject,
-    startEditing,
-    cancelEditing,
-    saveProjectName,
-    showDeleteSessionConfirmation,
     confirmDeleteSession,
-    requestProjectDelete,
     confirmDeleteProject,
     handleProjectSelect,
-    openArchivedSession,
-    restoreArchivedProject,
-    restoreArchivedSession,
     refreshProjects,
-    updateSessionSummary,
     collapseSidebar: handleCollapseSidebar,
     expandSidebar: handleExpandSidebar,
     setShowNewProject,
-    setEditingName,
-    setEditingSession,
-    setEditingSessionName,
     setSearchFilter,
     setDeleteConfirmation,
     setSessionDeleteConfirmation,
@@ -132,80 +90,21 @@ function Sidebar({
   });
 
   useEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-
+    if (typeof document === 'undefined') return;
     document.documentElement.classList.toggle('pwa-mode', isPWA);
     document.body.classList.toggle('pwa-mode', isPWA);
   }, [isPWA]);
 
-  const handleProjectCreated = () => {
-    void paletteOps.refreshProjects();
-  };
-
-  const projectListProps: SidebarProjectListProps = {
-    projects,
-    filteredProjects,
-    selectedProject,
-    selectedSession,
-    isLoading,
-    loadingProgress,
-    expandedProjects,
-    editingProject,
-    editingName,
-    initialSessionsLoaded,
-    currentTime,
-    editingSession,
-    editingSessionName,
-    deletingProjects,
-    tasksEnabled,
-    mcpServerStatus,
-    getProjectSessions,
-    loadingMoreProjects,
-    activeSessions,
-    attentionSessionIds,
-    forceExpanded: searchMode === 'running',
-    isProjectStarred,
-    onEditingNameChange: setEditingName,
-    onToggleProject: toggleProject,
-    onProjectSelect: handleProjectSelect,
-    onToggleStarProject: toggleStarProject,
-    onStartEditingProject: startEditing,
-    onCancelEditingProject: cancelEditing,
-    onSaveProjectName: (projectName) => {
-      void saveProjectName(projectName);
-    },
-    onDeleteProject: requestProjectDelete,
-    onSessionSelect: handleSessionClick,
-    onDeleteSession: showDeleteSessionConfirmation,
-    onLoadMoreSessions: loadMoreSessionsForProject,
-    onNewSession,
-    onEditingSessionNameChange: setEditingSessionName,
-    onStartEditingSession: (sessionId, initialName) => {
-      setEditingSession(sessionId);
-      setEditingSessionName(initialName);
-    },
-    onCancelEditingSession: () => {
-      setEditingSession(null);
-      setEditingSessionName('');
-    },
-    onSaveEditingSession: (projectName: string, sessionId: string, summary: string, provider: LLMProvider) => {
-      void updateSessionSummary(projectName, sessionId, summary, provider);
-    },
-    t,
-  };
-
   return (
     <>
-        <SidebarModals
-          projects={projects}
+      <SidebarModals
+        projects={projects}
         showSettings={showSettings}
         settingsInitialTab={settingsInitialTab}
         onCloseSettings={onCloseSettings}
         showNewProject={showNewProject}
         onCloseNewProject={() => setShowNewProject(false)}
-        onProjectCreated={handleProjectCreated}
+        onProjectCreated={() => { void paletteOps.refreshProjects(); }}
         deleteConfirmation={deleteConfirmation}
         onCancelDeleteProject={() => setDeleteConfirmation(null)}
         onConfirmDeleteProject={confirmDeleteProject}
@@ -251,7 +150,6 @@ function Sidebar({
           onShowSettings={onShowSettings}
         />
       )}
-
     </>
   );
 }
