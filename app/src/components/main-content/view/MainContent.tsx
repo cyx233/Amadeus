@@ -136,7 +136,7 @@ function MainContent({
               file={editingFile}
               onClose={handleCloseEditor}
               projectPath={selectedProject?.path}
-              isSidebar={false}
+              isSidebar={true}
               isExpanded={false}
               onToggleExpand={handleToggleEditorExpand}
             />
