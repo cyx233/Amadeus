@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import ChatInterface from '../../chat/view/ChatInterface';
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
@@ -9,7 +9,7 @@ import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
-import EditorSidebar from '../../code-editor/view/EditorSidebar';
+import CodeEditor from '../../code-editor/view/CodeEditor';
 import type { Project } from '../../../types/app';
 import { TaskMasterPanel } from '../../task-master';
 
@@ -100,27 +100,63 @@ function MainContent({
     return <MainContentStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} />;
   }
 
+  // Drag-to-resize between editor and chat
+  const [chatWidth, setChatWidth] = useState(400);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragRef.current = { startX: e.clientX, startWidth: chatWidth };
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return;
+      const delta = dragRef.current.startX - ev.clientX;
+      setChatWidth(Math.max(280, Math.min(700, dragRef.current.startWidth + delta)));
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [chatWidth]);
+
+  const dragRefEl = useRef<HTMLDivElement | null>(null);
+
   return (
     <div className="flex h-full flex-col">
-      {/* Top: Editor (left) + Chat (right) — fixed three-column with sidebar */}
+      {/* Top: Editor (left) + Chat (right) */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Editor */}
-        <EditorSidebar
-          editingFile={editingFile}
-          isMobile={isMobile}
-          editorExpanded={editorExpanded}
-          editorWidth={editorWidth}
-          hasManualWidth={hasManualWidth}
-          resizeHandleRef={resizeHandleRef}
-          onResizeStart={handleResizeStart}
-          onCloseEditor={handleCloseEditor}
-          onToggleEditorExpand={handleToggleEditorExpand}
-          projectPath={selectedProject?.path}
-          fillSpace={true}
-        />
+        <div className="flex min-w-[200px] flex-1 flex-col overflow-hidden">
+          {editingFile ? (
+            <CodeEditor
+              file={editingFile}
+              onClose={handleCloseEditor}
+              projectPath={selectedProject?.path}
+              isSidebar={false}
+              isExpanded={false}
+              onToggleExpand={handleToggleEditorExpand}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              Select a file from the sidebar
+            </div>
+          )}
+        </div>
+
+        {/* Resize handle */}
+        <div
+          ref={dragRefEl}
+          onMouseDown={onDragStart}
+          className="group relative w-1.5 flex-shrink-0 cursor-col-resize bg-border/40 transition-colors hover:bg-primary/60"
+          title="Drag to resize"
+        >
+          <div className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-primary opacity-0 transition-opacity group-hover:opacity-100" />
+        </div>
 
         {/* Chat — always visible */}
-        <div className="flex min-w-[300px] max-w-[480px] flex-1 flex-col overflow-hidden border-l border-border/60">
+        <div className="flex flex-col overflow-hidden" style={{ width: `${chatWidth}px`, minWidth: '280px' }}>
           <ErrorBoundary showDetails>
             <ChatInterface
               selectedProject={selectedProject}
