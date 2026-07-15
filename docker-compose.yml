@@ -1,5 +1,21 @@
 services:
-  amadeus:
+  # === Multi-user: nginx gateway + per-user containers ===
+  # Managed by scripts/add-user.sh
+  # Start: docker compose up -d
+  gateway:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./gateway/htpasswd:/etc/nginx/htpasswd:ro
+      - ./gateway/user-routes.conf:/etc/nginx/user-routes.conf:ro
+    profiles: ["multi"]
+
+  # === Single-user dev mode: no login, direct access ===
+  # Start: docker compose --profile dev up -d
+  amadeus-dev:
     build:
       context: .
       dockerfile: Dockerfile
@@ -9,7 +25,7 @@ services:
     ports:
       - "127.0.0.1:3001:3001"
     volumes:
-      - claude-data:/home/agent/.claude
+      - claude-data-dev:/home/agent/.claude
       - ${WORKSPACE_PATH:-./workspace}:/home/agent/workspace
       - ${HOME}/.aws/amadeus-creds.json:/home/agent/.aws/creds.json:ro
     environment:
@@ -29,7 +45,9 @@ services:
     depends_on:
       lightrag:
         condition: service_healthy
+    profiles: ["dev"]
 
+  # === Shared services ===
   lightrag:
     image: ghcr.io/hkuds/lightrag:latest
     restart: unless-stopped
@@ -46,5 +64,5 @@ services:
       start_period: 10s
 
 volumes:
-  claude-data:
+  claude-data-dev:
   lightrag-data:
