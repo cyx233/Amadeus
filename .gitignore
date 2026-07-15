@@ -8,3 +8,4 @@ dist-server/
 *.local
 .claude/settings.local.json
 build.log
+scripts/refresh-creds.sh
