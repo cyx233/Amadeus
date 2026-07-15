@@ -1,5 +1,4 @@
 import { Settings, ArrowUpCircle, AlertTriangle } from 'lucide-react';
-import type { TFunction } from 'i18next';
 import type { ReleaseInfo } from '../../../../types/sharedTypes';
 
 type SidebarFooterProps = {
@@ -10,7 +9,6 @@ type SidebarFooterProps = {
   currentVersion: string;
   onShowVersionModal: () => void;
   onShowSettings: () => void;
-  t: TFunction;
 };
 
 export default function SidebarFooter({
@@ -18,10 +16,9 @@ export default function SidebarFooter({
   restartRequired,
   releaseInfo,
   latestVersion,
-  currentVersion,
+  currentVersion: _currentVersion,
   onShowVersionModal,
   onShowSettings,
-  t,
 }: SidebarFooterProps) {
   return (
     <div className="flex-shrink-0" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0)' }}>
@@ -32,7 +29,7 @@ export default function SidebarFooter({
             <div className="flex items-center gap-2.5 rounded-lg border border-amber-300/60 bg-amber-50/80 px-2.5 py-2 dark:border-amber-700/40 dark:bg-amber-900/15">
               <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-500 dark:text-amber-400" />
               <span className="min-w-0 flex-1 text-xs font-medium text-amber-700 dark:text-amber-300">
-                {t('version.restartRequired')}
+                Restart required
               </span>
             </div>
           </div>
@@ -69,7 +66,7 @@ export default function SidebarFooter({
           onClick={onShowSettings}
         >
           <Settings className="h-3.5 w-3.5" />
-          <span className="text-sm">{t('actions.settings')}</span>
+          <span className="text-sm">Settings</span>
         </button>
       </div>
     </div>
