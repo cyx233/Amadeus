@@ -1,24 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 
 import ChatInterface from '../../chat/view/ChatInterface';
-import FileTree from '../../file-tree/view/FileTree';
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
 import GitPanel from '../../git-panel/view/GitPanel';
-import PluginTabContent from '../../plugins/view/PluginTabContent';
-import { BrowserUsePanel } from '../../browser-use';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
 import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
-import { useFileOpenResolver } from '../../../hooks/useFileOpenResolver';
-import { authenticatedFetch } from '../../../utils/api';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
 import EditorSidebar from '../../code-editor/view/EditorSidebar';
 import type { Project } from '../../../types/app';
 import { TaskMasterPanel } from '../../task-master';
 
-import MainContentHeader from './subcomponents/MainContentHeader';
 import MainContentStateView from './subcomponents/MainContentStateView';
 import ErrorBoundary from './ErrorBoundary';
 
@@ -36,8 +30,8 @@ type TasksSettingsContextValue = {
 function MainContent({
   selectedProject,
   selectedSession,
-  activeTab,
-  setActiveTab,
+  activeTab: _activeTab,
+  setActiveTab: _setActiveTab,
   ws,
   sendMessage,
   isMobile,
@@ -57,11 +51,8 @@ function MainContent({
   const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
 
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
-  const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings() as TasksSettingsContextValue;
-  const [browserUseEnabled, setBrowserUseEnabled] = useState(false);
-
-  const shouldShowTasksTab = true; // Always show — uses TaskMasterPanel
-  const shouldShowBrowserTab = browserUseEnabled;
+  const { tasksEnabled } = useTasksSettings() as TasksSettingsContextValue;
+  const [bottomPanel, setBottomPanel] = useState<'terminal' | 'tasks' | 'git' | null>(null);
 
   const {
     editingFile,
@@ -88,54 +79,17 @@ function MainContent({
     return () => window.removeEventListener('amadeus:file-open', handler);
   }, [handleFileOpen]);
 
-  // Resolves bare/partial file references (e.g. links inside chat messages) to
-  // real project files before opening them in the in-app editor.
-  const resolvedFileOpen = useFileOpenResolver(selectedProject, handleFileOpen);
-
   useEffect(() => {
-    // Identify projects by DB `projectId`; the TaskMaster context uses the
-    // same identifier to key its internal maps.
     const selectedProjectId = selectedProject?.projectId;
     const currentProjectId = currentProject?.projectId;
-
     if (selectedProject && selectedProjectId !== currentProjectId) {
       setCurrentProject?.(selectedProject);
     }
   }, [selectedProject, currentProject?.projectId, setCurrentProject]);
 
-  // Tasks tab is always available — no redirect needed
-
-  const loadBrowserUseSettings = useCallback(async () => {
-    try {
-      const response = await authenticatedFetch('/api/browser-use/settings');
-      const data = await response.json();
-      setBrowserUseEnabled(Boolean(response.ok && data?.success !== false && data?.data?.settings?.enabled));
-    } catch {
-      setBrowserUseEnabled(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadBrowserUseSettings();
-    window.addEventListener('browserUseSettingsChanged', loadBrowserUseSettings);
-    return () => window.removeEventListener('browserUseSettingsChanged', loadBrowserUseSettings);
-  }, [loadBrowserUseSettings]);
-
-  useEffect(() => {
-    if (!shouldShowBrowserTab && activeTab === 'browser') {
-      setActiveTab('chat');
-    }
-  }, [shouldShowBrowserTab, activeTab, setActiveTab]);
-
   usePaletteOpsRegister({
-    openFile: (filePath: string) => {
-      setActiveTab('files');
-      handleFileOpen(filePath);
-    },
-    // Opens the editor side panel in place, keeping the current tab (e.g. chat).
-    openFileInEditor: (filePath: string) => {
-      resolvedFileOpen(filePath);
-    },
+    openFile: (filePath: string) => handleFileOpen(filePath),
+    openFileInEditor: (filePath: string) => handleFileOpen(filePath),
   });
 
   if (isLoading) {
@@ -148,19 +102,9 @@ function MainContent({
 
   return (
     <div className="flex h-full flex-col">
-      <MainContentHeader
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        selectedProject={selectedProject}
-        selectedSession={selectedSession}
-        shouldShowTasksTab={shouldShowTasksTab}
-        shouldShowBrowserTab={shouldShowBrowserTab}
-        isMobile={isMobile}
-        onMenuClick={onMenuClick}
-      />
-
+      {/* Top: Editor (left) + Chat (right) — fixed three-column with sidebar */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Middle: Editor */}
+        {/* Editor */}
         <EditorSidebar
           editingFile={editingFile}
           isMobile={isMobile}
@@ -171,74 +115,75 @@ function MainContent({
           onResizeStart={handleResizeStart}
           onCloseEditor={handleCloseEditor}
           onToggleEditorExpand={handleToggleEditorExpand}
-          projectPath={selectedProject.path}
-          fillSpace={!editingFile ? false : true}
+          projectPath={selectedProject?.path}
+          fillSpace={true}
         />
 
-        {/* Right: Chat + other tabs */}
-        <div className={`flex min-h-0 min-w-[300px] flex-col overflow-hidden ${editorExpanded ? 'hidden' : ''} flex-1`}>
-          <div className={`h-full ${activeTab === 'chat' ? 'block' : 'hidden'}`}>
-            <ErrorBoundary showDetails>
-              <ChatInterface
-                selectedProject={selectedProject}
-                selectedSession={selectedSession}
-                ws={ws}
-                sendMessage={sendMessage}
-                onFileOpen={handleFileOpen}
-                onInputFocusChange={onInputFocusChange}
-                onSessionProcessing={onSessionProcessing}
-                onSessionIdle={onSessionIdle}
-                processingSessions={processingSessions}
-                onNavigateToSession={onNavigateToSession}
-                onSessionEstablished={onSessionEstablished}
-                onShowSettings={onShowSettings}
-                showRawParameters={showRawParameters}
-                showThinking={showThinking}
-                sendByCtrlEnter={sendByCtrlEnter}
-                externalMessageUpdate={externalMessageUpdate}
-                newSessionTrigger={newSessionTrigger}
-                onShowAllTasks={tasksEnabled ? () => setActiveTab('tasks') : null}
-              />
-            </ErrorBoundary>
-          </div>
+        {/* Chat — always visible */}
+        <div className="flex min-w-[300px] max-w-[480px] flex-1 flex-col overflow-hidden border-l border-border/60">
+          <ErrorBoundary showDetails>
+            <ChatInterface
+              selectedProject={selectedProject}
+              selectedSession={selectedSession}
+              ws={ws}
+              sendMessage={sendMessage}
+              onFileOpen={handleFileOpen}
+              onInputFocusChange={onInputFocusChange}
+              onSessionProcessing={onSessionProcessing}
+              onSessionIdle={onSessionIdle}
+              processingSessions={processingSessions}
+              onNavigateToSession={onNavigateToSession}
+              onSessionEstablished={onSessionEstablished}
+              onShowSettings={onShowSettings}
+              showRawParameters={showRawParameters}
+              showThinking={showThinking}
+              sendByCtrlEnter={sendByCtrlEnter}
+              externalMessageUpdate={externalMessageUpdate}
+              newSessionTrigger={newSessionTrigger}
+              onShowAllTasks={() => setBottomPanel('tasks')}
+            />
+          </ErrorBoundary>
+        </div>
+      </div>
 
-          {activeTab === 'tasks' && (
-            <TaskMasterPanel isVisible={true} />
-          )}
+      {/* Bottom panel: Terminal / Tasks / Git */}
+      <div className="flex-shrink-0 border-t border-border/60">
+        {/* Panel tab bar */}
+        <div className="flex items-center gap-0 bg-card/50 px-2">
+          {(['terminal', 'tasks', 'git'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setBottomPanel(prev => prev === tab ? null : tab)}
+              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                bottomPanel === tab
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {tab === 'terminal' ? 'Terminal' : tab === 'tasks' ? 'Tasks' : 'Git'}
+            </button>
+          ))}
+        </div>
 
-          {activeTab === 'shell' && (
-            <div className="h-full w-full overflow-hidden">
+        {/* Panel content */}
+        {bottomPanel && (
+          <div className="h-[250px] overflow-hidden">
+            {bottomPanel === 'terminal' && (
               <StandaloneShell
                 project={selectedProject}
                 session={selectedSession}
                 showHeader={false}
-                isActive={activeTab === 'shell'}
+                isActive={true}
               />
-            </div>
-          )}
-
-          {activeTab === 'git' && (
-            <div className="h-full overflow-hidden">
+            )}
+            {bottomPanel === 'tasks' && (
+              <TaskMasterPanel isVisible={true} />
+            )}
+            {bottomPanel === 'git' && (
               <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
-            </div>
-          )}
-
-          {shouldShowBrowserTab && activeTab === 'browser' && (
-            <div className="h-full overflow-hidden">
-              <BrowserUsePanel isVisible={activeTab === 'browser'} onShowSettings={onShowSettings} />
-            </div>
-          )}
-
-          {activeTab.startsWith('plugin:') && (
-            <div className="h-full overflow-hidden">
-              <PluginTabContent
-                pluginName={activeTab.replace('plugin:', '')}
-                selectedProject={selectedProject}
-                selectedSession={selectedSession}
-              />
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
