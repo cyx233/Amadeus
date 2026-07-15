@@ -221,6 +221,7 @@ function MainContent({
               <StandaloneShell
                 project={selectedProject}
                 session={null}
+                isPlainShell={true}
                 showHeader={false}
                 isActive={true}
               />
