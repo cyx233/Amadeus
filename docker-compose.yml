@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        SKIP_AUTH: "true"
     restart: unless-stopped
     ports:
       - "127.0.0.1:3001:3001"
@@ -13,6 +15,7 @@ services:
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - AWS_REGION=${AWS_REGION:-us-west-2}
+      - VITE_IS_PLATFORM=true
       - DISABLE_AUTOUPDATER=1
       - LIGHTRAG_URL=http://lightrag:9621
       - WORKSPACES_ROOT=/home/agent/workspace

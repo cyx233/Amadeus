@@ -17,7 +17,9 @@ RUN useradd -m -s /bin/bash agent \
 COPY --chown=agent:agent app/ /home/agent/cloudcli-src/
 WORKDIR /home/agent/cloudcli-src
 USER agent
-RUN npm ci && npm run build && npm prune --omit=dev && npm cache clean --force
+# VITE_IS_PLATFORM=true skips login (single-user mode)
+ARG SKIP_AUTH=true
+RUN VITE_IS_PLATFORM=${SKIP_AUTH} npm ci && VITE_IS_PLATFORM=${SKIP_AUTH} npm run build && npm prune --omit=dev && npm cache clean --force
 
 # RAG skills
 COPY --chown=agent:agent skills/ /home/agent/.claude/skills/
