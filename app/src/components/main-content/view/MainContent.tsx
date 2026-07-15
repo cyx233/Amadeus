@@ -53,17 +53,14 @@ function MainContent({
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled } = useTasksSettings() as TasksSettingsContextValue;
   const [bottomPanel, setBottomPanel] = useState<'terminal' | 'tasks' | 'git' | null>(null);
+  const [chatWidth, setChatWidth] = useState(400);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   const {
     editingFile,
-    editorWidth,
-    editorExpanded,
-    hasManualWidth,
-    resizeHandleRef,
     handleFileOpen,
     handleCloseEditor,
     handleToggleEditorExpand,
-    handleResizeStart,
   } = useEditorSidebar({
     selectedProject,
     isMobile,
@@ -92,18 +89,6 @@ function MainContent({
     openFileInEditor: (filePath: string) => handleFileOpen(filePath),
   });
 
-  if (isLoading) {
-    return <MainContentStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
-  }
-
-  if (!selectedProject) {
-    return <MainContentStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} />;
-  }
-
-  // Drag-to-resize between editor and chat
-  const [chatWidth, setChatWidth] = useState(400);
-  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
-
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     dragRef.current = { startX: e.clientX, startWidth: chatWidth };
@@ -121,7 +106,13 @@ function MainContent({
     document.addEventListener('mouseup', onUp);
   }, [chatWidth]);
 
-  const dragRefEl = useRef<HTMLDivElement | null>(null);
+  if (isLoading) {
+    return <MainContentStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
+  }
+
+  if (!selectedProject) {
+    return <MainContentStateView mode="empty" isMobile={isMobile} onMenuClick={onMenuClick} />;
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -147,7 +138,6 @@ function MainContent({
 
         {/* Resize handle */}
         <div
-          ref={dragRefEl}
           onMouseDown={onDragStart}
           className="group relative w-1.5 flex-shrink-0 cursor-col-resize bg-border/40 transition-colors hover:bg-primary/60"
           title="Drag to resize"
