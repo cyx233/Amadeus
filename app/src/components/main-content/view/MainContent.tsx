@@ -53,8 +53,10 @@ function MainContent({
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled } = useTasksSettings() as TasksSettingsContextValue;
   const [bottomPanel, setBottomPanel] = useState<'terminal' | 'tasks' | 'git' | null>(null);
+  const [bottomHeight, setBottomHeight] = useState(250);
   const [chatWidth, setChatWidth] = useState(400);
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const bottomDragRef = useRef<{ startY: number; startH: number } | null>(null);
 
   const {
     editingFile,
@@ -105,6 +107,19 @@ function MainContent({
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   }, [chatWidth]);
+
+  const onBottomDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    bottomDragRef.current = { startY: e.clientY, startH: bottomHeight };
+    const onMove = (ev: MouseEvent) => {
+      if (!bottomDragRef.current) return;
+      const delta = bottomDragRef.current.startY - ev.clientY;
+      setBottomHeight(Math.max(100, Math.min(500, bottomDragRef.current.startH + delta)));
+    };
+    const onUp = () => { bottomDragRef.current = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [bottomHeight]);
 
   if (isLoading) {
     return <MainContentStateView mode="loading" isMobile={isMobile} onMenuClick={onMenuClick} />;
@@ -173,9 +188,17 @@ function MainContent({
       </div>
 
       {/* Bottom panel: Terminal / Tasks / Git */}
-      <div className="flex-shrink-0 border-t border-border/60">
+      <div className="flex-shrink-0">
+        {/* Resize handle (only when panel open) */}
+        {bottomPanel && (
+          <div
+            onMouseDown={onBottomDragStart}
+            className="h-1 cursor-row-resize bg-border/40 transition-colors hover:bg-primary/60"
+          />
+        )}
+
         {/* Panel tab bar */}
-        <div className="flex items-center gap-0 bg-card/50 px-2">
+        <div className="flex items-center gap-0 border-t border-border/60 bg-card/50 px-2">
           {(['terminal', 'tasks', 'git'] as const).map(tab => (
             <button
               key={tab}
@@ -193,7 +216,7 @@ function MainContent({
 
         {/* Panel content */}
         {bottomPanel && (
-          <div className="h-[250px] overflow-hidden">
+          <div className="overflow-hidden" style={{ height: `${bottomHeight}px` }}>
             {bottomPanel === 'terminal' && (
               <StandaloneShell
                 project={selectedProject}

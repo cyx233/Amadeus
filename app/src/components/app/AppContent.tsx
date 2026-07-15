@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -85,9 +85,22 @@ function AppContentInner() {
     activeSessions: processingSessions,
   });
 
-  // Queued messages for sessions that finish while another session (or none)
-  // is being viewed are sent from here; the viewed session's composer handles
-  // its own queue.
+  // Sidebar resize
+  const [sidebarWidth, setSidebarWidth] = useState(288);
+  const sidebarDragRef = useRef<{ startX: number; startW: number } | null>(null);
+  const onSidebarDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    sidebarDragRef.current = { startX: e.clientX, startW: sidebarWidth };
+    const onMove = (ev: MouseEvent) => {
+      if (!sidebarDragRef.current) return;
+      const delta = ev.clientX - sidebarDragRef.current.startX;
+      setSidebarWidth(Math.max(180, Math.min(500, sidebarDragRef.current.startW + delta)));
+    };
+    const onUp = () => { sidebarDragRef.current = null; document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [sidebarWidth]);
+
   useQueuedMessageAutoSend({
     processingSessions,
     activeSessionId: selectedSession?.id ?? sessionId ?? null,
@@ -205,9 +218,16 @@ function AppContentInner() {
   return (
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
-        <div className="h-full flex-shrink-0 border-r border-border/50">
+        <>
+        <div className="h-full flex-shrink-0" style={{ width: `${sidebarWidth}px` }}>
           <Sidebar {...sidebarSharedProps} />
         </div>
+        <div
+          onMouseDown={onSidebarDragStart}
+          className="h-full w-1 flex-shrink-0 cursor-col-resize bg-border/40 transition-colors hover:bg-primary/60"
+        />
+        </>
+
       ) : (
         <div
           className={`fixed inset-0 z-50 flex transition-all duration-150 ease-out ${sidebarOpen ? 'visible opacity-100' : 'invisible opacity-0'

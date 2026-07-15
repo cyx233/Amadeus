@@ -46,7 +46,7 @@ export default function SidebarContent({
   onShowSettings,
 }: SidebarContentProps) {
   return (
-    <div className="flex h-full flex-col bg-background/80 backdrop-blur-sm w-72 select-none">
+    <div className="flex h-full w-full flex-col bg-background/80 backdrop-blur-sm select-none">
       <SidebarHeader
         isLoading={isLoading}
         searchFilter={searchFilter}
