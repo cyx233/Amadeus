@@ -5,8 +5,8 @@ mkdir -p ~/.claude/projects ~/.cloudcli
 
 # Configure AWS credential_process to read the mounted creds file
 if [ -f ~/.aws/creds.json ]; then
-  mkdir -p ~/.aws
-  cat > ~/.aws/config << 'AWSCFG'
+  export AWS_CONFIG_FILE=/tmp/aws-config
+  cat > "$AWS_CONFIG_FILE" << 'AWSCFG'
 [default]
 region = us-west-2
 credential_process = cat /home/agent/.aws/creds.json
