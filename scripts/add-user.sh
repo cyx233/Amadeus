@@ -53,8 +53,7 @@ cat >> "$COMPOSE_FILE" << EOF
       - claude-data-${USERNAME}:/home/agent/.claude
       - ${WORKSPACE_ROOT}/${USERNAME}:/home/agent/workspace
     environment:
-      - ANTHROPIC_API_KEY=\${ANTHROPIC_API_KEY:-}
-      - AWS_REGION=\${AWS_REGION:-}
+      # No API keys injected — users configure their own in the web UI (Settings)
       - DISABLE_AUTOUPDATER=1
       - WORKSPACES_ROOT=/home/agent/workspace
       - NODE_ENV=production
