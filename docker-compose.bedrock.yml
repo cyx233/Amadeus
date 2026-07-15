@@ -1,9 +1,0 @@
-# Bedrock auth: mount host credential file into container.
-# Run scripts/refresh-creds.sh first (or add to crontab).
-# Usage: docker compose -f docker-compose.yml -f docker-compose.bedrock.yml up -d
-services:
-  amadeus:
-    volumes:
-      - ${HOME}/.aws/amadeus-creds.json:/home/agent/.aws/creds.json:ro
-    environment:
-      - AWS_REGION=us-west-2
