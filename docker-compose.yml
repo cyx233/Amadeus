@@ -20,6 +20,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
+        PLATFORM: linux/amd64
         SKIP_AUTH: "true"
     restart: unless-stopped
     ports:
@@ -28,6 +29,7 @@ services:
       - claude-data-dev:/home/agent/.claude
       - ${WORKSPACE_PATH:-./workspace}:/home/agent/workspace
       - ${HOME}/.aws/amadeus-creds.json:/home/agent/.aws/creds.json:ro
+      - ${CLAUDE_TOOLBOX_PATH:-/dev/null}:/opt/claude-toolbox:ro
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - AWS_REGION=${AWS_REGION:-us-west-2}

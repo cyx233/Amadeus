@@ -3,26 +3,22 @@ set -e
 
 mkdir -p ~/.claude/projects ~/.cloudcli
 
-# Configure AWS credential_process to read the mounted creds file
-if [ -f ~/.aws/creds.json ]; then
-  export AWS_CONFIG_FILE=/tmp/aws-config
-  cat > "$AWS_CONFIG_FILE" << 'AWSCFG'
-[default]
-region = us-west-2
-credential_process = cat /home/agent/.aws/creds.json
-AWSCFG
-  echo "[entrypoint] AWS configured (credential_process → mounted file)"
-fi
+# Use ASBX claude binary if mounted at /opt/claude-toolbox
+if [ -d /opt/claude-toolbox/bin ]; then
+  export PATH="/opt/claude-toolbox/bin:$PATH"
+  export HOME_TOOLBOX=/opt/claude-toolbox
 
-# Seed Claude settings for Bedrock (only on first boot)
-if [ ! -f ~/.claude/settings.json ]; then
-  cat > ~/.claude/settings.json << 'SETTINGS'
+  # Seed settings with awsCredentialExport pointing to mounted creds
+  if [ ! -f ~/.claude/settings.json ] && [ -f ~/.aws/creds.json ]; then
+    cat > ~/.claude/settings.json << 'SETTINGS'
 {
   "env": { "AWS_REGION": "us-west-2" },
-  "model": "us.anthropic.claude-sonnet-4-20250514-v1:0"
+  "model": "global.anthropic.claude-sonnet-4-20250514-v1:0",
+  "awsCredentialExport": "cat /home/agent/.aws/creds.json"
 }
 SETTINGS
-  echo "[entrypoint] Seeded Claude settings (Bedrock)"
+    echo "[entrypoint] Claude configured (ASBX binary + Bedrock)"
+  fi
 fi
 
 # Platform mode (SKIP_AUTH): seed a user so the DB isn't empty
