@@ -220,7 +220,7 @@ function MainContent({
             {bottomPanel === 'terminal' && (
               <StandaloneShell
                 project={selectedProject}
-                session={selectedSession}
+                session={null}
                 showHeader={false}
                 isActive={true}
               />
