@@ -10,3 +10,4 @@ dist-server/
 build.log
 scripts/refresh-creds.sh
 gateway/htpasswd
+gateway/user-routes.conf
