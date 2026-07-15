@@ -572,13 +572,7 @@ export default function ChatComposer({
           </PromptInputTools>
 
           <div className="flex items-center gap-2">
-            <div
-              className={`hidden text-xs text-muted-foreground/50 transition-opacity duration-200 lg:block ${
-                input.trim() && !canQueueDraft ? 'opacity-0' : 'opacity-100'
-              }`}
-            >
-              {submitHint}
-            </div>
+            {/* ponytail: hints hidden — clutters narrow sidebar chat */}
             <PromptInputSubmit
               onClick={
                 canQueueDraft
