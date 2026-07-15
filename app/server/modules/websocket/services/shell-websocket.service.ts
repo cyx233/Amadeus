@@ -126,7 +126,7 @@ function buildShellCommand(
     provider === 'plain-shell';
 
   if (isPlainShell) {
-    return initialCommand;
+    return initialCommand || 'exec bash';
   }
 
   if (provider === 'cursor') {
