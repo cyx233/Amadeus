@@ -68,14 +68,10 @@ function MainContent({
     isMobile,
   });
 
-  // Listen for file-open events from sidebar file tree
+  // Expose handleFileOpen globally for sidebar file tree
   useEffect(() => {
-    const handler = (e: Event) => {
-      const path = (e as CustomEvent).detail?.path;
-      if (path) handleFileOpen(path);
-    };
-    window.addEventListener('amadeus:file-open', handler);
-    return () => window.removeEventListener('amadeus:file-open', handler);
+    (window as any).__amadeus_openFile = handleFileOpen;
+    return () => { delete (window as any).__amadeus_openFile; };
   }, [handleFileOpen]);
 
   useEffect(() => {

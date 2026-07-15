@@ -12,17 +12,17 @@ type FileNode = {
 
 type SidebarFileTreeProps = {
   selectedProject: Project | null;
-  onFileOpen?: (path: string) => void;
 };
 
-export default function SidebarFileTree({ selectedProject, onFileOpen: onFileOpenProp }: SidebarFileTreeProps) {
-  // If no onFileOpen prop, dispatch a global event that MainContent listens for
-  const onFileOpen = onFileOpenProp || ((path: string) => {
-    window.dispatchEvent(new CustomEvent('amadeus:file-open', { detail: { path } }));
-  });
+export default function SidebarFileTree({ selectedProject }: SidebarFileTreeProps) {
   const [files, setFiles] = useState<FileNode[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
+
+  const openFile = useCallback((path: string) => {
+    const fn = (window as any).__amadeus_openFile;
+    if (fn) fn(path);
+  }, []);
 
   useEffect(() => {
     if (!selectedProject?.projectId) { setFiles([]); return; }
@@ -31,7 +31,6 @@ export default function SidebarFileTree({ selectedProject, onFileOpen: onFileOpe
       .then(res => res.ok ? res.json() : [])
       .then((data: FileNode[]) => {
         setFiles(data);
-        // Auto-expand top-level directories
         const topDirs = data.filter(n => n.type === 'directory').map(n => n.path);
         setExpanded(new Set(topDirs));
       })
@@ -63,7 +62,7 @@ export default function SidebarFileTree({ selectedProject, onFileOpen: onFileOpe
   return (
     <div className="space-y-0.5 text-[13px]">
       {files.map(node => (
-        <TreeNode key={node.path} node={node} expanded={expanded} onToggle={toggle} onFileOpen={onFileOpen} depth={0} />
+        <TreeNode key={node.path} node={node} expanded={expanded} onToggle={toggle} onFileOpen={openFile} depth={0} />
       ))}
     </div>
   );
@@ -73,7 +72,7 @@ function TreeNode({ node, expanded, onToggle, onFileOpen, depth }: {
   node: FileNode;
   expanded: Set<string>;
   onToggle: (path: string) => void;
-  onFileOpen?: (path: string) => void;
+  onFileOpen: (path: string) => void;
   depth: number;
 }) {
   const isDir = node.type === 'directory';
@@ -84,7 +83,7 @@ function TreeNode({ node, expanded, onToggle, onFileOpen, depth }: {
       <button
         className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left transition-colors hover:bg-accent/50"
         style={{ paddingLeft: `${8 + depth * 12}px` }}
-        onClick={() => isDir ? onToggle(node.path) : onFileOpen?.(node.path)}
+        onClick={() => isDir ? onToggle(node.path) : onFileOpen(node.path)}
       >
         {isDir ? (
           isOpen ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />
