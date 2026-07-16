@@ -83,6 +83,11 @@ export class ClaudeProviderAuth implements IProviderAuth {
   private async checkCredentials(): Promise<ClaudeCredentialsStatus> {
     const missingCredentialsError = 'Claude CLI is not authenticated. Run claude /login or configure ANTHROPIC_API_KEY.';
 
+    // Bedrock auth via AWS credentials
+    if (process.env.CLAUDE_CODE_USE_BEDROCK?.trim() && process.env.AWS_ACCESS_KEY_ID?.trim()) {
+      return { authenticated: true, email: 'AWS Bedrock', method: 'api_key' };
+    }
+
     if (process.env.ANTHROPIC_AUTH_TOKEN?.trim()) {
       return { authenticated: true, email: 'Auth Token', method: 'api_key' };
     }

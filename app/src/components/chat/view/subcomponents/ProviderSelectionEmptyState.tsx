@@ -62,7 +62,6 @@ type ProviderSelectionEmptyStateProps = {
   providerModelsLoading: boolean;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
-  onShowAllTasks?: (() => void) | null;
   setInput: React.Dispatch<React.SetStateAction<string>>;
 };
 
@@ -119,7 +118,6 @@ export default function ProviderSelectionEmptyState({
   providerModelsLoading,
   tasksEnabled,
   isTaskMasterInstalled,
-  onShowAllTasks,
   setInput,
 }: ProviderSelectionEmptyStateProps) {
   const { t } = useTranslation("chat");
@@ -337,7 +335,6 @@ export default function ProviderSelectionEmptyState({
             <div className="mt-5">
               <NextTaskBanner
                 onStartTask={() => setInput(nextTaskPrompt)}
-                onShowAllTasks={onShowAllTasks}
               />
             </div>
           )}
@@ -361,7 +358,6 @@ export default function ProviderSelectionEmptyState({
             <div className="mt-5">
               <NextTaskBanner
                 onStartTask={() => setInput(nextTaskPrompt)}
-                onShowAllTasks={onShowAllTasks}
               />
             </div>
           )}

@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import ChatInterface from '../../chat/view/ChatInterface';
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
-import GitPanel from '../../git-panel/view/GitPanel';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
@@ -11,7 +10,6 @@ import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
 import CodeEditor from '../../code-editor/view/CodeEditor';
 import type { Project } from '../../../types/app';
-import { TaskMasterPanel } from '../../task-master';
 
 import MainContentStateView from './subcomponents/MainContentStateView';
 import ErrorBoundary from './ErrorBoundary';
@@ -52,7 +50,7 @@ function MainContent({
 
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled } = useTasksSettings() as TasksSettingsContextValue;
-  const [bottomPanel, setBottomPanel] = useState<'terminal' | 'tasks' | 'git' | null>(null);
+  const [bottomPanel, setBottomPanel] = useState<'terminal' | null>(null);
   const [bottomHeight, setBottomHeight] = useState(250);
   const [chatPercent, setChatPercent] = useState(50);
   const bottomDragRef = useRef<{ startY: number; startH: number } | null>(null);
@@ -180,7 +178,6 @@ function MainContent({
               sendByCtrlEnter={sendByCtrlEnter}
               externalMessageUpdate={externalMessageUpdate}
               newSessionTrigger={newSessionTrigger}
-              onShowAllTasks={() => setBottomPanel('tasks')}
             />
           </ErrorBoundary>
         </div>
@@ -196,21 +193,18 @@ function MainContent({
           />
         )}
 
-        {/* Panel tab bar */}
+        {/* Terminal tab bar */}
         <div className="flex items-center border-t border-border/60 bg-card/50 px-2">
-          {(['terminal', 'tasks', 'git'] as const).map(tab => (
-            <button
-              key={tab}
-              onClick={() => setBottomPanel(prev => prev === tab ? null : tab)}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                bottomPanel === tab
-                  ? 'border-b-2 border-primary text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {tab === 'terminal' ? 'Terminal' : tab === 'tasks' ? 'Tasks' : 'Git'}
-            </button>
-          ))}
+          <button
+            onClick={() => setBottomPanel(prev => prev === 'terminal' ? null : 'terminal')}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+              bottomPanel === 'terminal'
+                ? 'border-b-2 border-primary text-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Terminal
+          </button>
           {bottomPanel && (
             <button
               onClick={() => setBottomPanel(null)}
@@ -222,24 +216,16 @@ function MainContent({
           )}
         </div>
 
-        {/* Panel content */}
-        {bottomPanel && (
+        {/* Terminal content */}
+        {bottomPanel === 'terminal' && (
           <div className="overflow-hidden" style={{ height: `${bottomHeight}px` }}>
-            {bottomPanel === 'terminal' && (
-              <StandaloneShell
-                project={selectedProject}
-                session={null}
-                isPlainShell={true}
-                showHeader={false}
-                isActive={true}
-              />
-            )}
-            {bottomPanel === 'tasks' && (
-              <TaskMasterPanel isVisible={true} />
-            )}
-            {bottomPanel === 'git' && (
-              <GitPanel selectedProject={selectedProject} isMobile={isMobile} onFileOpen={handleFileOpen} />
-            )}
+            <StandaloneShell
+              project={selectedProject}
+              session={null}
+              isPlainShell={true}
+              showHeader={false}
+              isActive={true}
+            />
           </div>
         )}
       </div>

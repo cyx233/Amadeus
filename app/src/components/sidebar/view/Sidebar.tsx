@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
@@ -7,10 +7,12 @@ import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
+import GitPanel from '../../git-panel/view/GitPanel';
+import { TaskMasterPanel } from '../../task-master';
 import type { Project } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 
-import SidebarCollapsed from './subcomponents/SidebarCollapsed';
+import SidebarCollapsed, { type SidebarView } from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
 import SidebarModals from './subcomponents/SidebarModals';
 
@@ -42,6 +44,7 @@ function Sidebar({
   expandedWidth = 288,
 }: SidebarProps & { expandedWidth?: number }) {
   const { t } = useTranslation(['sidebar', 'common']);
+  const [activeView, setActiveView] = useState<SidebarView>('explorer');
   const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
     'siteboon',
@@ -100,30 +103,45 @@ function Sidebar({
     <div className="flex h-full flex-shrink-0">
       {/* Activity bar — always visible */}
       <SidebarCollapsed
-        onExpand={isSidebarCollapsed ? handleExpandSidebar : handleCollapseSidebar}
+        activeView={isSidebarCollapsed ? null : activeView}
+        onSelectView={(view) => {
+          if (!isSidebarCollapsed && view === activeView) {
+            handleCollapseSidebar();
+          } else {
+            setActiveView(view);
+            if (isSidebarCollapsed) handleExpandSidebar();
+          }
+        }}
         onShowSettings={onShowSettings}
-        expanded={!isSidebarCollapsed}
         t={t}
       />
 
       {/* Panel — toggled */}
       {!isSidebarCollapsed && (
         <div className="h-full border-r border-border/40" style={{ width: `${expandedWidth}px` }}>
-          <SidebarContent
-            isLoading={isLoading}
-            projects={projects}
-            selectedProject={selectedProject}
-            selectedSession={selectedSession}
-            onProjectSelect={handleProjectSelect}
-            onSessionSelect={onSessionSelect}
-            onNewSession={() => { if (selectedProject) onNewSession(selectedProject); }}
-            searchFilter={searchFilter}
-            onSearchFilterChange={setSearchFilter}
-            onRefresh={() => refreshProjects()}
-            isRefreshing={isRefreshing}
-            onCreateProject={() => setShowNewProject(true)}
-            onCollapseSidebar={handleCollapseSidebar}
-          />
+          {activeView === 'explorer' && (
+            <SidebarContent
+              isLoading={isLoading}
+              projects={projects}
+              selectedProject={selectedProject}
+              selectedSession={selectedSession}
+              onProjectSelect={handleProjectSelect}
+              onSessionSelect={onSessionSelect}
+              onNewSession={() => { if (selectedProject) onNewSession(selectedProject); }}
+              searchFilter={searchFilter}
+              onSearchFilterChange={setSearchFilter}
+              onRefresh={() => refreshProjects()}
+              isRefreshing={isRefreshing}
+              onCreateProject={() => setShowNewProject(true)}
+              onCollapseSidebar={handleCollapseSidebar}
+            />
+          )}
+          {activeView === 'git' && (
+            <GitPanel selectedProject={selectedProject} isMobile={isMobile} />
+          )}
+          {activeView === 'tasks' && (
+            <TaskMasterPanel isVisible={true} />
+          )}
         </div>
       )}
 

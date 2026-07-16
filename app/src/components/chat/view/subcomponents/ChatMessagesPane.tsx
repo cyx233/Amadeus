@@ -44,7 +44,6 @@ interface ChatMessagesPaneProps {
   providerModelsLoading: boolean;
   tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
-  onShowAllTasks?: (() => void) | null;
   setInput: Dispatch<SetStateAction<string>>;
   isLoadingMoreMessages: boolean;
   hasMoreMessages: boolean;
@@ -92,7 +91,6 @@ function ChatMessagesPane({
   providerModelsLoading,
   tasksEnabled,
   isTaskMasterInstalled,
-  onShowAllTasks,
   setInput,
   isLoadingMoreMessages,
   hasMoreMessages,
@@ -191,7 +189,6 @@ function ChatMessagesPane({
           providerModelsLoading={providerModelsLoading}
           tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
-          onShowAllTasks={onShowAllTasks}
           setInput={setInput}
         />
       ) : (

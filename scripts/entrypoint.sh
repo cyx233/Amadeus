@@ -2,6 +2,7 @@
 set -e
 
 mkdir -p ~/.claude/projects ~/.cloudcli
+git config --global --add safe.directory '*'
 
 [ -f /home/agent/entrypoint-local.sh ] && . /home/agent/entrypoint-local.sh
 
