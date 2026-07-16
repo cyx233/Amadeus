@@ -2,7 +2,7 @@ FROM node:22-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential python3 python3-setuptools \
-    curl git jq ripgrep sqlite3 tree vim-tiny \
+    ca-certificates curl git jq ripgrep sqlite3 tree vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Claude Code CLI + TaskMaster globally

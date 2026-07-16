@@ -27,7 +27,7 @@ function Sidebar({
   attentionSessionIds: _attentionSessionIds,
   onProjectSelect,
   onSessionSelect,
-  onNewSession: _onNewSession,
+  onNewSession,
   onSessionDelete,
   onLoadMoreSessions,
   onProjectDelete,
@@ -39,7 +39,8 @@ function Sidebar({
   settingsInitialTab,
   onCloseSettings,
   isMobile,
-}: SidebarProps) {
+  expandedWidth = 288,
+}: SidebarProps & { expandedWidth?: number }) {
   const { t } = useTranslation(['sidebar', 'common']);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
@@ -96,7 +97,36 @@ function Sidebar({
   }, [isPWA]);
 
   return (
-    <>
+    <div className="flex h-full flex-shrink-0">
+      {/* Activity bar — always visible */}
+      <SidebarCollapsed
+        onExpand={isSidebarCollapsed ? handleExpandSidebar : handleCollapseSidebar}
+        onShowSettings={onShowSettings}
+        expanded={!isSidebarCollapsed}
+        t={t}
+      />
+
+      {/* Panel — toggled */}
+      {!isSidebarCollapsed && (
+        <div className="h-full border-r border-border/40" style={{ width: `${expandedWidth}px` }}>
+          <SidebarContent
+            isLoading={isLoading}
+            projects={projects}
+            selectedProject={selectedProject}
+            selectedSession={selectedSession}
+            onProjectSelect={handleProjectSelect}
+            onSessionSelect={onSessionSelect}
+            onNewSession={() => { if (selectedProject) onNewSession(selectedProject); }}
+            searchFilter={searchFilter}
+            onSearchFilterChange={setSearchFilter}
+            onRefresh={() => refreshProjects()}
+            isRefreshing={isRefreshing}
+            onCreateProject={() => setShowNewProject(true)}
+            onCollapseSidebar={handleCollapseSidebar}
+          />
+        </div>
+      )}
+
       <SidebarModals
         projects={projects}
         showSettings={showSettings}
@@ -120,37 +150,7 @@ function Sidebar({
         t={t}
       />
 
-      {isSidebarCollapsed ? (
-        <SidebarCollapsed
-          onExpand={handleExpandSidebar}
-          onShowSettings={onShowSettings}
-          updateAvailable={updateAvailable}
-          restartRequired={restartRequired}
-          onShowVersionModal={() => setShowVersionModal(true)}
-          t={t}
-        />
-      ) : (
-        <SidebarContent
-          isLoading={isLoading}
-          projects={projects}
-          selectedProject={selectedProject}
-          onProjectSelect={handleProjectSelect}
-          searchFilter={searchFilter}
-          onSearchFilterChange={setSearchFilter}
-          onRefresh={() => { void refreshProjects(); }}
-          isRefreshing={isRefreshing}
-          onCreateProject={() => setShowNewProject(true)}
-          onCollapseSidebar={handleCollapseSidebar}
-          updateAvailable={updateAvailable}
-          restartRequired={restartRequired}
-          releaseInfo={releaseInfo}
-          latestVersion={latestVersion}
-          currentVersion={currentVersion}
-          onShowVersionModal={() => setShowVersionModal(true)}
-          onShowSettings={onShowSettings}
-        />
-      )}
-    </>
+    </div>
   );
 }
 

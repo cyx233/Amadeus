@@ -836,8 +836,16 @@ export function useProjectsState({
   const handleProjectSelect = useCallback(
     (project: Project) => {
       setSelectedProject(project);
-      setSelectedSession(null);
-      navigate('/');
+
+      // Auto-select the most recent session for this project
+      const latestSession = project.sessions?.[0] ?? null;
+      if (latestSession) {
+        setSelectedSession(latestSession);
+        navigate(`/session/${latestSession.id}`);
+      } else {
+        setSelectedSession(null);
+        navigate('/');
+      }
 
       if (isMobile) {
         setSidebarOpen(false);
@@ -909,11 +917,7 @@ export function useProjectsState({
       const response = await api.projects();
       const freshProjects = (await response.json()) as Project[];
       const projectsWithTaskMaster = mergeTaskMasterCache(freshProjects, projects);
-      const mergedProjects = mergeExpandedSessionPages(projects, projectsWithTaskMaster);
-
-      setProjects((prevProjects) =>
-        projectsHaveChanges(prevProjects, mergedProjects) ? mergedProjects : prevProjects,
-      );
+      setProjects(projectsWithTaskMaster);
 
       if (!selectedProject) {
         return;
@@ -945,6 +949,16 @@ export function useProjectsState({
 
         if (serialize(normalizedRefreshedSession) !== serialize(selectedSession)) {
           setSelectedSession(normalizedRefreshedSession);
+        }
+      } else {
+        // Session was deleted — select next available or clear
+        const remaining = getProjectSessions(refreshedProject);
+        if (remaining.length > 0) {
+          setSelectedSession(remaining[0]);
+          navigate(`/session/${remaining[0].id}`);
+        } else {
+          setSelectedSession(null);
+          navigate('/');
         }
       }
     } catch (error) {

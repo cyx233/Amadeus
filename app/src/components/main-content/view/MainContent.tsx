@@ -54,8 +54,7 @@ function MainContent({
   const { tasksEnabled } = useTasksSettings() as TasksSettingsContextValue;
   const [bottomPanel, setBottomPanel] = useState<'terminal' | 'tasks' | 'git' | null>(null);
   const [bottomHeight, setBottomHeight] = useState(250);
-  const [chatWidth, setChatWidth] = useState(400);
-  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const [chatPercent, setChatPercent] = useState(50);
   const bottomDragRef = useRef<{ startY: number; startH: number } | null>(null);
 
   const {
@@ -87,22 +86,26 @@ function MainContent({
     openFileInEditor: (filePath: string) => handleFileOpen(filePath),
   });
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const onDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    dragRef.current = { startX: e.clientX, startWidth: chatWidth };
+    const container = containerRef.current;
+    if (!container) return;
+    const startX = e.clientX;
+    const startPercent = chatPercent;
+    const containerWidth = container.getBoundingClientRect().width;
     const onMove = (ev: MouseEvent) => {
-      if (!dragRef.current) return;
-      const delta = dragRef.current.startX - ev.clientX;
-      setChatWidth(Math.max(280, Math.min(700, dragRef.current.startWidth + delta)));
+      const delta = startX - ev.clientX;
+      const deltaPercent = (delta / containerWidth) * 100;
+      setChatPercent(Math.max(20, Math.min(80, startPercent + deltaPercent)));
     };
     const onUp = () => {
-      dragRef.current = null;
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
-  }, [chatWidth]);
+  }, [chatPercent]);
 
   const onBottomDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -128,9 +131,9 @@ function MainContent({
   return (
     <div className="flex h-full flex-col">
       {/* Top: Editor (left) + Chat (right) */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
+      <div ref={containerRef} className="flex min-h-0 flex-1 overflow-hidden">
         {/* Editor */}
-        <div className="flex min-w-[200px] flex-1 flex-col overflow-hidden">
+        <div className="flex flex-col overflow-hidden" style={{ width: `${100 - chatPercent}%`, minWidth: '20%' }}>
           {editingFile ? (
             <CodeEditor
               file={editingFile}
@@ -157,7 +160,7 @@ function MainContent({
         </div>
 
         {/* Chat — always visible */}
-        <div className="flex flex-col overflow-hidden" style={{ width: `${chatWidth}px`, minWidth: '280px' }}>
+        <div className="flex flex-col overflow-hidden" style={{ width: `${chatPercent}%`, minWidth: '20%' }}>
           <ErrorBoundary showDetails>
             <ChatInterface
               selectedProject={selectedProject}
@@ -194,7 +197,7 @@ function MainContent({
         )}
 
         {/* Panel tab bar */}
-        <div className="flex items-center gap-0 border-t border-border/60 bg-card/50 px-2">
+        <div className="flex items-center border-t border-border/60 bg-card/50 px-2">
           {(['terminal', 'tasks', 'git'] as const).map(tab => (
             <button
               key={tab}
@@ -208,6 +211,15 @@ function MainContent({
               {tab === 'terminal' ? 'Terminal' : tab === 'tasks' ? 'Tasks' : 'Git'}
             </button>
           ))}
+          {bottomPanel && (
+            <button
+              onClick={() => setBottomPanel(null)}
+              className="ml-auto px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+              title="Close panel"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         {/* Panel content */}

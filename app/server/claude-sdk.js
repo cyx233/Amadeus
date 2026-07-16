@@ -692,7 +692,15 @@ async function queryClaudeSDK(command, options = {}, ws) {
       sessionName: sessionSummary,
       stopReason: wasAborted ? 'aborted' : 'completed'
     });
-    // Complete
+    // Trigger name broadcast after session completes
+    const sid = capturedSessionId || sessionId;
+    if (sid) {
+      setTimeout(() => {
+        import('./modules/providers/services/sessions-watcher.service.js')
+          .then(m => m.triggerSessionResync?.(sid))
+          .catch(() => {});
+      }, 1500);
+    }
 
   } catch (error) {
     console.error('SDK query error:', error);

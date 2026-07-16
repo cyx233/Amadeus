@@ -550,6 +550,37 @@ app.get('/api/projects/:projectId/files/content', authenticateToken, async (req,
     }
 });
 
+// Download single file
+app.get('/api/projects/:projectId/files/download', authenticateToken, async (req, res) => {
+    try {
+        const projectRoot = await projectsDb.getProjectPathById(req.params.projectId);
+        if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+        const filePath = req.query.path;
+        if (!filePath) return res.status(400).json({ error: 'path required' });
+        const resolved = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(projectRoot, filePath);
+        if (!resolved.startsWith(path.resolve(projectRoot) + path.sep)) return res.status(403).json({ error: 'Forbidden' });
+        await fsPromises.access(resolved);
+        res.setHeader('Content-Disposition', `attachment; filename="${path.basename(resolved)}"`);
+        fs.createReadStream(resolved).pipe(res);
+    } catch { res.status(404).json({ error: 'File not found' }); }
+});
+
+// Download entire project as tar.gz
+app.get('/api/projects/:projectId/download', authenticateToken, async (req, res) => {
+    try {
+        const projectRoot = await projectsDb.getProjectPathById(req.params.projectId);
+        if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+        const name = path.basename(projectRoot);
+        res.setHeader('Content-Type', 'application/gzip');
+        res.setHeader('Content-Disposition', `attachment; filename="${name}.tar.gz"`);
+        const { spawn } = await import('node:child_process');
+        const tar = spawn('tar', ['czf', '-', '-C', path.dirname(projectRoot), name]);
+        tar.stdout.pipe(res);
+        tar.stderr.on('data', (d) => console.error('[tar]', d.toString()));
+        tar.on('error', () => { if (!res.headersSent) res.status(500).end(); });
+    } catch { res.status(500).json({ error: 'Download failed' }); }
+});
+
 // Save file content endpoint
 app.put('/api/projects/:projectId/file', authenticateToken, async (req, res) => {
     try {

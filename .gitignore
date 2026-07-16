@@ -9,5 +9,8 @@ dist-server/
 .claude/settings.local.json
 build.log
 scripts/refresh-creds.sh
+scripts/entrypoint-local.sh
 gateway/htpasswd
 gateway/user-routes.conf
+docker-compose.dev.yml
+workspace/

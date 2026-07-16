@@ -123,6 +123,12 @@ export class ClaudeSessionSynchronizer implements IProviderSessionSynchronizer {
         return null;
       }
 
+      // Only index sessions whose CWD is under WORKSPACES_ROOT
+      const root = process.env.WORKSPACES_ROOT;
+      if (root && !projectPath.startsWith(root)) {
+        return null;
+      }
+
       return {
         sessionId,
         projectPath,

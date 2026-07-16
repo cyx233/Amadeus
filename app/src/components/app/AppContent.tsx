@@ -219,9 +219,7 @@ function AppContentInner() {
     <div className="fixed inset-0 flex bg-background" style={{ bottom: 'var(--keyboard-height, 0px)' }}>
       {!isMobile ? (
         <>
-        <div className="h-full flex-shrink-0" style={{ width: `${sidebarWidth}px` }}>
-          <Sidebar {...sidebarSharedProps} />
-        </div>
+        <Sidebar {...sidebarSharedProps} expandedWidth={sidebarWidth} />
         <div
           onMouseDown={onSidebarDragStart}
           className="h-full w-1 flex-shrink-0 cursor-col-resize bg-border/40 transition-colors hover:bg-primary/60"

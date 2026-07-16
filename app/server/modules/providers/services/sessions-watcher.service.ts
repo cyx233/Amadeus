@@ -302,6 +302,17 @@ export async function initializeSessionsWatcher(): Promise<void> {
 }
 
 /**
+ * Re-syncs a session's JSONL file (re-reads history.jsonl for name) and broadcasts update.
+ */
+export async function triggerSessionResync(sessionId: string): Promise<void> {
+  const { sessionsDb } = await import('@/modules/database/index.js');
+  const row = sessionsDb.getSessionByProviderSessionId(sessionId) ?? sessionsDb.getSessionById(sessionId);
+  if (row?.jsonl_path) {
+    await onUpdate('change', row.jsonl_path, 'claude');
+  }
+}
+
+/**
  * Stops all active provider session watchers.
  */
 export async function closeSessionsWatcher(): Promise<void> {

@@ -72,6 +72,12 @@ export async function deleteOrArchiveProject(projectId: string, force: boolean):
   await deleteSessionJsonlFilesForProjectPath(row.project_path);
   sessionsDb.deleteSessionsByProjectPath(row.project_path);
   projectsDb.deleteProjectById(projectId);
+
+  // Also remove the workspace directory if it's under WORKSPACES_ROOT
+  const root = process.env.WORKSPACES_ROOT;
+  if (root && row.project_path.startsWith(root) && row.project_path !== root) {
+    await fs.rm(row.project_path, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 /**

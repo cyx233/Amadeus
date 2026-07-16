@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../../utils/api';
+import { IS_PLATFORM } from '../../../constants/config';
 import { useAuth } from '../../auth/context/AuthContext';
 import { useWebSocket } from '../../../contexts/WebSocketContext';
 import type {
@@ -129,7 +130,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
   const refreshCurrentProjectTaskMaster = useCallback(
     async (projectId: string) => {
-      if (!projectId || !user || !token) {
+      if (!projectId || !user || (!token && !IS_PLATFORM)) {
         return;
       }
 
@@ -188,7 +189,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   );
 
   const refreshProjects = useCallback(async () => {
-    if (!user || !token) {
+    if (!user || (!token && !IS_PLATFORM)) {
       setProjects([]);
       setCurrentProjectState(null);
       setProjectTaskMaster(null);
@@ -270,7 +271,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     // TaskMaster tasks endpoint now lives under /api/taskmaster/tasks/:projectId.
     const projectId = currentProject?.projectId;
 
-    if (!projectId || !user || !token) {
+    if (!projectId || !user || (!token && !IS_PLATFORM)) {
       setTasks([]);
       setNextTask(null);
       return;
@@ -301,7 +302,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   }, [clearError, currentProject?.projectId, handleError, token, user]);
 
   const refreshMCPStatus = useCallback(async () => {
-    if (!user || !token) {
+    if (!user || (!token && !IS_PLATFORM)) {
       setMcpServerStatus(null);
       return;
     }
