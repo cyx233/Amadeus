@@ -6,7 +6,10 @@ dist-server/
 .desktop-build/
 .DS_Store
 *.local
-.claude/settings.local.json
+.claude/
+.taskmaster/
+.mcp.json
+CLAUDE.md
 build.log
 scripts/refresh-creds.sh
 scripts/entrypoint-local.sh
