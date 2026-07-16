@@ -1,18 +1,7 @@
 #!/bin/bash
 set -e
 
-mkdir -p ~/.claude/projects
-
-# Persist .cloudcli (auth DB, settings) and .gitconfig on the .claude volume
-# so they survive container recreation.
-mkdir -p ~/.claude/_persist
-[ -d ~/.cloudcli ] && [ ! -L ~/.cloudcli ] && rm -rf ~/.cloudcli
-[ ! -e ~/.cloudcli ] && ln -s ~/.claude/_persist/cloudcli ~/.cloudcli
-mkdir -p ~/.claude/_persist/cloudcli
-
-[ -f ~/.claude/_persist/gitconfig ] || touch ~/.claude/_persist/gitconfig
-[ ! -L ~/.gitconfig ] && ln -sf ~/.claude/_persist/gitconfig ~/.gitconfig
-
+mkdir -p ~/.claude/projects ~/.cloudcli
 git config --global --add safe.directory '*'
 
 [ -f /home/agent/entrypoint-local.sh ] && . /home/agent/entrypoint-local.sh
