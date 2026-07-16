@@ -14,7 +14,7 @@ export type FileOpenHandler = (filePath: string, diffInfo?: FileDiffInfo) => voi
 
 export type GitPanelProps = {
   selectedProject: Project | null;
-  isMobile?: boolean;
+  compact?: boolean;
   onFileOpen?: FileOpenHandler;
 };
 

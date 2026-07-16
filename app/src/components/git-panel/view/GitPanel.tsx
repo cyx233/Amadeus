@@ -11,7 +11,9 @@ import GitRepositoryErrorState from '../view/GitRepositoryErrorState';
 import GitViewTabs from '../view/GitViewTabs';
 import ConfirmActionModal from '../view/modals/ConfirmActionModal';
 
-export default function GitPanel({ selectedProject, isMobile = false, onFileOpen }: GitPanelProps) {
+export default function GitPanel({ selectedProject, compact = false, onFileOpen }: GitPanelProps) {
+  // compact drives all narrow-layout behavior (icon-only buttons, no view tabs)
+  const isMobile = compact;
   const [activeView, setActiveView] = useState<GitPanelView>('changes');
   const [wrapText, setWrapText] = useState(true);
   const [hasExpandedFiles, setHasExpandedFiles] = useState(false);
@@ -118,12 +120,14 @@ export default function GitPanel({ selectedProject, isMobile = false, onFileOpen
         <GitRepositoryErrorState error={gitStatus.error} details={gitStatus.details} />
       ) : (
         <>
-          <GitViewTabs
-            activeView={activeView}
-            isHidden={hasExpandedFiles}
-            changeCount={changeCount}
-            onChange={setActiveView}
-          />
+          {!compact && (
+            <GitViewTabs
+              activeView={activeView}
+              isHidden={hasExpandedFiles}
+              changeCount={changeCount}
+              onChange={setActiveView}
+            />
+          )}
 
           {activeView === 'changes' && (
             <ChangesView

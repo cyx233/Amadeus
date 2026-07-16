@@ -274,6 +274,10 @@ export function useChatRealtimeHandlers({
             void playNotificationSound();
           }
 
+          if (sid !== activeViewSessionId) {
+            console.warn('[permission] dropped: sid=%s active=%s requestId=%s tool=%s', sid, activeViewSessionId, msg.requestId, msg.toolName);
+          }
+
           if (sid === activeViewSessionId) {
             const previousPendingPermissionRequests = pendingPermissionRequestsRef.current;
             if (!previousPendingPermissionRequests.some((request) => request.requestId === msg.requestId)) {

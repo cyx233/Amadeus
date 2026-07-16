@@ -137,7 +137,11 @@ function Sidebar({
             />
           )}
           {activeView === 'git' && (
-            <GitPanel selectedProject={selectedProject} isMobile={isMobile} />
+            <GitPanel
+              selectedProject={selectedProject}
+              compact={true}
+              onFileOpen={(filePath, diffInfo) => (window as any).__amadeus_openFile?.(filePath, diffInfo)}
+            />
           )}
           {activeView === 'tasks' && (
             <TaskMasterPanel isVisible={true} />

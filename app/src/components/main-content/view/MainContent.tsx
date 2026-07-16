@@ -59,7 +59,6 @@ function MainContent({
     editingFile,
     handleFileOpen,
     handleCloseEditor,
-    handleToggleEditorExpand,
   } = useEditorSidebar({
     selectedProject,
     isMobile,
@@ -138,8 +137,6 @@ function MainContent({
               onClose={handleCloseEditor}
               projectPath={selectedProject?.path}
               isSidebar={true}
-              isExpanded={false}
-              onToggleExpand={handleToggleEditorExpand}
             />
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

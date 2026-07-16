@@ -251,9 +251,12 @@ export class ClaudeProviderModels implements IProviderModels {
     }
 
     try {
-      const jsonlPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
+      const row = sessionsDb.getSessionById(sessionId);
+      const jsonlPath = row?.jsonl_path;
+      // JSONL events carry the provider-native session id, not the app id.
+      const jsonlSessionId = row?.provider_session_id || sessionId;
       const activeModel = jsonlPath
-        ? await readClaudeSessionModelFromJsonl(sessionId, jsonlPath)
+        ? await readClaudeSessionModelFromJsonl(jsonlSessionId, jsonlPath)
         : null;
       if (activeModel?.model) {
         return activeModel;
