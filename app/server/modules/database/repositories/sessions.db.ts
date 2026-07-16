@@ -220,6 +220,25 @@ export const sessionsDb = {
     ).run(customName, sessionId);
   },
 
+  /**
+   * The single entry point for reading a session's on-disk transcript.
+   *
+   * JSONL files live in the provider's world: the file name and every event
+   * inside carry the provider-native session id, never the app id. Callers
+   * must use the returned `providerSessionId` when matching events — using
+   * the app id silently matches nothing.
+   */
+  getSessionTranscript(sessionId: string): { jsonlPath: string; providerSessionId: string } | null {
+    const row = this.getSessionById(sessionId);
+    if (!row?.jsonl_path) {
+      return null;
+    }
+    return {
+      jsonlPath: row.jsonl_path,
+      providerSessionId: row.provider_session_id || sessionId,
+    };
+  },
+
   getSessionById(sessionId: string): SessionRow | null {
     const db = getConnection();
     const row = db

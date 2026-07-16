@@ -99,12 +99,12 @@ async function getCodexSessionMessages(
   offset = 0,
 ): Promise<CodexHistoryResult> {
   try {
-    const sessionFilePath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
-
-    if (!sessionFilePath) {
+    const transcript = sessionsDb.getSessionTranscript(sessionId);
+    if (!transcript) {
       console.warn(`Codex session file not found for session ${sessionId}`);
       return { messages: [], total: 0, hasMore: false };
     }
+    const sessionFilePath = transcript.jsonlPath;
 
     const messages: AnyRecord[] = [];
     let tokenUsage: AnyRecord | null = null;

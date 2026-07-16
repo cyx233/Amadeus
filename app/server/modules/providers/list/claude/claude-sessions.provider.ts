@@ -108,13 +108,11 @@ async function getSessionMessages(
   offset: number,
 ): Promise<ClaudeHistoryMessagesResult> {
   try {
-    // The DB row is keyed by the app-facing session id, while the JSONL rows
-    // on disk carry the provider-native id — both ids are needed here.
-    const jsonLPath = sessionsDb.getSessionById(sessionId)?.jsonl_path;
-
-    if (!jsonLPath) {
+    const transcript = sessionsDb.getSessionTranscript(sessionId);
+    if (!transcript) {
       return { messages: [], total: 0, hasMore: false };
     }
+    const jsonLPath = transcript.jsonlPath;
 
     const projectDir = path.dirname(jsonLPath);
     const files = await fsp.readdir(projectDir);
