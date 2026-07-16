@@ -10,8 +10,8 @@ RUN npm install -g @anthropic-ai/claude-code@latest task-master-ai && npm cache 
 
 # Non-root user with workspace mount point
 RUN useradd -m -s /bin/bash agent \
-    && mkdir -p /home/agent/workspace \
-    && chown agent:agent /home/agent/workspace
+    && mkdir -p /home/agent/workspace /home/agent/.cloudcli \
+    && chown agent:agent /home/agent/workspace /home/agent/.cloudcli
 
 # Install CloudCLI (the web UI)
 COPY --chown=agent:agent app/ /home/agent/cloudcli-src/
