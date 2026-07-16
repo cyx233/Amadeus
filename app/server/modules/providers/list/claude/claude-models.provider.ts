@@ -150,13 +150,16 @@ const extractClaudeEventModel = (event: ClaudeInitEvent, sessionId: string): str
     return contentModel;
   }
 
+  const isRealModel = (value?: string): value is string =>
+    Boolean(value && value !== '<synthetic>');
+
   const directModel = event.model?.trim();
-  if (directModel) {
+  if (isRealModel(directModel)) {
     return directModel;
   }
 
   const messageModel = event.message?.model?.trim();
-  return messageModel || null;
+  return isRealModel(messageModel) ? messageModel : null;
 };
 
 const stripAnsi = (value: string): string => value.replace(ANSI_PATTERN, '');
