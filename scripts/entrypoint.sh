@@ -2,6 +2,9 @@
 set -e
 
 mkdir -p ~/.claude/projects ~/.cloudcli
+
+# Restore gitconfig from persistent volume (survives container recreation)
+[ -f ~/.cloudcli/.gitconfig ] && cp ~/.cloudcli/.gitconfig ~/.gitconfig
 git config --global --add safe.directory '*'
 
 [ -f /home/agent/entrypoint-local.sh ] && . /home/agent/entrypoint-local.sh
@@ -34,5 +37,10 @@ if [ "${VITE_IS_PLATFORM}" = "true" ]; then
   kill $PID 2>/dev/null; wait $PID 2>/dev/null || true
 fi
 
-# Start server (foreground)
-exec node dist-server/server/index.js
+# Save gitconfig to persistent volume on shutdown
+save_gitconfig() { [ -f ~/.gitconfig ] && cp ~/.gitconfig ~/.cloudcli/.gitconfig; }
+trap save_gitconfig TERM INT
+
+# Start server (foreground, but not exec — so trap fires)
+node dist-server/server/index.js &
+wait $!

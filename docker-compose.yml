@@ -26,6 +26,7 @@ services:
       - "3001:3001"
     volumes:
       - claude-data-dev:/home/agent/.claude
+      - cloudcli-data-dev:/home/agent/.cloudcli
       - ${WORKSPACE_PATH:-./workspace}:/home/agent/workspace
       - ${HOME}/.aws/amadeus-creds.json:/home/agent/.aws/creds.json:ro
     environment:
@@ -63,4 +64,5 @@ services:
 
 volumes:
   claude-data-dev:
+  cloudcli-data-dev:
   lightrag-data:

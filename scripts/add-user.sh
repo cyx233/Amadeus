@@ -12,6 +12,12 @@ WORKSPACE_ROOT="${WORKSPACE_ROOT:-./workspaces}"
 HTPASSWD_FILE="gateway/htpasswd"
 ROUTES_FILE="gateway/user-routes.conf"
 
+# Dedup: abort if user already exists
+if grep -q "amadeus-${USERNAME}:" docker-compose.yml 2>/dev/null; then
+  echo "[!] User '${USERNAME}' already exists. Skipping."
+  exit 0
+fi
+
 # Prompt for password if not given
 if [ -z "$PASSWORD" ]; then
   read -s -p "Password for ${USERNAME}: " PASSWORD; echo
@@ -45,6 +51,7 @@ sed -i.bak "/^volumes:/i\\
     container_name: amadeus-${USERNAME}\\
     volumes:\\
       - claude-data-${USERNAME}:/home/agent/.claude\\
+      - cloudcli-data-${USERNAME}:/home/agent/.cloudcli\\
       - ${WORKSPACE_ROOT}/${USERNAME}:/home/agent/workspace\\
     environment:\\
       - DISABLE_AUTOUPDATER=1\\
@@ -63,8 +70,9 @@ sed -i.bak "/^volumes:/i\\
 " docker-compose.yml
 rm -f docker-compose.yml.bak
 
-# Add volume declaration
+# Add volume declarations
 echo "  claude-data-${USERNAME}:" >> docker-compose.yml
+echo "  cloudcli-data-${USERNAME}:" >> docker-compose.yml
 
 echo ""
 echo "[+] User '${USERNAME}' added"
