@@ -67,6 +67,7 @@ import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './util
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { createProject } from './modules/projects/services/project-management.service.js';
 import { configureWebPush } from './services/vapid-keys.js';
+import { syncGitCredentials } from './utils/git-credentials.js';
 import { validateApiKey, authenticateToken, authenticateWebSocket } from './middleware/auth.js';
 import { IS_PLATFORM } from './constants/config.js';
 import { c } from './utils/colors.js';
@@ -1621,6 +1622,9 @@ async function startServer() {
                 }
             } catch {}
         }
+
+        // Sync GitHub token into git credential store
+        await syncGitCredentials();
 
         // Configure Web Push (VAPID keys)
         configureWebPush();

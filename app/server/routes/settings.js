@@ -8,6 +8,7 @@ import {
 } from '../modules/database/index.js';
 import { getPublicKey } from '../services/vapid-keys.js';
 import { createNotificationEvent, notifyUserIfEnabled } from '../services/notification-orchestrator.js';
+import { syncGitCredentials } from '../utils/git-credentials.js';
 
 const router = express.Router();
 
@@ -137,6 +138,7 @@ router.post('/credentials', async (req, res) => {
       success: true,
       credential: result
     });
+    void syncGitCredentials();
   } catch (error) {
     console.error('Error creating credential:', error);
     res.status(500).json({ error: 'Failed to create credential' });
@@ -151,6 +153,7 @@ router.delete('/credentials/:credentialId', async (req, res) => {
 
     if (success) {
       res.json({ success: true });
+      void syncGitCredentials();
     } else {
       res.status(404).json({ error: 'Credential not found' });
     }
@@ -174,6 +177,7 @@ router.patch('/credentials/:credentialId/toggle', async (req, res) => {
 
     if (success) {
       res.json({ success: true });
+      void syncGitCredentials();
     } else {
       res.status(404).json({ error: 'Credential not found' });
     }

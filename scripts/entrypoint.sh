@@ -6,6 +6,7 @@ mkdir -p ~/.claude/projects ~/.cloudcli
 # Restore gitconfig from persistent volume (survives container recreation)
 [ -f ~/.cloudcli/.gitconfig ] && cp ~/.cloudcli/.gitconfig ~/.gitconfig
 git config --global --add safe.directory '*'
+git config --global core.sharedRepository world
 
 [ -f /home/agent/entrypoint-local.sh ] && . /home/agent/entrypoint-local.sh
 
