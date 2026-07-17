@@ -16,17 +16,16 @@ git config --global --add safe.directory '*'
 # Bedrock creds, etc. Absent in multi mode.
 [ -f /home/agent/entrypoint-local.sh ] && . /home/agent/entrypoint-local.sh
 
-# Configure TaskMaster MCP server if not already set
-if ! grep -q "task-master-ai" ~/.claude.json 2>/dev/null; then
-  node -e "
-    const f = require('fs'), p = require('path');
-    const cfg = p.join(process.env.HOME, '.claude.json');
-    const j = f.existsSync(cfg) ? JSON.parse(f.readFileSync(cfg,'utf8')) : {};
-    j.mcpServers = j.mcpServers || {};
-    j.mcpServers['task-master-ai'] = { command: 'task-master', args: ['--serve'] };
-    f.writeFileSync(cfg, JSON.stringify(j, null, 2));
-  "
-fi
+# Configure TaskMaster MCP server (task-master-mcp is the stdio server bin;
+# `task-master --serve` was wrong — that flag doesn't exist).
+node -e "
+  const f = require('fs'), p = require('path');
+  const cfg = p.join(process.env.HOME, '.claude.json');
+  const j = f.existsSync(cfg) ? JSON.parse(f.readFileSync(cfg,'utf8')) : {};
+  j.mcpServers = j.mcpServers || {};
+  j.mcpServers['task-master-ai'] = { command: 'task-master-mcp', args: [] };
+  f.writeFileSync(cfg, JSON.stringify(j, null, 2));
+"
 
 # Platform mode (SKIP_AUTH): seed a user so the DB isn't empty
 cd "$APP"
