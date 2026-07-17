@@ -8,12 +8,12 @@ import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import GitPanel from '../../git-panel/view/GitPanel';
-import { TaskMasterPanel } from '../../task-master';
 import type { Project } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
 
 import SidebarCollapsed, { type SidebarView } from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
+import TodoPanel from './subcomponents/TodoPanel';
 import SidebarModals from './subcomponents/SidebarModals';
 
 type TaskMasterSidebarContext = {
@@ -143,8 +143,8 @@ function Sidebar({
               onFileOpen={(filePath, diffInfo) => (window as any).__amadeus_openFile?.(filePath, diffInfo)}
             />
           )}
-          {activeView === 'tasks' && (
-            <TaskMasterPanel isVisible={true} />
+          {activeView === 'todo' && (
+            <TodoPanel />
           )}
         </div>
       )}

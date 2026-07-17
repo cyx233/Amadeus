@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 import ChatInterface from '../../chat/view/ChatInterface';
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
+import { TaskMasterPanel } from '../../task-master';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
@@ -50,7 +51,7 @@ function MainContent({
 
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
   const { tasksEnabled } = useTasksSettings() as TasksSettingsContextValue;
-  const [bottomPanel, setBottomPanel] = useState<'terminal' | null>(null);
+  const [bottomPanel, setBottomPanel] = useState<'terminal' | 'tasks' | null>(null);
   const [bottomHeight, setBottomHeight] = useState(250);
   const [chatPercent, setChatPercent] = useState(50);
   const bottomDragRef = useRef<{ startY: number; startH: number } | null>(null);
@@ -202,6 +203,16 @@ function MainContent({
           >
             Terminal
           </button>
+          <button
+            onClick={() => setBottomPanel(prev => prev === 'tasks' ? null : 'tasks')}
+            className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+              bottomPanel === 'tasks'
+                ? 'border-b-2 border-primary text-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Tasks
+          </button>
           {bottomPanel && (
             <button
               onClick={() => setBottomPanel(null)}
@@ -223,6 +234,13 @@ function MainContent({
               showHeader={false}
               isActive={true}
             />
+          </div>
+        )}
+
+        {/* Tasks content */}
+        {bottomPanel === 'tasks' && (
+          <div className="overflow-hidden" style={{ height: `${bottomHeight}px` }}>
+            <TaskMasterPanel isVisible={true} />
           </div>
         )}
       </div>
