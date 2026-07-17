@@ -376,11 +376,14 @@ function extractTokenBudget(sdkMessage) {
  * @returns {Promise<string|AsyncIterable>} SDK prompt payload
  */
 async function buildPromptPayload(command, images, cwd) {
-  if (normalizeImageDescriptors(images).length === 0) {
-    return command;
-  }
+  // Always use streaming-input mode (an async generator), even for plain text.
+  // query.interrupt() (used by chat.abort) only works in streaming-input mode;
+  // a bare string prompt makes abort a silent no-op, so the agent can't be
+  // stopped mid-run. See abortClaudeSDKSession.
+  const content = normalizeImageDescriptors(images).length === 0
+    ? command
+    : await buildClaudeUserContent(command, images, cwd);
 
-  const content = await buildClaudeUserContent(command, images, cwd);
   return (async function* () {
     yield {
       type: 'user',
