@@ -327,14 +327,14 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   }, [clearError, handleError, token, user]);
 
   useEffect(() => {
-    if (!isAuthLoading && user && token) {
+    if (!isAuthLoading && user && (token || IS_PLATFORM)) {
       void refreshProjects();
       void refreshMCPStatus();
     }
   }, [isAuthLoading, refreshMCPStatus, refreshProjects, token, user]);
 
   useEffect(() => {
-    if (currentProject?.projectId && user && token) {
+    if (currentProject?.projectId && user && (token || IS_PLATFORM)) {
       void refreshTasks();
     }
   }, [currentProject?.projectId, refreshTasks, token, user]);
