@@ -44,7 +44,12 @@ export function useGitPanelController({
   selectedProject,
   activeView,
   onFileOpen,
+  selectedRepoPath,
 }: UseGitPanelControllerOptions): GitPanelController {
+  // Appends the active repo path to a GET query string; a no-op when unset so
+  // legacy/single-repo behavior is unchanged.
+  const withRepo = (qs: string) =>
+    selectedRepoPath ? `${qs}&repo=${encodeURIComponent(selectedRepoPath)}` : qs;
   const [gitStatus, setGitStatus] = useState<GitStatusResponse | null>(null);
   const [gitDiff, setGitDiff] = useState<GitDiffMap>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -85,7 +90,7 @@ export function useGitPanelController({
 
       try {
         const response = await fetchWithAuth(
-          `/api/git/diff?project=${encodeURIComponent(projectId)}&file=${encodeURIComponent(filePath)}`,
+          withRepo(`/api/git/diff?project=${encodeURIComponent(projectId)}&file=${encodeURIComponent(filePath)}`),
           { signal },
         );
         const data = await readJson<GitDiffResponse>(response, signal);
@@ -111,7 +116,7 @@ export function useGitPanelController({
         console.error('Error fetching file diff:', error);
       }
     },
-    [selectedProject],
+    [selectedProject, selectedRepoPath],
   );
 
   const fetchGitStatus = useCallback(async (signal?: AbortSignal) => {
@@ -124,7 +129,7 @@ export function useGitPanelController({
 
     setIsLoading(true);
     try {
-      const response = await fetchWithAuth(`/api/git/status?project=${encodeURIComponent(projectId)}`, { signal });
+      const response = await fetchWithAuth(withRepo(`/api/git/status?project=${encodeURIComponent(projectId)}`), { signal });
       const data = await readJson<GitStatusResponse>(response, signal);
 
       if (
@@ -165,7 +170,7 @@ export function useGitPanelController({
     } finally {
       setIsLoading(false);
     }
-  }, [fetchFileDiff, selectedProject]);
+  }, [fetchFileDiff, selectedProject, selectedRepoPath]);
 
   const fetchBranches = useCallback(async () => {
     if (!selectedProject) {
@@ -173,7 +178,7 @@ export function useGitPanelController({
     }
 
     try {
-      const response = await fetchWithAuth(`/api/git/branches?project=${encodeURIComponent(selectedProject.projectId)}`);
+      const response = await fetchWithAuth(withRepo(`/api/git/branches?project=${encodeURIComponent(selectedProject.projectId)}`));
       const data = await readJson<GitBranchesResponse>(response);
 
       if (!data.error && data.branches) {
@@ -192,7 +197,7 @@ export function useGitPanelController({
       setLocalBranches([]);
       setRemoteBranches([]);
     }
-  }, [selectedProject]);
+  }, [selectedProject, selectedRepoPath]);
 
   const fetchRemoteStatus = useCallback(async () => {
     if (!selectedProject) {
@@ -200,7 +205,7 @@ export function useGitPanelController({
     }
 
     try {
-      const response = await fetchWithAuth(`/api/git/remote-status?project=${encodeURIComponent(selectedProject.projectId)}`);
+      const response = await fetchWithAuth(withRepo(`/api/git/remote-status?project=${encodeURIComponent(selectedProject.projectId)}`));
       const data = await readJson<GitRemoteStatus | GitApiErrorResponse>(response);
 
       if (!data.error) {
@@ -213,7 +218,7 @@ export function useGitPanelController({
       console.error('Error fetching remote status:', error);
       setRemoteStatus(null);
     }
-  }, [selectedProject]);
+  }, [selectedProject, selectedRepoPath]);
 
   const switchBranch = useCallback(
     async (branchName: string) => {
@@ -227,6 +232,7 @@ export function useGitPanelController({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             project: selectedProject.projectId,
+            repo: selectedRepoPath ?? undefined,
             branch: branchName,
           }),
         });
@@ -245,7 +251,7 @@ export function useGitPanelController({
         return false;
       }
     },
-    [fetchGitStatus, selectedProject],
+    [fetchGitStatus, selectedProject, selectedRepoPath],
   );
 
   const createBranch = useCallback(
@@ -262,6 +268,7 @@ export function useGitPanelController({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             project: selectedProject.projectId,
+            repo: selectedRepoPath ?? undefined,
             branch: trimmedBranchName,
           }),
         });
@@ -283,7 +290,7 @@ export function useGitPanelController({
         setIsCreatingBranch(false);
       }
     },
-    [fetchBranches, fetchGitStatus, selectedProject],
+    [fetchBranches, fetchGitStatus, selectedProject, selectedRepoPath],
   );
 
   const deleteBranch = useCallback(
@@ -294,7 +301,7 @@ export function useGitPanelController({
         const response = await fetchWithAuth('/api/git/delete-branch', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project: selectedProject.projectId, branch: branchName }),
+          body: JSON.stringify({ project: selectedProject.projectId, repo: selectedRepoPath ?? undefined, branch: branchName }),
         });
 
         const data = await readJson<GitOperationResponse>(response);
@@ -310,7 +317,7 @@ export function useGitPanelController({
         return false;
       }
     },
-    [fetchBranches, selectedProject],
+    [fetchBranches, selectedProject, selectedRepoPath],
   );
 
   const handleFetch = useCallback(async () => {
@@ -325,6 +332,7 @@ export function useGitPanelController({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project: selectedProject.projectId,
+          repo: selectedRepoPath ?? undefined,
         }),
       });
 
@@ -342,7 +350,7 @@ export function useGitPanelController({
     } finally {
       setIsFetching(false);
     }
-  }, [fetchBranches, fetchGitStatus, fetchRemoteStatus, selectedProject]);
+  }, [fetchBranches, fetchGitStatus, fetchRemoteStatus, selectedProject, selectedRepoPath]);
 
   const handlePull = useCallback(async () => {
     if (!selectedProject) {
@@ -356,6 +364,7 @@ export function useGitPanelController({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project: selectedProject.projectId,
+          repo: selectedRepoPath ?? undefined,
         }),
       });
 
@@ -372,7 +381,7 @@ export function useGitPanelController({
     } finally {
       setIsPulling(false);
     }
-  }, [fetchGitStatus, fetchRemoteStatus, selectedProject]);
+  }, [fetchGitStatus, fetchRemoteStatus, selectedProject, selectedRepoPath]);
 
   const handlePush = useCallback(async () => {
     if (!selectedProject) {
@@ -386,6 +395,7 @@ export function useGitPanelController({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project: selectedProject.projectId,
+          repo: selectedRepoPath ?? undefined,
         }),
       });
 
@@ -402,7 +412,7 @@ export function useGitPanelController({
     } finally {
       setIsPushing(false);
     }
-  }, [fetchGitStatus, fetchRemoteStatus, selectedProject]);
+  }, [fetchGitStatus, fetchRemoteStatus, selectedProject, selectedRepoPath]);
 
   const handlePublish = useCallback(async () => {
     if (!selectedProject) {
@@ -416,6 +426,7 @@ export function useGitPanelController({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project: selectedProject.projectId,
+          repo: selectedRepoPath ?? undefined,
           branch: currentBranch,
         }),
       });
@@ -433,7 +444,7 @@ export function useGitPanelController({
     } finally {
       setIsPublishing(false);
     }
-  }, [currentBranch, fetchGitStatus, fetchRemoteStatus, selectedProject]);
+  }, [currentBranch, fetchGitStatus, fetchRemoteStatus, selectedProject, selectedRepoPath]);
 
   const discardChanges = useCallback(
     async (filePath: string) => {
@@ -447,6 +458,7 @@ export function useGitPanelController({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             project: selectedProject.projectId,
+            repo: selectedRepoPath ?? undefined,
             file: filePath,
           }),
         });
@@ -462,7 +474,7 @@ export function useGitPanelController({
         console.error('Error discarding changes:', error);
       }
     },
-    [fetchGitStatus, selectedProject],
+    [fetchGitStatus, selectedProject, selectedRepoPath],
   );
 
   const deleteUntrackedFile = useCallback(
@@ -477,6 +489,7 @@ export function useGitPanelController({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             project: selectedProject.projectId,
+            repo: selectedRepoPath ?? undefined,
             file: filePath,
           }),
         });
@@ -492,7 +505,7 @@ export function useGitPanelController({
         console.error('Error deleting untracked file:', error);
       }
     },
-    [fetchGitStatus, selectedProject],
+    [fetchGitStatus, selectedProject, selectedRepoPath],
   );
 
   const stageFiles = useCallback(
@@ -507,6 +520,7 @@ export function useGitPanelController({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             project: selectedProject.projectId,
+            repo: selectedRepoPath ?? undefined,
             files,
           }),
         });
@@ -525,7 +539,7 @@ export function useGitPanelController({
         return false;
       }
     },
-    [fetchGitStatus, selectedProject],
+    [fetchGitStatus, selectedProject, selectedRepoPath],
   );
 
   const unstageFiles = useCallback(
@@ -540,6 +554,7 @@ export function useGitPanelController({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             project: selectedProject.projectId,
+            repo: selectedRepoPath ?? undefined,
             files,
           }),
         });
@@ -557,7 +572,7 @@ export function useGitPanelController({
         return false;
       }
     },
-    [fetchGitStatus, selectedProject],
+    [fetchGitStatus, selectedProject, selectedRepoPath],
   );
 
   const fetchRecentCommits = useCallback(async () => {
@@ -567,7 +582,7 @@ export function useGitPanelController({
 
     try {
       const response = await fetchWithAuth(
-        `/api/git/commits?project=${encodeURIComponent(selectedProject.projectId)}&limit=${RECENT_COMMITS_LIMIT}`,
+        withRepo(`/api/git/commits?project=${encodeURIComponent(selectedProject.projectId)}&limit=${RECENT_COMMITS_LIMIT}`),
       );
       const data = await readJson<GitCommitsResponse>(response);
 
@@ -577,7 +592,7 @@ export function useGitPanelController({
     } catch (error) {
       console.error('Error fetching commits:', error);
     }
-  }, [selectedProject]);
+  }, [selectedProject, selectedRepoPath]);
 
   const fetchCommitDiff = useCallback(
     async (commitHash: string) => {
@@ -587,7 +602,7 @@ export function useGitPanelController({
 
       try {
         const response = await fetchWithAuth(
-          `/api/git/commit-diff?project=${encodeURIComponent(selectedProject.projectId)}&commit=${commitHash}`,
+          withRepo(`/api/git/commit-diff?project=${encodeURIComponent(selectedProject.projectId)}&commit=${commitHash}`),
         );
         const data = await readJson<GitDiffResponse>(response);
 
@@ -601,7 +616,7 @@ export function useGitPanelController({
         console.error('Error fetching commit diff:', error);
       }
     },
-    [selectedProject],
+    [selectedProject, selectedRepoPath],
   );
 
   const generateCommitMessage = useCallback(
@@ -616,6 +631,7 @@ export function useGitPanelController({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             project: selectedProject.projectId,
+            repo: selectedRepoPath ?? undefined,
             files,
             provider,
           }),
@@ -633,7 +649,7 @@ export function useGitPanelController({
         return null;
       }
     },
-    [provider, selectedProject],
+    [provider, selectedProject, selectedRepoPath],
   );
 
   const commitChanges = useCallback(
@@ -648,6 +664,7 @@ export function useGitPanelController({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             project: selectedProject.projectId,
+            repo: selectedRepoPath ?? undefined,
             message,
             files,
           }),
@@ -667,7 +684,7 @@ export function useGitPanelController({
         return false;
       }
     },
-    [fetchGitStatus, fetchRemoteStatus, selectedProject],
+    [fetchGitStatus, fetchRemoteStatus, selectedProject, selectedRepoPath],
   );
 
   const createInitialCommit = useCallback(async () => {
@@ -682,6 +699,7 @@ export function useGitPanelController({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project: selectedProject.projectId,
+          repo: selectedRepoPath ?? undefined,
         }),
       });
 
@@ -699,7 +717,7 @@ export function useGitPanelController({
     } finally {
       setIsCreatingInitialCommit(false);
     }
-  }, [fetchGitStatus, fetchRemoteStatus, selectedProject]);
+  }, [fetchGitStatus, fetchRemoteStatus, selectedProject, selectedRepoPath]);
 
   const openFile = useCallback(
     async (filePath: string) => {
@@ -714,7 +732,7 @@ export function useGitPanelController({
 
       try {
         const response = await fetchWithAuth(
-          `/api/git/file-with-diff?project=${encodeURIComponent(selectedProject.projectId)}&file=${encodeURIComponent(filePath)}`,
+          withRepo(`/api/git/file-with-diff?project=${encodeURIComponent(selectedProject.projectId)}&file=${encodeURIComponent(filePath)}`),
         );
         const data = await readJson<GitFileWithDiffResponse>(response);
 
@@ -733,7 +751,7 @@ export function useGitPanelController({
         onFileOpen(filePath);
       }
     },
-    [onFileOpen, selectedProject],
+    [onFileOpen, selectedProject, selectedRepoPath],
   );
 
   const refreshAll = useCallback(() => {

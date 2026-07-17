@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-import { parseGitLogWithStats, parseGitStatusOutput } from './git.js';
+import { parseGitLogWithStats, parseGitStatusOutput, resolveRepoWithinProject, discoverGitRepos } from './git.js';
 
 // Builds `git status --porcelain=v1 -z` output: NUL-separated entries with a
 // trailing NUL, exactly as git emits it.
@@ -103,4 +106,59 @@ test('parseGitLogWithStats parses commits with parents, refs, and shortstat line
 
 test('parseGitLogWithStats handles empty output', () => {
   assert.deepEqual(parseGitLogWithStats(''), []);
+});
+
+test('resolveRepoWithinProject returns project root when no repo override', () => {
+  assert.equal(resolveRepoWithinProject('/home/u/proj', undefined), '/home/u/proj');
+  assert.equal(resolveRepoWithinProject('/home/u/proj', null), '/home/u/proj');
+});
+
+test('resolveRepoWithinProject allows the root and nested subdirs', () => {
+  assert.equal(resolveRepoWithinProject('/home/u/proj', '/home/u/proj'), '/home/u/proj');
+  assert.equal(resolveRepoWithinProject('/home/u/proj', '/home/u/proj/src/pkg'), '/home/u/proj/src/pkg');
+});
+
+test('resolveRepoWithinProject rejects traversal / sibling escapes', () => {
+  assert.throws(() => resolveRepoWithinProject('/home/u/proj', '/home/u/other'), /must be inside/);
+  assert.throws(() => resolveRepoWithinProject('/home/u/proj', '/home/u/proj/../secret'), /must be inside/);
+  // '/home/u/proj-evil' must not pass just because it shares the prefix
+  assert.throws(() => resolveRepoWithinProject('/home/u/proj', '/home/u/proj-evil'), /must be inside/);
+});
+
+// Mirrors the real case: a Brazil-style workspace whose root is NOT a repo but
+// whose src/ packages each are. Scanning stops at each repo root (nested repos
+// inside a package are that package's business — submodules/vendored), skips
+// node_modules, and never descends into an already-found repo.
+test('discoverGitRepos finds package repos under a non-repo root', async () => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'gitscan-'));
+  try {
+    await fs.mkdir(path.join(base, 'src', 'PkgA', '.git'), { recursive: true });
+    await fs.mkdir(path.join(base, 'src', 'PkgB', '.git'), { recursive: true });
+    // buried inside node_modules — must be ignored
+    await fs.mkdir(path.join(base, 'node_modules', 'dep', '.git'), { recursive: true });
+    // nested INSIDE PkgA — must NOT be surfaced (we stop at PkgA)
+    await fs.mkdir(path.join(base, 'src', 'PkgA', 'vendor', '.git'), { recursive: true });
+
+    const repos = await discoverGitRepos(base);
+    const rel = repos.map((r) => path.relative(base, r)).sort();
+
+    assert.deepEqual(rel, [path.join('src', 'PkgA'), path.join('src', 'PkgB')].sort());
+  } finally {
+    await fs.rm(base, { recursive: true, force: true });
+  }
+});
+
+// When the root itself is a repo, that's the single repo — don't scan inside it
+// for more (matches VSCode's default, avoids surfacing submodules as siblings).
+test('discoverGitRepos returns just the root when the root is a repo', async () => {
+  const base = await fs.mkdtemp(path.join(os.tmpdir(), 'gitscan-'));
+  try {
+    await fs.mkdir(path.join(base, '.git'), { recursive: true });
+    await fs.mkdir(path.join(base, 'src', 'sub', '.git'), { recursive: true });
+
+    const repos = await discoverGitRepos(base);
+    assert.deepEqual(repos, [base]);
+  } finally {
+    await fs.rm(base, { recursive: true, force: true });
+  }
 });

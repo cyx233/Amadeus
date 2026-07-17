@@ -70,10 +70,21 @@ export type ConfirmationRequest = {
   onConfirm: () => Promise<void> | void;
 };
 
+export type GitRepo = {
+  /** Absolute path to the git repo; threaded to the backend as the `repo` param. */
+  path: string;
+  /** Relative subdir path, or '' for the project root. */
+  name: string;
+  isRoot: boolean;
+  branch: string | null;
+};
+
 export type UseGitPanelControllerOptions = {
   selectedProject: Project | null;
   activeView: GitPanelView;
   onFileOpen?: FileOpenHandler;
+  /** Absolute path of the active repo; omitted from requests when null. */
+  selectedRepoPath?: string | null;
 };
 
 export type GitPanelController = {

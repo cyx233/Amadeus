@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { authenticatedFetch } from '../../../utils/api';
 import { useGitPanelController } from '../hooks/useGitPanelController';
 import { useRevertLocalCommit } from '../hooks/useRevertLocalCommit';
-import type { ConfirmationRequest, GitPanelProps, GitPanelView } from '../types/types';
+import type { ConfirmationRequest, GitPanelProps, GitPanelView, GitRepo } from '../types/types';
 import { getChangedFileCount } from '../utils/gitPanelUtils';
 import ChangesView from '../view/changes/ChangesView';
 import HistoryView from '../view/history/HistoryView';
@@ -18,6 +19,47 @@ export default function GitPanel({ selectedProject, compact = false, onFileOpen 
   const [wrapText, setWrapText] = useState(true);
   const [hasExpandedFiles, setHasExpandedFiles] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmationRequest | null>(null);
+  // VSCode-style multi-repo support: the picker lists every git repo in the
+  // project, and the selected repo's absolute path threads into all git calls.
+  const [repos, setRepos] = useState<GitRepo[]>([]);
+  const [selectedRepoPath, setSelectedRepoPath] = useState<string | null>(null);
+
+  const projectId = selectedProject?.projectId ?? null;
+
+  useEffect(() => {
+    setRepos([]);
+    setSelectedRepoPath(null);
+
+    if (!projectId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const response = await authenticatedFetch(
+          `/api/git/repos?project=${encodeURIComponent(projectId)}`,
+        );
+        const data = (await response.json()) as { repos?: GitRepo[] };
+        if (cancelled || !data.repos) {
+          return;
+        }
+
+        setRepos(data.repos);
+        const root = data.repos.find((repo) => repo.isRoot);
+        setSelectedRepoPath(root?.path ?? data.repos[0]?.path ?? null);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Error fetching git repos:', error);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   const {
     gitStatus,
@@ -59,12 +101,14 @@ export default function GitPanel({ selectedProject, compact = false, onFileOpen 
     selectedProject,
     activeView,
     onFileOpen,
+    selectedRepoPath,
   });
 
   const { isRevertingLocalCommit, revertLatestLocalCommit } = useRevertLocalCommit({
     // `projectId` (DB primary key) is forwarded to the revert API which uses it
     // as the `project` body param.
     projectId: selectedProject?.projectId ?? null,
+    repoPath: selectedRepoPath,
     onSuccess: refreshAll,
   });
 
@@ -91,6 +135,25 @@ export default function GitPanel({ selectedProject, compact = false, onFileOpen 
 
   return (
     <div className="flex h-full flex-col bg-background">
+      {repos.length > 1 && (
+        <div className="border-b border-border px-2 py-1.5">
+          <select
+            className="w-full rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+            value={selectedRepoPath ?? ''}
+            onChange={(event) => setSelectedRepoPath(event.target.value)}
+          >
+            {repos.map((repo) => {
+              const label = repo.isRoot ? repo.name || 'root' : repo.name;
+              return (
+                <option key={repo.path} value={repo.path}>
+                  {repo.branch ? `${label} · ${repo.branch}` : label}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+      )}
+
       <GitPanelHeader
         isMobile={isMobile}
         currentBranch={currentBranch}
@@ -131,9 +194,9 @@ export default function GitPanel({ selectedProject, compact = false, onFileOpen 
 
           {activeView === 'changes' && (
             <ChangesView
-              key={selectedProject.fullPath}
+              key={selectedRepoPath ?? selectedProject.fullPath}
               isMobile={isMobile}
-              projectPath={selectedProject.fullPath}
+              projectPath={selectedRepoPath ?? selectedProject.fullPath}
               gitStatus={gitStatus}
               gitDiff={gitDiff}
               isLoading={isLoading}
