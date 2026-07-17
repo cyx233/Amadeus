@@ -126,7 +126,9 @@ function buildShellCommand(
     provider === 'plain-shell';
 
   if (isPlainShell) {
-    return initialCommand || 'exec bash';
+    // AMADEUS_SHELL_CMD lets dev route the plain shell to the host (e.g. an
+    // ssh into the Cloud Desktop for the native zsh + toolbox); defaults to bash.
+    return initialCommand || process.env.AMADEUS_SHELL_CMD || 'exec bash';
   }
 
   if (provider === 'cursor') {
