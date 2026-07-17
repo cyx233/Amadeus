@@ -25,9 +25,7 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - claude-data-dev:/home/agent/.claude
-      - cloudcli-data-dev:/home/agent/.cloudcli
-      - workspace-dev:/home/agent/workspace
+      - user-data-dev:/home/agent
       - ${HOME}/.aws/amadeus-creds.json:/home/agent/.aws/creds.json:ro
     environment:
       - VITE_IS_PLATFORM=true
@@ -63,7 +61,5 @@ services:
       start_period: 10s
 
 volumes:
-  claude-data-dev:
-  cloudcli-data-dev:
-  workspace-dev:
+  user-data-dev:
   lightrag-data:

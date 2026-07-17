@@ -8,27 +8,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Claude Code CLI + TaskMaster globally
 RUN npm install -g @anthropic-ai/claude-code@latest task-master-ai && npm cache clean --force
 
-# Non-root user with workspace mount point
-RUN useradd -m -s /bin/bash agent \
-    && mkdir -p /home/agent/workspace /home/agent/.cloudcli \
-    && chown agent:agent /home/agent/workspace /home/agent/.cloudcli
+# Non-root user. /home/agent is a single mounted volume at runtime, so app
+# code and entrypoint live in /opt (outside the volume) to avoid being shadowed.
+RUN useradd -m -s /bin/bash agent
 
-# Install CloudCLI (the web UI)
-COPY --chown=agent:agent app/ /home/agent/cloudcli-src/
-WORKDIR /home/agent/cloudcli-src
+# Install CloudCLI (the web UI) under /opt
+COPY --chown=agent:agent app/ /opt/cloudcli/
+WORKDIR /opt/cloudcli
 USER agent
 # VITE_IS_PLATFORM=true skips login (single-user mode)
 ARG SKIP_AUTH=true
 RUN VITE_IS_PLATFORM=${SKIP_AUTH} npm ci && VITE_IS_PLATFORM=${SKIP_AUTH} npm run build && npm prune --omit=dev && npm cache clean --force
 
-# RAG skills
-COPY --chown=agent:agent skills/ /home/agent/.claude/skills/
+# RAG skills — copied into the home volume's skills dir at startup by entrypoint
+COPY --chown=agent:agent skills/ /opt/cloudcli-skills/
 
 # Entrypoint
-COPY --chown=agent:agent scripts/entrypoint.sh /home/agent/entrypoint.sh
-RUN chmod +x /home/agent/entrypoint.sh
+COPY --chown=agent:agent scripts/entrypoint.sh /opt/entrypoint.sh
+USER root
+RUN chmod +x /opt/entrypoint.sh
+USER agent
 
 WORKDIR /home/agent
 EXPOSE 3001
 
-ENTRYPOINT ["/home/agent/entrypoint.sh"]
+ENTRYPOINT ["/opt/entrypoint.sh"]

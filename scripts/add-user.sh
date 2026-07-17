@@ -48,9 +48,7 @@ sed -i.bak "/^volumes:/i\\
     restart: unless-stopped\\
     container_name: amadeus-${USERNAME}\\
     volumes:\\
-      - claude-data-${USERNAME}:/home/agent/.claude\\
-      - cloudcli-data-${USERNAME}:/home/agent/.cloudcli\\
-      - workspace-${USERNAME}:/home/agent/workspace\\
+      - user-data-${USERNAME}:/home/agent\\
     environment:\\
       - DISABLE_AUTOUPDATER=1\\
       - WORKSPACES_ROOT=/home/agent/workspace\\
@@ -68,14 +66,12 @@ sed -i.bak "/^volumes:/i\\
 " docker-compose.yml
 rm -f docker-compose.yml.bak
 
-# Add volume declarations
-echo "  claude-data-${USERNAME}:" >> docker-compose.yml
-echo "  cloudcli-data-${USERNAME}:" >> docker-compose.yml
-echo "  workspace-${USERNAME}:" >> docker-compose.yml
+# Add volume declaration (one per user, holds .claude/.cloudcli/workspace)
+echo "  user-data-${USERNAME}:" >> docker-compose.yml
 
 echo ""
 echo "[+] User '${USERNAME}' added"
-echo "    Workspace: docker volume workspace-${USERNAME}"
+echo "    Data volume: user-data-${USERNAME}"
 echo "    Container: amadeus-${USERNAME}"
 echo ""
 echo "Start multi-user mode:"

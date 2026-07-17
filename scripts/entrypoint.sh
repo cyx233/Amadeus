@@ -1,10 +1,15 @@
 #!/bin/bash
 set -e
 
-mkdir -p ~/.claude/projects ~/.cloudcli
+APP=/opt/cloudcli
 
-# Restore gitconfig from persistent volume (survives container recreation)
-[ -f ~/.cloudcli/.gitconfig ] && cp ~/.cloudcli/.gitconfig ~/.gitconfig
+mkdir -p ~/.claude/projects ~/.cloudcli ~/workspace
+
+# Sync bundled RAG skills into the home volume (image is source of truth).
+# Volume shadows the image's ~/.claude, so seed from /opt on every start.
+mkdir -p ~/.claude/skills
+cp -r /opt/cloudcli-skills/. ~/.claude/skills/
+
 git config --global --add safe.directory '*'
 git config --global core.sharedRepository world
 
@@ -23,7 +28,7 @@ if ! grep -q "task-master-ai" ~/.claude.json 2>/dev/null; then
 fi
 
 # Platform mode (SKIP_AUTH): seed a user so the DB isn't empty
-cd ~/cloudcli-src
+cd "$APP"
 if [ "${VITE_IS_PLATFORM}" = "true" ]; then
   # Boot server briefly to create schema
   node dist-server/server/index.js &
@@ -38,10 +43,5 @@ if [ "${VITE_IS_PLATFORM}" = "true" ]; then
   kill $PID 2>/dev/null; wait $PID 2>/dev/null || true
 fi
 
-# Save gitconfig to persistent volume on shutdown
-save_gitconfig() { [ -f ~/.gitconfig ] && cp ~/.gitconfig ~/.cloudcli/.gitconfig; }
-trap save_gitconfig TERM INT
-
-# Start server (foreground, but not exec — so trap fires)
-node dist-server/server/index.js &
-wait $!
+# Start server (foreground)
+exec node dist-server/server/index.js
