@@ -12,7 +12,8 @@ cp -r /opt/cloudcli-skills/. ~/.claude/skills/
 
 git config --global --add safe.directory '*'
 
-# Dev-only local hook (Bedrock creds via mounted entrypoint-local.sh)
+# Optional local hook — dev mounts one to install host-forwarding shims,
+# Bedrock creds, etc. Absent in multi mode.
 [ -f /home/agent/entrypoint-local.sh ] && . /home/agent/entrypoint-local.sh
 
 # Configure TaskMaster MCP server if not already set
