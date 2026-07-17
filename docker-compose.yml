@@ -27,7 +27,7 @@ services:
     volumes:
       - claude-data-dev:/home/agent/.claude
       - cloudcli-data-dev:/home/agent/.cloudcli
-      - ${WORKSPACE_PATH:-./workspace}:/home/agent/workspace
+      - workspace-dev:/home/agent/workspace
       - ${HOME}/.aws/amadeus-creds.json:/home/agent/.aws/creds.json:ro
     environment:
       - VITE_IS_PLATFORM=true
@@ -65,4 +65,5 @@ services:
 volumes:
   claude-data-dev:
   cloudcli-data-dev:
+  workspace-dev:
   lightrag-data:

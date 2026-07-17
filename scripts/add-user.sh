@@ -8,7 +8,6 @@ set -e
 
 USERNAME="${1:?Usage: $0 <username> [password]}"
 PASSWORD="${2:-}"
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-./workspaces}"
 HTPASSWD_FILE="gateway/htpasswd"
 ROUTES_FILE="gateway/user-routes.conf"
 
@@ -23,8 +22,7 @@ if [ -z "$PASSWORD" ]; then
   read -s -p "Password for ${USERNAME}: " PASSWORD; echo
 fi
 
-# Create workspace
-mkdir -p "${WORKSPACE_ROOT}/${USERNAME}"
+# Workspace is a named volume (container-owned), so no host dir to create.
 mkdir -p gateway
 
 # Add htpasswd entry
@@ -52,7 +50,7 @@ sed -i.bak "/^volumes:/i\\
     volumes:\\
       - claude-data-${USERNAME}:/home/agent/.claude\\
       - cloudcli-data-${USERNAME}:/home/agent/.cloudcli\\
-      - ${WORKSPACE_ROOT}/${USERNAME}:/home/agent/workspace\\
+      - workspace-${USERNAME}:/home/agent/workspace\\
     environment:\\
       - DISABLE_AUTOUPDATER=1\\
       - WORKSPACES_ROOT=/home/agent/workspace\\
@@ -73,10 +71,11 @@ rm -f docker-compose.yml.bak
 # Add volume declarations
 echo "  claude-data-${USERNAME}:" >> docker-compose.yml
 echo "  cloudcli-data-${USERNAME}:" >> docker-compose.yml
+echo "  workspace-${USERNAME}:" >> docker-compose.yml
 
 echo ""
 echo "[+] User '${USERNAME}' added"
-echo "    Workspace: ${WORKSPACE_ROOT}/${USERNAME}"
+echo "    Workspace: docker volume workspace-${USERNAME}"
 echo "    Container: amadeus-${USERNAME}"
 echo ""
 echo "Start multi-user mode:"
