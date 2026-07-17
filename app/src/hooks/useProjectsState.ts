@@ -612,10 +612,40 @@ export function useProjectsState({
     void hydrateProjectTaskMaster(selectedProject.projectId);
   }, [hydrateProjectTaskMaster, selectedProject?.projectId]);
 
-  // Auto-select the project when there is only one, so the user lands on the new session page
+  // Persist the selected project so a page refresh restores it (below).
   useEffect(() => {
-    if (!isLoadingProjects && projects.length === 1 && !selectedProject && !sessionId) {
+    try {
+      if (selectedProject?.projectId) {
+        localStorage.setItem('selected-project-id', selectedProject.projectId);
+      }
+    } catch {
+      // Silently ignore storage errors
+    }
+  }, [selectedProject?.projectId]);
+
+  // On load, restore the project the user last had selected. Gated on
+  // `!sessionId` (a session URL already resolves its own project, higher
+  // priority) and `!selectedProject` (never override an active choice). Also
+  // covers the single-project case, so no separate auto-select is needed.
+  useEffect(() => {
+    if (isLoadingProjects || selectedProject || sessionId || projects.length === 0) {
+      return;
+    }
+
+    if (projects.length === 1) {
       setSelectedProject(projects[0]);
+      return;
+    }
+
+    let storedId: string | null = null;
+    try {
+      storedId = localStorage.getItem('selected-project-id');
+    } catch {
+      // Silently ignore storage errors
+    }
+    const restored = storedId ? projects.find((p) => p.projectId === storedId) : null;
+    if (restored) {
+      setSelectedProject(restored);
     }
   }, [isLoadingProjects, projects, selectedProject, sessionId]);
 
@@ -923,7 +953,7 @@ export function useProjectsState({
         return;
       }
 
-      const refreshedProject = mergedProjects.find((project) => project.projectId === selectedProject.projectId);
+      const refreshedProject = projectsWithTaskMaster.find((project) => project.projectId === selectedProject.projectId);
       if (!refreshedProject) {
         return;
       }

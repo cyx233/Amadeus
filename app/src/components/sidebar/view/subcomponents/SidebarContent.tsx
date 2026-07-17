@@ -38,12 +38,9 @@ export default function SidebarContent({
   onCreateProject,
   onCollapseSidebar,
 }: SidebarContentProps) {
-  // ponytail: auto-select first project on load
-  useEffect(() => {
-    if (!selectedProject && projects.length > 0) {
-      onProjectSelect(projects[0]);
-    }
-  }, [selectedProject, projects, onProjectSelect]);
+  // Project auto-selection/restore lives in useProjectsState (URL-session
+  // resolution, persisted selection, single-project). Selecting projects[0]
+  // here raced those and clobbered the session in the URL on refresh.
 
   // Always read sessions from the latest projects array to avoid stale references
   const currentProject = projects.find(p => p.projectId === selectedProject?.projectId);
