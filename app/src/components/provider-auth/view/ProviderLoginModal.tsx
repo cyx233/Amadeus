@@ -1,4 +1,5 @@
 import { X } from 'lucide-react';
+import { Dialog, DialogContent, DialogTitle } from '../../../shared/view/ui';
 import StandaloneShell from '../../standalone-shell/view/StandaloneShell';
 import { DEFAULT_PROJECT_FOR_EMPTY_SHELL, IS_PLATFORM } from '../../../constants/config';
 import type { LLMProvider } from '../../../types/app';
@@ -60,10 +61,6 @@ export default function ProviderLoginModal({
   customCommand,
   isAuthenticated = false,
 }: ProviderLoginModalProps) {
-  if (!isOpen) {
-    return null;
-  }
-
   const command = getProviderCommand({ provider, customCommand, isAuthenticated });
   const title = getProviderTitle(provider);
 
@@ -73,8 +70,12 @@ export default function ProviderLoginModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black bg-opacity-50 max-md:items-stretch max-md:justify-stretch">
-      <div className="flex h-3/4 w-full max-w-4xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-800 max-md:m-0 max-md:h-full max-md:max-w-none max-md:rounded-none md:m-4 md:h-3/4 md:max-w-4xl md:rounded-lg">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        wrapperClassName="z-[10000]"
+        className="z-[10000] flex h-3/4 w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white p-0 shadow-xl dark:bg-gray-800 max-md:m-0 max-md:h-full max-md:max-w-none max-md:rounded-none md:m-4 md:h-3/4 md:max-w-4xl md:rounded-lg"
+      >
+        <DialogTitle>{title}</DialogTitle>
         <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h3>
           <button
@@ -89,7 +90,7 @@ export default function ProviderLoginModal({
         <div className="flex-1 overflow-hidden">
           <StandaloneShell project={DEFAULT_PROJECT_FOR_EMPTY_SHELL} command={command} onComplete={handleComplete} minimal={true} />
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

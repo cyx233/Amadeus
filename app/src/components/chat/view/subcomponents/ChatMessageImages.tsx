@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 import { authenticatedFetch } from '../../../../utils/api';
+import { Dialog, DialogContent, DialogTitle } from '../../../../shared/view/ui';
 import type { ChatImage } from '../../types/types';
 
 type ChatMessageImagesProps = {
@@ -86,41 +86,29 @@ function useChatImageSrc(image: ChatImage, projectId?: string | null): { src: st
  * image, closes on backdrop click, close button, or Escape.
  */
 function ImageLightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown, true);
-    return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [onClose]);
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label={alt}
-    >
-      <button
-        type="button"
-        onClick={onClose}
-        aria-label="Close image preview"
-        className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        wrapperClassName="z-[100]"
+        aria-label={alt}
+        className="z-[100] border-0 bg-transparent p-0 shadow-none"
       >
-        <X className="h-5 w-5" />
-      </button>
-      <img
-        src={src}
-        alt={alt}
-        onClick={(event) => event.stopPropagation()}
-        className="max-h-[90vh] max-w-[92vw] rounded-lg object-contain shadow-2xl"
-      />
-    </div>,
-    document.body,
+        <DialogTitle>{alt}</DialogTitle>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close image preview"
+          className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
+        >
+          <X className="h-5 w-5" />
+        </button>
+        <img
+          src={src}
+          alt={alt}
+          className="max-h-[90vh] max-w-[92vw] rounded-lg object-contain shadow-2xl"
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
 

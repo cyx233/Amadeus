@@ -1,18 +1,17 @@
 import { Sparkles, X } from 'lucide-react';
 
+import { Dialog, DialogContent, DialogTitle } from '../../../../shared/view/ui';
+
 type CreateTaskModalProps = {
   isOpen: boolean;
   onClose: () => void;
 };
 
 export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProps) {
-  if (!isOpen) {
-    return null;
-  }
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md overflow-hidden border-gray-200 bg-white p-0 dark:border-gray-700 dark:bg-gray-800">
+        <DialogTitle>Create AI-Generated Task</DialogTitle>
         <div className="flex items-center justify-between border-b border-gray-200 p-6 dark:border-gray-700">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
@@ -67,7 +66,7 @@ export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProp
             Got it
           </button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

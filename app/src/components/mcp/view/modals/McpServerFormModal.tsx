@@ -1,8 +1,7 @@
 import { FolderOpen, Globe, X } from 'lucide-react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 
-import { Button, Input } from '../../../../shared/view/ui';
+import { Button, Dialog, DialogContent, DialogTitle, Input } from '../../../../shared/view/ui';
 import {
   MCP_PROVIDER_NAMES,
   MCP_SUPPORTED_SCOPES,
@@ -108,10 +107,6 @@ export default function McpServerFormModal({
     onSubmit,
   });
 
-  if (!isOpen) {
-    return null;
-  }
-
   const providerName = MCP_PROVIDER_NAMES[provider];
   const modalTitle = title ?? (isEditing ? t('mcpForm.title.edit') : t('mcpForm.title.add'));
   const addButtonLabel = submitLabel ?? `${t('mcpForm.actions.addServer')} to ${providerName}`;
@@ -120,9 +115,13 @@ export default function McpServerFormModal({
   const supportsWorkingDirectory = !isGlobalMode && MCP_SUPPORTS_WORKING_DIRECTORY[provider];
   const showCodexOnlyFields = provider === 'codex' && !isGlobalMode;
 
-  return createPortal(
-    <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-border bg-background">
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        wrapperClassName="z-[10000]"
+        className="z-[10000] max-h-[90vh] max-w-2xl overflow-y-auto border-border bg-background p-0"
+      >
+        <DialogTitle>{modalTitle}</DialogTitle>
         <div className="flex items-center justify-between border-b border-border p-4">
           <h3 className="text-lg font-medium text-foreground">{modalTitle}</h3>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -429,8 +428,7 @@ export default function McpServerFormModal({
             </Button>
           </div>
         </form>
-      </div>
-    </div>,
-    document.body,
+      </DialogContent>
+    </Dialog>
   );
 }

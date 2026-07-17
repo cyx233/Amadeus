@@ -2,6 +2,7 @@ import * as React from 'react';
 import { createPortal } from 'react-dom';
 
 import { cn } from '../../../lib/utils';
+import { useModalEscape } from '../../../hooks/useModalEscape';
 
 interface DialogContextValue {
   open: boolean;
@@ -115,17 +116,18 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
       }
     }, [open, triggerRef]);
 
+    // ESC goes through the shared LIFO stack (useModalEscape) so nested
+    // dialogs / hand-rolled modals close top-first instead of all at once.
+    const handleEscape = React.useCallback(() => {
+      onEscapeKeyDown?.();
+      onOpenChange(false);
+    }, [onEscapeKeyDown, onOpenChange]);
+    useModalEscape(handleEscape, open);
+
     React.useEffect(() => {
       if (!open) return;
 
       const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          e.stopPropagation();
-          onEscapeKeyDown?.();
-          onOpenChange(false);
-          return;
-        }
-
         // Focus trap: Tab / Shift+Tab cycle within the dialog
         if (e.key === 'Tab' && contentRef.current) {
           const focusable = Array.from(
@@ -156,7 +158,7 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
         document.removeEventListener('keydown', handleKeyDown, true);
         document.body.style.overflow = prev;
       };
-    }, [open, onOpenChange, onEscapeKeyDown]);
+    }, [open]);
 
     // Auto-focus first focusable element on open
     React.useEffect(() => {

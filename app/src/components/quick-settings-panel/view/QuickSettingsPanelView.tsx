@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 
+import { useModalEscape } from '../../../hooks/useModalEscape';
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useTheme } from '../../../contexts/ThemeContext';
@@ -13,6 +14,7 @@ import QuickSettingsPanelHeader from './QuickSettingsPanelHeader';
 
 export default function QuickSettingsPanelView() {
   const [isOpen, setIsOpen] = useState(false);
+  useModalEscape(() => setIsOpen(false), isOpen);
   const { isMobile } = useDeviceSettings({ trackPWA: false });
   const { isDarkMode } = useTheme();
   const { preferences, setPreference } = useUiPreferences();

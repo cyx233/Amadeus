@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { Dialog, DialogContent, DialogTitle } from '../../../shared/view/ui';
 import { copyTextToClipboard } from '../../../utils/clipboard';
 import { api } from '../../../utils/api';
 import { useTaskMaster } from '../context/TaskMasterContext';
@@ -78,7 +79,7 @@ export default function TaskDetailModal({
 
   const StatusIcon = useMemo(() => getStatusIcon(task?.status), [task?.status]);
 
-  if (!isOpen || !task || !editableTask) {
+  if (!task || !editableTask) {
     return null;
   }
 
@@ -146,13 +147,15 @@ export default function TaskDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 md:p-4">
-      <div
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        wrapperClassName="z-[100]"
         className={cn(
-          'w-full md:max-w-4xl h-full md:h-[90vh] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 md:rounded-lg shadow-xl flex flex-col',
+          'z-[100] w-full md:max-w-4xl h-full md:h-[90vh] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 md:rounded-lg shadow-xl flex flex-col p-0',
           className,
         )}
       >
+        <DialogTitle>{task.title}</DialogTitle>
         <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700 md:p-6">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <StatusIcon className="h-6 w-6 text-blue-600 dark:text-blue-400" />
@@ -312,7 +315,7 @@ export default function TaskDetailModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

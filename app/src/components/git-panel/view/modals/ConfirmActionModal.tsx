@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Check, Download, RotateCcw, Trash2, Upload } from 'lucide-react';
 import {
   CONFIRMATION_ACTION_LABELS,
@@ -6,6 +5,7 @@ import {
   CONFIRMATION_ICON_CONTAINER_CLASSES,
   CONFIRMATION_TITLES,
 } from '../../constants/constants';
+import { Dialog, DialogContent, DialogTitle } from '../../../../shared/view/ui';
 import type { ConfirmationRequest } from '../../types/types';
 
 type ConfirmActionModalProps = {
@@ -37,36 +37,17 @@ function renderConfirmActionIcon(actionType: ConfirmationRequest['type']) {
 export default function ConfirmActionModal({ action, onCancel, onConfirm }: ConfirmActionModalProps) {
   const titleId = action ? `confirmation-title-${action.type}` : undefined;
 
-  useEffect(() => {
-    if (!action) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onCancel();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [action, onCancel]);
-
   if (!action) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
-      <div
-        className="relative w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
-        role="dialog"
-        aria-modal="true"
+    <Dialog open={Boolean(action)} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent
+        className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-card p-0 shadow-2xl"
         aria-labelledby={titleId}
       >
+        <DialogTitle>{CONFIRMATION_TITLES[action.type]}</DialogTitle>
         <div className="p-6">
           <div className="mb-4 flex items-center">
             <div className={`mr-3 rounded-full p-2 ${CONFIRMATION_ICON_CONTAINER_CLASSES[action.type]}`}>
@@ -95,7 +76,7 @@ export default function ConfirmActionModal({ action, onCancel, onConfirm }: Conf
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

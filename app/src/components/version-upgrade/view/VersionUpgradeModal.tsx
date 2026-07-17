@@ -6,6 +6,7 @@ import { authenticatedFetch } from "../../../utils/api";
 import { ReleaseInfo } from "../../../types/sharedTypes";
 import { copyTextToClipboard } from "../../../utils/clipboard";
 import type { InstallMode } from "../../../hooks/useVersionCheck";
+import { Dialog, DialogContent, DialogTitle } from "../../../shared/view/ui";
 import { IS_PLATFORM } from "../../../constants/config";
 
 interface VersionUpgradeModalProps {
@@ -86,19 +87,10 @@ export function VersionUpgradeModal({
         }
     }, []);
 
-    if (!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            {/* Backdrop */}
-            <button
-                className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-                onClick={onClose}
-                aria-label={t('versionUpdate.ariaLabels.closeModal')}
-            />
-
-            {/* Modal */}
-            <div className="relative mx-4 max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-lg border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="mx-4 max-h-[90vh] w-full max-w-2xl space-y-4 overflow-y-auto rounded-lg border border-gray-200 bg-white p-6 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+                <DialogTitle>{t('versionUpdate.title')}</DialogTitle>
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -235,8 +227,8 @@ export function VersionUpgradeModal({
                         </>
                     )}
                 </div>
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 };
 

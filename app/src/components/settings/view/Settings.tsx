@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import ProviderLoginModal from '../../provider-auth/view/ProviderLoginModal';
-import { Button } from '../../../shared/view/ui';
+import { Button, Dialog, DialogContent, DialogTitle } from '../../../shared/view/ui';
 import SettingsSidebar from '../view/SettingsSidebar';
 import AgentsSettingsTab from '../view/tabs/agents-settings/AgentsSettingsTab';
 import AppearanceSettingsTab from '../view/tabs/AppearanceSettingsTab';
@@ -127,27 +127,15 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
     });
   };
 
-  useEffect(() => {
-    if (!isOpen) return undefined;
-    const onEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented) {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener('keydown', onEsc);
-    return () => document.removeEventListener('keydown', onEsc);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) {
-    return null;
-  }
-
   const isAuthenticated = Boolean(loginProvider && providerAuthStatus[loginProvider].authenticated);
 
   return (
-    <div className="modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center bg-background/80 backdrop-blur-sm md:p-4">
-      <div className="flex h-full w-full flex-col overflow-hidden border border-border bg-background shadow-2xl md:h-[90vh] md:max-w-4xl md:rounded-xl">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        wrapperClassName="z-[9999]"
+        className="modal-backdrop flex h-full w-full flex-col overflow-hidden border border-border bg-background p-0 shadow-2xl md:h-[90vh] md:max-w-4xl md:rounded-xl"
+      >
+        <DialogTitle>{t('title')}</DialogTitle>
         {/* Header */}
         <div className="flex flex-shrink-0 items-center justify-between border-b border-border px-4 py-3 md:px-5">
           <h2 className="text-base font-semibold text-foreground">{t('title')}</h2>
@@ -231,18 +219,18 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
             </div>
           </main>
         </div>
-      </div>
 
-      <ProviderLoginModal
-        key={loginProvider || 'claude'}
-        isOpen={showLoginModal}
-        onClose={() => setShowLoginModal(false)}
-        provider={loginProvider || 'claude'}
-        onComplete={handleLoginComplete}
-        isAuthenticated={isAuthenticated}
-      />
+        <ProviderLoginModal
+          key={loginProvider || 'claude'}
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          provider={loginProvider || 'claude'}
+          onComplete={handleLoginComplete}
+          isAuthenticated={isAuthenticated}
+        />
 
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

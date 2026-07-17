@@ -1,5 +1,6 @@
 import { ExternalLink, FileText, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { Dialog, DialogContent, DialogTitle } from '../../../../shared/view/ui';
 
 type TaskHelpModalProps = {
   isOpen: boolean;
@@ -16,10 +17,6 @@ type HelpStep = {
 
 export default function TaskHelpModal({ isOpen, onClose, onCreatePrd }: TaskHelpModalProps) {
   const { t } = useTranslation('tasks');
-
-  if (!isOpen) {
-    return null;
-  }
 
   const steps: HelpStep[] = [
     {
@@ -49,8 +46,9 @@ export default function TaskHelpModal({ isOpen, onClose, onCreatePrd }: TaskHelp
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-lg border border-gray-200 bg-white p-0 shadow-xl dark:border-gray-700 dark:bg-gray-900">
+        <DialogTitle>{t('helpGuide.title')}</DialogTitle>
         <div className="flex items-center justify-between border-b border-gray-200 p-6 dark:border-gray-700">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/50">
@@ -123,7 +121,7 @@ export default function TaskHelpModal({ isOpen, onClose, onCreatePrd }: TaskHelp
             </a>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

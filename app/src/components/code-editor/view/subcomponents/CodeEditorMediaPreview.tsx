@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { authenticatedFetch } from '../../../../utils/api';
+import { useModalEscape } from '../../../../hooks/useModalEscape';
 import type { CodeEditorFile } from '../../types/types';
 import { getPreviewMimeType, type PreviewKind } from '../../utils/previewableFile';
 
@@ -52,6 +53,8 @@ export default function CodeEditorMediaPreview({
   // file (the editor reuses this component instance across files).
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const sourceKey = `${projectId ?? ''}:${file.path}:${kind}`;
+
+  useModalEscape(onClose);
 
   useEffect(() => {
     if (!projectId) {
