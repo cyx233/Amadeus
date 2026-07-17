@@ -13,7 +13,6 @@ CLAUDE.md
 build.log
 scripts/refresh-creds.sh
 scripts/entrypoint-local.sh
-scripts/dev-local.sh
 gateway/htpasswd
 gateway/user-routes.conf
 docker-compose.dev.yml
