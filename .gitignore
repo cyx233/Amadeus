@@ -17,4 +17,5 @@ scripts/dev-local.sh
 gateway/htpasswd
 gateway/user-routes.conf
 docker-compose.dev.yml
+docker-compose.multi.yml
 workspace/
