@@ -32,6 +32,7 @@ import {
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
+import { todoMcpServer } from './utils/todo-mcp.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -490,9 +491,9 @@ async function queryClaudeSDK(command, options = {}, ws) {
     });
 
     const mcpServers = await loadMcpConfig(options.cwd);
-    if (mcpServers) {
-      sdkOptions.mcpServers = mcpServers;
-    }
+    // Always expose the in-process global TODO server; merge user-configured
+    // MCP servers on top so their names win on collision.
+    sdkOptions.mcpServers = { todo: todoMcpServer, ...(mcpServers || {}) };
 
     // Turns with image attachments switch to streaming input so the images
     // ride along as real content blocks. Built per query attempt because an
