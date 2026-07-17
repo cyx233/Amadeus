@@ -264,6 +264,13 @@ function ChatInterface({
         return;
       }
 
+      // Don't hijack ESC when a modal is open — it should close the modal,
+      // not abort the running agent. Covers Dialog (role=dialog) and the
+      // hand-rolled Settings/login modals (.modal-backdrop).
+      if (document.querySelector('[role="dialog"], .modal-backdrop')) {
+        return;
+      }
+
       event.preventDefault();
       handleAbortSession();
     };
