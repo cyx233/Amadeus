@@ -16,8 +16,8 @@ RUN useradd -m -s /bin/bash agent
 COPY --chown=agent:agent app/ /opt/cloudcli/
 WORKDIR /opt/cloudcli
 USER agent
-# VITE_IS_PLATFORM=true skips login (single-user mode)
-ARG SKIP_AUTH=true
+# Multi-user mode requires login; add-user.sh sets SKIP_AUTH=false explicitly.
+ARG SKIP_AUTH=false
 RUN VITE_IS_PLATFORM=${SKIP_AUTH} npm ci && VITE_IS_PLATFORM=${SKIP_AUTH} npm run build && npm prune --omit=dev && npm cache clean --force
 
 # RAG skills — copied into the home volume's skills dir at startup by entrypoint

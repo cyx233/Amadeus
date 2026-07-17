@@ -1,7 +1,7 @@
 services:
   # === Multi-user: nginx gateway + per-user containers ===
   # Managed by scripts/add-user.sh
-  # Start: docker compose up -d
+  # Start: docker compose --profile multi up -d
   gateway:
     image: nginx:alpine
     restart: unless-stopped

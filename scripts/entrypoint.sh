@@ -11,9 +11,6 @@ mkdir -p ~/.claude/skills
 cp -r /opt/cloudcli-skills/. ~/.claude/skills/
 
 git config --global --add safe.directory '*'
-git config --global core.sharedRepository world
-
-[ -f /home/agent/entrypoint-local.sh ] && . /home/agent/entrypoint-local.sh
 
 # Configure TaskMaster MCP server if not already set
 if ! grep -q "task-master-ai" ~/.claude.json 2>/dev/null; then
