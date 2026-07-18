@@ -5,8 +5,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl git jq ripgrep sqlite3 tree vim-tiny \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code CLI + TaskMaster globally
-RUN npm install -g @anthropic-ai/claude-code@latest task-master-ai && npm cache clean --force
+# Install the coding-agent CLIs + TaskMaster globally so their in-container
+# login flows (claude /login, codex login, opencode auth login) work out of the box.
+RUN npm install -g \
+    @anthropic-ai/claude-code@latest \
+    @openai/codex@latest \
+    opencode-ai@latest \
+    task-master-ai \
+    && npm cache clean --force
 
 # Non-root user. /home/agent is a single mounted volume at runtime, so app
 # code and entrypoint live in /opt (outside the volume) to avoid being shadowed.

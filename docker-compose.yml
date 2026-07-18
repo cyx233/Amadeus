@@ -13,9 +13,9 @@ services:
       - ./gateway/user-routes.conf:/etc/nginx/user-routes.conf:ro
     profiles: ["multi"]
 
-  # === Single-user dev mode: no login, direct access ===
-  # Start: docker compose --profile dev up -d
-  amadeus-dev:
+  # === Single-user mode: no login, direct access ===
+  # Start: docker compose up -d
+  amadeus:
     build:
       context: .
       dockerfile: Dockerfile
@@ -25,8 +25,7 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      - user-data-dev:/home/agent
-      - ${HOME}/.aws/amadeus-creds.json:/home/agent/.aws/creds.json:ro
+      - user-data:/home/agent
     environment:
       - VITE_IS_PLATFORM=true
       - DISABLE_AUTOUPDATER=1
@@ -42,7 +41,6 @@ services:
     depends_on:
       lightrag:
         condition: service_healthy
-    profiles: ["dev"]
 
   lightrag:
     image: ghcr.io/hkuds/lightrag:latest
@@ -62,5 +60,5 @@ services:
       start_period: 10s
 
 volumes:
-  user-data-dev:
+  user-data:
   lightrag-data:
