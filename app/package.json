@@ -14,8 +14,7 @@
     "public/api-docs.html",
     "dist/",
     "dist-server/",
-    "scripts/",
-    "README.md"
+    "scripts/"
   ],
   "homepage": "https://cloudcli.ai",
   "repository": {
