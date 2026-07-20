@@ -310,15 +310,22 @@ export function handleShellConnection(
           return;
         }
 
-        const resolvedProjectPath = path.resolve(projectPath);
-        try {
-          const stats = fs.statSync(resolvedProjectPath);
-          if (!stats.isDirectory()) {
-            throw new Error('Not a directory');
+        // Resolve the shell cwd. If the requested path is missing (e.g. the
+        // login modal's placeholder project points at /workspace, which may
+        // not exist in every deployment), fall back to a real directory so the
+        // terminal still opens instead of dying black/empty.
+        let resolvedProjectPath = path.resolve(projectPath);
+        const isUsableDir = (p: string): boolean => {
+          try { return fs.statSync(p).isDirectory(); } catch { return false; }
+        };
+        if (!isUsableDir(resolvedProjectPath)) {
+          const fallback = [process.env.WORKSPACES_ROOT, process.env.HOME, '/tmp']
+            .find((p): p is string => Boolean(p) && isUsableDir(p as string));
+          if (!fallback) {
+            ws.send(JSON.stringify({ type: 'error', message: 'No usable working directory' }));
+            return;
           }
-        } catch {
-          ws.send(JSON.stringify({ type: 'error', message: 'Invalid project path' }));
-          return;
+          resolvedProjectPath = fallback;
         }
 
         const safeSessionIdPattern = /^[a-zA-Z0-9_.\-:]+$/;

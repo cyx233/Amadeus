@@ -37,9 +37,10 @@ if [ "${VITE_IS_PLATFORM}" = "true" ]; then
     sqlite3 ~/.cloudcli/auth.db "SELECT 1 FROM users LIMIT 1;" 2>/dev/null && break
     sleep 1
   done
-  # Always ensure a user exists
+  # Always ensure a user exists. has_completed_onboarding=0 so the first login
+  # runs the onboarding flow (provider/LLM setup) instead of skipping it.
   HASH=$(head -c 32 /dev/urandom | base64)
-  sqlite3 ~/.cloudcli/auth.db "INSERT OR IGNORE INTO users (username, password_hash, has_completed_onboarding) VALUES ('user', '$HASH', 1);"
+  sqlite3 ~/.cloudcli/auth.db "INSERT OR IGNORE INTO users (username, password_hash, has_completed_onboarding) VALUES ('user', '$HASH', 0);"
   kill $PID 2>/dev/null; wait $PID 2>/dev/null || true
 fi
 
