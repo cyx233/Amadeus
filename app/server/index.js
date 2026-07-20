@@ -568,6 +568,37 @@ app.get('/api/projects/:projectId/files/download', authenticateToken, async (req
     } catch { res.status(404).json({ error: 'File not found' }); }
 });
 
+// Download a folder within the project as tar.gz. Streams from `tar` so the
+// whole subtree is archived server-side (complete — unlike client-side zipping
+// which only sees lazily-loaded nodes) without buffering it in memory.
+app.get('/api/projects/:projectId/files/download-folder', authenticateToken, async (req, res) => {
+    try {
+        const projectRoot = await projectsDb.getProjectPathById(req.params.projectId);
+        if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+        const dirPath = req.query.path;
+        if (!dirPath) return res.status(400).json({ error: 'path required' });
+
+        const root = path.resolve(projectRoot);
+        const resolved = path.isAbsolute(dirPath) ? path.resolve(dirPath) : path.resolve(root, dirPath);
+        // Must be a directory strictly inside the project (no traversal).
+        if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        const stat = await fsPromises.stat(resolved);
+        if (!stat.isDirectory()) return res.status(400).json({ error: 'Not a directory' });
+
+        const name = path.basename(resolved);
+        res.setHeader('Content-Type', 'application/gzip');
+        res.setHeader('Content-Disposition', `attachment; filename="${name}.tar.gz"`);
+        const { spawn } = await import('node:child_process');
+        // -C parent, then the folder name → archive contains name/... entries.
+        const tar = spawn('tar', ['czf', '-', '-C', path.dirname(resolved), name]);
+        tar.stdout.pipe(res);
+        tar.stderr.on('data', (d) => console.error('[tar]', d.toString()));
+        tar.on('error', () => { if (!res.headersSent) res.status(500).end(); });
+    } catch { res.status(404).json({ error: 'Folder not found' }); }
+});
+
 // Download entire project as tar.gz
 app.get('/api/projects/:projectId/download', authenticateToken, async (req, res) => {
     try {

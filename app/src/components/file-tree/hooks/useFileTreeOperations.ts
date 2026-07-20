@@ -1,6 +1,5 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import JSZip from 'jszip';
 import { api } from '../../../utils/api';
 import type { FileTreeNode } from '../types/types';
 import type { Project } from '../../../types/app';
@@ -297,45 +296,21 @@ export function useFileTreeOperations({
     triggerBrowserDownload(blob, item.name);
   }, [selectedProject, triggerBrowserDownload]);
 
-  // Download folder as ZIP
+  // Download a folder as a server-built tar.gz. The backend streams the whole
+  // subtree via `tar`, so the archive is complete regardless of which nodes the
+  // lazily-loaded tree has expanded (the old client-side zip only saw loaded
+  // children and silently dropped the rest).
   const downloadFolderAsZip = useCallback(async (folder: FileTreeNode) => {
     if (!selectedProject) return;
 
-    const zip = new JSZip();
-
-    // Recursively get all files in the folder
-    const collectFiles = async (node: FileTreeNode, currentPath: string) => {
-      const fullPath = currentPath ? `${currentPath}/${node.name}` : node.name;
-
-      if (node.type === 'file') {
-        const response = await api.readFileBlob(selectedProject.projectId, node.path);
-        if (!response.ok) {
-          throw new Error(`Failed to download "${node.name}" for ZIP export`);
-        }
-
-        // Store raw bytes in the archive so binary files stay intact.
-        const fileBytes = await response.arrayBuffer();
-        zip.file(fullPath, fileBytes);
-      } else if (node.type === 'directory' && node.children) {
-        // Recursively process children
-        for (const child of node.children) {
-          await collectFiles(child, fullPath);
-        }
-      }
-    };
-
-    // If the folder has children, process them
-    if (folder.children && folder.children.length > 0) {
-      for (const child of folder.children) {
-        await collectFiles(child, '');
-      }
+    const response = await api.downloadFolder(selectedProject.projectId, folder.path);
+    if (!response.ok) {
+      throw new Error('Failed to download folder');
     }
+    const blob = await response.blob();
+    triggerBrowserDownload(blob, `${folder.name}.tar.gz`);
 
-    // Generate ZIP file
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-    triggerBrowserDownload(zipBlob, `${folder.name}.zip`);
-
-    showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded as ZIP'), 'success');
+    showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded'), 'success');
   }, [selectedProject, showToast, t, triggerBrowserDownload]);
 
   return {
