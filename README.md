@@ -4,21 +4,35 @@ Browser-based Claude Code agent platform with long-lived Docker sessions, self-r
 
 ## Quick Start
 
-Amadeus is multi-user: an nginx gateway on port 3001 handles login and routes
-each user to their own isolated container. Create at least one user first.
+Amadeus is multi-user. A single URL (port 3001) serves a login page; after
+login the nginx gateway routes each user to their own isolated container.
 
 ```bash
 cp .env.example .env
-# Fill in ONE of: ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, or AWS creds
+# Set JWT_SECRET (openssl rand -hex 32) and ONE of:
+#   ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, or AWS creds
 
+# 1. Start the gateway + auth entrypoint
+docker compose up -d
+
+# 2. Register users (auth-gateway must be up)
 ./scripts/add-user.sh alice           # prompts for a password
+
+# 3. Bring up the per-user backends
 docker compose -f docker-compose.yml -f docker-compose.multi.yml up -d
+
 open http://localhost:3001            # log in as alice
 ```
 
-`add-user.sh` writes the per-user service to `docker-compose.multi.yml`
-(gitignored — it contains usernames), adds an nginx route, and an htpasswd
-entry. Re-run it to add more users, then bring the stack back up.
+How it fits together:
+- **auth-gateway** — a lightweight auth entrypoint (reuses CloudCLI's auth
+  code, none of the app runtime). Serves the login page, owns the shared user
+  database, and issues the login cookie.
+- **gateway (nginx)** — verifies the cookie and routes each request to
+  `amadeus-<username>`; unauthenticated requests get the login page.
+- **amadeus-&lt;user&gt;** — per-user backend containers, fully isolated
+  (own volume), generated into `docker-compose.multi.yml` by `add-user.sh`
+  (gitignored — it contains usernames).
 
 Each user's container ships the coding-agent CLIs (Claude Code, Codex,
 OpenCode); sign in to a provider from the in-app settings after first launch.

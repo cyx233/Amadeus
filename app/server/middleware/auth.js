@@ -2,8 +2,28 @@ import jwt from 'jsonwebtoken';
 import { userDb, appConfigDb } from '../modules/database/index.js';
 import { IS_PLATFORM } from '../constants/config.js';
 
-// Use env var if set, otherwise auto-generate a unique secret per installation
+// Use env var if set, otherwise auto-generate a unique secret per installation.
+// In the multi-user gateway deployment, JWT_SECRET is injected via env so the
+// auth entrypoint and every backend container verify the same tokens.
 const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
+
+// Name of the cookie the auth entrypoint sets so the nginx gateway can route
+// by identity (browsers send cookies on the first HTML request; Bearer tokens
+// in localStorage are not available then).
+const AUTH_COOKIE_NAME = 'amadeus_token';
+
+// Minimal cookie parser (avoids adding cookie-parser for one header).
+function readTokenFromCookie(cookieHeader) {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq === -1) continue;
+    if (part.slice(0, eq).trim() === AUTH_COOKIE_NAME) {
+      return decodeURIComponent(part.slice(eq + 1).trim());
+    }
+  }
+  return null;
+}
 
 // Optional API key middleware
 const validateApiKey = (req, res, next) => {
@@ -43,6 +63,12 @@ const authenticateToken = async (req, res, next) => {
   // Also check query param for SSE endpoints (EventSource can't set headers)
   if (!token && req.query.token) {
     token = req.query.token;
+  }
+
+  // Also accept the gateway cookie so the auth entrypoint's /api/auth/user can
+  // serve as nginx's auth_request verifier (cookie is sent automatically).
+  if (!token) {
+    token = readTokenFromCookie(req.headers['cookie']);
   }
 
   if (!token) {
@@ -128,5 +154,6 @@ export {
   authenticateToken,
   generateToken,
   authenticateWebSocket,
-  JWT_SECRET
+  JWT_SECRET,
+  AUTH_COOKIE_NAME
 };

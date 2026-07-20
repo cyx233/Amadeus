@@ -2,7 +2,22 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import { userDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
-import { generateToken, authenticateToken } from '../middleware/auth.js';
+import { generateToken, authenticateToken, AUTH_COOKIE_NAME } from '../middleware/auth.js';
+
+// Multi-user gateway deployment: the auth entrypoint accepts registrations for
+// more than one account. Single-instance deployments stay single-user.
+const ALLOW_MULTI_USER = process.env.AMADEUS_MULTI_USER === 'true';
+
+// Sets the gateway auth cookie so the nginx gateway can route by identity.
+// 7d matches the JWT lifetime; HttpOnly keeps it out of JS/XSS reach.
+function setAuthCookie(res, token) {
+  res.cookie?.(AUTH_COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+  });
+}
 
 const router = express.Router();
 const db = getConnection();
@@ -38,9 +53,10 @@ router.post('/register', async (req, res) => {
     // Use a transaction to prevent race conditions
     db.prepare('BEGIN').run();
     try {
-      // Check if users already exist (only allow one user)
+      // Single-instance deployments allow only one account; the multi-user
+      // gateway (AMADEUS_MULTI_USER=true) accepts additional registrations.
       const hasUsers = userDb.hasUsers();
-      if (hasUsers) {
+      if (hasUsers && !ALLOW_MULTI_USER) {
         db.prepare('ROLLBACK').run();
         return res.status(403).json({ error: 'User already exists. This is a single-user system.' });
       }
@@ -60,6 +76,7 @@ router.post('/register', async (req, res) => {
       // Update last login (non-fatal, outside transaction)
       userDb.updateLastLogin(user.id);
 
+      setAuthCookie(res, token);
       res.json({
         success: true,
         user: { id: user.id, username: user.username },
@@ -107,13 +124,14 @@ router.post('/login', async (req, res) => {
     
     // Update last login
     userDb.updateLastLogin(user.id);
-    
+
+    setAuthCookie(res, token);
     res.json({
       success: true,
       user: { id: user.id, username: user.username },
       token
     });
-    
+
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -127,10 +145,19 @@ router.get('/user', authenticateToken, (req, res) => {
   });
 });
 
+// Gateway verify endpoint for nginx auth_request. authenticateToken reads the
+// JWT from the amadeus_token cookie; on success we echo the username in a
+// response header so nginx can route the request to amadeus-<username>.
+router.get('/gateway-verify', authenticateToken, (req, res) => {
+  res.setHeader('X-Auth-User', req.user.username);
+  res.status(200).end();
+});
+
 // Logout (client-side token removal, but this endpoint can be used for logging)
 router.post('/logout', authenticateToken, (req, res) => {
-  // In a simple JWT system, logout is mainly client-side
-  // This endpoint exists for consistency and potential future logging
+  // In a simple JWT system, logout is mainly client-side; also clear the
+  // gateway cookie so the nginx auth_request stops authorizing this browser.
+  res.clearCookie?.(AUTH_COOKIE_NAME, { path: '/' });
   res.json({ success: true, message: 'Logged out successfully' });
 });
 
