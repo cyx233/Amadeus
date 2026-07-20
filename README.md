@@ -67,6 +67,27 @@ OpenCode); sign in to a provider from the in-app settings after first launch.
 └──────────────────────────────────────────────────┘
 ```
 
+## Data & Privacy
+
+Amadeus is self-hosted: **all persistent data stays on the machine you deploy
+it to.** Nothing is sent to any Amadeus-operated service — there is no
+telemetry, analytics, or account backend.
+
+- **Where data lives** — each user gets an isolated container with its own
+  Docker volume (`user-data-<user>`). Code, agent sessions, the SQLite auth
+  database, and uploads all live in that volume on your host. Users cannot see
+  each other's data.
+- **What leaves the machine** — only what *you* configure the agent to reach:
+  your chosen LLM backend (Anthropic API, OpenAI, or Bedrock) and any tools the
+  agent runs. Amadeus itself adds no outbound calls, with one exception:
+- **Update check** — the sidebar polls this repo's GitHub releases to show an
+  "update available" hint. It sends no data beyond a plain GitHub API request.
+  Disable it by removing the `useVersionCheck` call in
+  `app/src/components/sidebar/view/Sidebar.tsx`.
+
+You own the deployment, so you own the data. Encryption at rest (LUKS, encrypted
+volumes) is a host-level concern and left to the operator.
+
 ## Key Features
 
 | Feature | How |
