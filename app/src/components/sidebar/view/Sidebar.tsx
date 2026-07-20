@@ -7,6 +7,7 @@ import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
+import { useAuth } from '../../auth/context/AuthContext';
 import GitPanel from '../../git-panel/view/GitPanel';
 import type { Project } from '../../../types/app';
 import type { MCPServerStatus, SidebarProps } from '../types/types';
@@ -54,6 +55,7 @@ function Sidebar({
   const { sidebarVisible } = preferences;
   const { setCurrentProject } = useTaskMaster() as TaskMasterSidebarContext;
   const paletteOps = usePaletteOps();
+  const { logout } = useAuth();
 
   const {
     isSidebarCollapsed,
@@ -113,6 +115,7 @@ function Sidebar({
           }
         }}
         onShowSettings={onShowSettings}
+        onLogout={logout}
         t={t}
       />
 

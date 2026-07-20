@@ -1,4 +1,4 @@
-import { Settings, FolderOpen, GitBranch, ListTodo } from 'lucide-react';
+import { Settings, FolderOpen, GitBranch, ListTodo, LogOut } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
 export type SidebarView = 'explorer' | 'git' | 'todo';
@@ -7,6 +7,7 @@ type SidebarCollapsedProps = {
   activeView: SidebarView | null;
   onSelectView: (view: SidebarView) => void;
   onShowSettings: () => void;
+  onLogout?: () => void;
   t: TFunction;
 };
 
@@ -20,6 +21,7 @@ export default function SidebarCollapsed({
   activeView,
   onSelectView,
   onShowSettings,
+  onLogout,
   t,
 }: SidebarCollapsedProps) {
   return (
@@ -48,6 +50,17 @@ export default function SidebarCollapsed({
       >
         <Settings className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
       </button>
+
+      {onLogout && (
+        <button
+          onClick={onLogout}
+          className="group flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-accent/80"
+          aria-label={t('actions.logout', 'Log out')}
+          title={t('actions.logout', 'Log out')}
+        >
+          <LogOut className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
+        </button>
+      )}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { ScrollArea } from '../../../../shared/view/ui';
 import { authenticatedFetch } from '../../../../utils/api';
 import type { Project, ProjectSession } from '../../../../types/app';
 
-import SidebarFileTree from './SidebarFileTree';
+import FileTree from '../../../file-tree/view/FileTree';
 import SidebarHeader from './SidebarHeader';
 
 type SidebarContentProps = {
@@ -185,7 +185,10 @@ export default function SidebarContent({
       <SplitPane
         top={
           <div className="px-1 py-1">
-            <SidebarFileTree selectedProject={selectedProject} />
+            <FileTree
+              selectedProject={selectedProject}
+              onFileOpen={(filePath) => (window as any).__amadeus_openFile?.(filePath)}
+            />
           </div>
         }
         bottom={
