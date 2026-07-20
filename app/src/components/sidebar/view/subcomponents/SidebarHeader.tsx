@@ -1,21 +1,17 @@
-import { PanelLeftClose, Plus, RefreshCw } from 'lucide-react';
+import { PanelLeftClose, RefreshCw } from 'lucide-react';
 
 import { Button } from '../../../../shared/view/ui';
 import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../constants/branding';
 
 type SidebarHeaderProps = {
-  isLoading: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
-  onCreateProject: () => void;
   onCollapseSidebar: () => void;
 };
 
 export default function SidebarHeader({
-  isLoading,
   onRefresh,
   isRefreshing,
-  onCreateProject,
   onCollapseSidebar,
 }: SidebarHeaderProps) {
   return (
@@ -42,15 +38,6 @@ export default function SidebarHeader({
             </Button>
           </div>
         </div>
-
-        {!isLoading && (
-          <div className="mt-2.5 flex items-center justify-end">
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-lg px-2 text-muted-foreground hover:bg-accent/80 hover:text-foreground" onClick={onCreateProject} title="New project">
-              <Plus className="h-4 w-4" />
-              <span className="text-xs">New project</span>
-            </Button>
-          </div>
-        )}
       </div>
       <div className="nav-divider" />
     </div>

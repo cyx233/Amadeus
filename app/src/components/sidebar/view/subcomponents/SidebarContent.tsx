@@ -99,10 +99,8 @@ export default function SidebarContent({
   return (
     <div className="flex h-full w-full flex-col bg-background/80 backdrop-blur-sm select-none">
       <SidebarHeader
-        isLoading={isLoading}
         onRefresh={onRefresh}
         isRefreshing={isRefreshing}
-        onCreateProject={onCreateProject}
         onCollapseSidebar={onCollapseSidebar}
       />
 
@@ -124,6 +122,13 @@ export default function SidebarContent({
             </option>
           ))}
         </select>
+        <button
+          onClick={onCreateProject}
+          className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          title="New project"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
         {selectedProject && (
           <div className="relative flex-shrink-0">
             <button
@@ -160,7 +165,7 @@ export default function SidebarContent({
         <div className="flex-shrink-0 border-b border-border/40 bg-muted/30 px-3 py-2">
           <div className="mb-1 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Archived</span>
-            <button onClick={() => setShowArchived(false)} className="text-xs text-muted-foreground hover:text-foreground">✕</button>
+            <button onClick={() => setShowArchived(false)} className="text-xs text-muted-foreground hover:text-foreground" title="Close">✕</button>
           </div>
           {archivedProjects.length === 0 ? (
             <p className="text-xs text-muted-foreground/60">No archived projects</p>
