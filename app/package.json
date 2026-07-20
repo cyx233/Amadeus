@@ -5,9 +5,6 @@
   "description": "Self-hosted browser-based multi-agent coding platform (Claude Code, Codex, OpenCode)",
   "type": "module",
   "main": "dist-server/server/index.js",
-  "bin": {
-    "cloudcli": "dist-server/server/cli.js"
-  },
   "files": [
     "server/",
     "shared/",

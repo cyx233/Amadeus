@@ -1782,7 +1782,7 @@ async function startServer() {
             console.log('');
             console.log(`${c.info('[INFO]')} Server URL:  ${c.bright('http://' + DISPLAY_HOST + ':' + SERVER_PORT)}`);
             console.log(`${c.info('[INFO]')} Installed at: ${c.dim(appInstallPath)}`);
-            console.log(`${c.tip('[TIP]')}  Run "cloudcli status" for full configuration details`);
+            console.log(`${c.tip('[TIP]')}  See README for configuration details`);
             console.log('');
 
             // Start watching the projects folder for changes

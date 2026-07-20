@@ -152,16 +152,12 @@ function getPlaywright(): any | null {
 function getMcpCommand(): { command: string; args: string[] } {
   const serverDir = path.resolve(__dirname, '..', '..');
   const mcpScriptPath = path.join(serverDir, 'browser-use-mcp.js');
-  if (fs.existsSync(mcpScriptPath)) {
-    return {
-      command: process.execPath,
-      args: [mcpScriptPath],
-    };
+  if (!fs.existsSync(mcpScriptPath)) {
+    throw new Error(`browser-use MCP script not found at ${mcpScriptPath}`);
   }
-
   return {
-    command: 'cloudcli',
-    args: ['browser-use-mcp'],
+    command: process.execPath,
+    args: [mcpScriptPath],
   };
 }
 
