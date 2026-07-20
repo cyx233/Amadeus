@@ -28,6 +28,14 @@ fi
 
 mkdir -p gateway
 
+# The gateway bind-mounts htpasswd/user-routes.conf. If the stack was started
+# before these existed, docker created them as directories — fix that so the
+# appends below (and nginx) get real files.
+for f in "$HTPASSWD_FILE" "$ROUTES_FILE"; do
+  if [ -d "$f" ]; then rmdir "$f" 2>/dev/null || rm -rf "$f"; fi
+  [ -e "$f" ] || : > "$f"
+done
+
 # Add htpasswd entry
 HASH=$(openssl passwd -apr1 "$PASSWORD")
 echo "${USERNAME}:${HASH}" >> "$HTPASSWD_FILE"
