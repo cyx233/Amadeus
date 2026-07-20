@@ -36,6 +36,6 @@ RUN chmod +x /opt/entrypoint.sh
 USER agent
 
 WORKDIR /home/agent
-EXPOSE 3001
+EXPOSE 3002
 
 ENTRYPOINT ["/opt/entrypoint.sh"]

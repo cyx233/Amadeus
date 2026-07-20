@@ -23,17 +23,18 @@ services:
         SKIP_AUTH: "true"
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "3002:3002"
     volumes:
       - user-data:/home/agent
     environment:
+      - SERVER_PORT=3002
       - VITE_IS_PLATFORM=true
       - DISABLE_AUTOUPDATER=1
       - LIGHTRAG_URL=http://lightrag:9621
       - WORKSPACES_ROOT=/home/agent/workspace
       - NODE_ENV=production
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:3001/api/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:3002/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
