@@ -164,6 +164,8 @@ export const api = {
     }),
   getFiles: (projectId, options = {}) =>
     authenticatedFetch(`/api/projects/${projectId}/files`, options),
+  getDirChildren: (projectId, dirPath) =>
+    authenticatedFetch(`/api/projects/${projectId}/files?path=${encodeURIComponent(dirPath)}`),
 
   // File operations
   createFile: (projectId, { path, type, name }) =>

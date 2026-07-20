@@ -737,7 +737,21 @@ app.get('/api/projects/:projectId/files', authenticateToken, async (req, res) =>
             return res.status(404).json({ error: `Project path not found: ${actualPath}` });
         }
 
-        const files = await getFileTree(actualPath, 10, 0, true);
+        // Lazy tree: return only the top level (directories carry hasChildren
+        // so the UI shows an expand arrow). Children are fetched on expand via
+        // /files/dir. Avoids walking huge projects (e.g. Brazil workspaces) up
+        // front. Optional ?path= lists one subdirectory instead of the root.
+        const sub = typeof req.query.path === 'string' ? req.query.path : '';
+        let target = actualPath;
+        if (sub) {
+            const resolvedSub = path.isAbsolute(sub) ? path.resolve(sub) : path.resolve(actualPath, sub);
+            const root = path.resolve(actualPath);
+            if (resolvedSub !== root && !resolvedSub.startsWith(root + path.sep)) {
+                return res.status(403).json({ error: 'Forbidden' });
+            }
+            target = resolvedSub;
+        }
+        const files = await getFileTree(target, 1, 0, true);
         res.json(files);
     } catch (error) {
         console.error('[ERROR] File tree error:', error.message);
@@ -1630,14 +1644,33 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
             item.permissionsRwx = '---------';
         }
 
-        if (entry.isDirectory() && currentDepth < maxDepth) {
-            // Recurse. Let readdir's own EACCES bubble up through the catch in
-            // the recursive call rather than doing a separate access() probe
-            // (which doubled the round-trip count on SMB without adding info).
-            // The recursive call starts with a bounded readdir; holding a permit
-            // for the whole subtree can deadlock when sibling directories are
-            // waiting on their own children.
-            item.children = await getFileTree(itemPath, maxDepth, currentDepth + 1, showHidden);
+        if (entry.isDirectory()) {
+            if (currentDepth < maxDepth) {
+                // Recurse. Let readdir's own EACCES bubble up through the catch in
+                // the recursive call rather than doing a separate access() probe
+                // (which doubled the round-trip count on SMB without adding info).
+                // The recursive call starts with a bounded readdir; holding a permit
+                // for the whole subtree can deadlock when sibling directories are
+                // waiting on their own children.
+                item.children = await getFileTree(itemPath, maxDepth, currentDepth + 1, showHidden);
+                item.hasChildren = item.children.length > 0;
+            } else {
+                // Lazy: not recursing here, but tell the UI whether to show an
+                // expand arrow with one cheap readdir (first entry is enough).
+                try {
+                    await acquire();
+                    try {
+                        const dir = await fsPromises.opendir(itemPath);
+                        const first = await dir.read();
+                        await dir.close();
+                        item.hasChildren = first !== null;
+                    } finally {
+                        release();
+                    }
+                } catch {
+                    item.hasChildren = false;
+                }
+            }
         }
 
         return item;

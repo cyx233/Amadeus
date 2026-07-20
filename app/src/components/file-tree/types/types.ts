@@ -11,6 +11,7 @@ export interface FileTreeNode {
   size?: number;
   modified?: string;
   permissionsRwx?: string;
+  hasChildren?: boolean;
   children?: FileTreeNode[];
   [key: string]: unknown;
 }

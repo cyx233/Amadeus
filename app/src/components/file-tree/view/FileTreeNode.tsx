@@ -1,5 +1,5 @@
 import type { ReactNode, RefObject } from 'react';
-import { ChevronRight, Folder, FolderOpen } from 'lucide-react';
+import { ChevronRight, Folder, FolderOpen, Loader2 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import type { FileTreeNode as FileTreeNodeType, FileTreeViewMode } from '../types/types';
 import { Input } from '../../../shared/view/ui';
@@ -10,6 +10,7 @@ type FileTreeNodeProps = {
   level: number;
   viewMode: FileTreeViewMode;
   expandedDirs: Set<string>;
+  loadingDirs?: Set<string>;
   onItemClick: (item: FileTreeNodeType) => void;
   renderFileIcon: (filename: string) => ReactNode;
   formatFileSize: (bytes?: number) => string;
@@ -34,10 +35,11 @@ type FileTreeNodeProps = {
 type TreeItemIconProps = {
   item: FileTreeNodeType;
   isOpen: boolean;
+  isExpandable: boolean;
   renderFileIcon: (filename: string) => ReactNode;
 };
 
-function TreeItemIcon({ item, isOpen, renderFileIcon }: TreeItemIconProps) {
+function TreeItemIcon({ item, isOpen, isExpandable, renderFileIcon }: TreeItemIconProps) {
   if (item.type === 'directory') {
     return (
       <span className="flex flex-shrink-0 items-center gap-0.5">
@@ -45,6 +47,7 @@ function TreeItemIcon({ item, isOpen, renderFileIcon }: TreeItemIconProps) {
           className={cn(
             'w-3.5 h-3.5 text-muted-foreground/70 transition-transform duration-150',
             isOpen && 'rotate-90',
+            !isExpandable && 'invisible',
           )}
         />
         {isOpen ? (
@@ -64,6 +67,7 @@ export default function FileTreeNode({
   level,
   viewMode,
   expandedDirs,
+  loadingDirs,
   onItemClick,
   renderFileIcon,
   formatFileSize,
@@ -85,7 +89,13 @@ export default function FileTreeNode({
 }: FileTreeNodeProps) {
   const isDirectory = item.type === 'directory';
   const isOpen = isDirectory && expandedDirs.has(item.path);
-  const hasChildren = Boolean(isDirectory && item.children && item.children.length > 0);
+  const hasLoadedChildren = Boolean(isDirectory && item.children && item.children.length > 0);
+  // A directory is expandable if it already has loaded children OR the backend
+  // flagged that it has children we haven't fetched yet (lazy loading).
+  const isExpandable = Boolean(isDirectory && (hasLoadedChildren || item.hasChildren));
+  // Children not yet fetched: `children` is undefined but the dir is expandable.
+  const childrenNotLoaded = isDirectory && item.children === undefined && Boolean(item.hasChildren);
+  const isLoadingChildren = Boolean(loadingDirs?.has(item.path));
   const isRenaming = renamingItem?.path === item.path;
 
   const nameClassName = cn(
@@ -112,7 +122,7 @@ export default function FileTreeNode({
         style={{ paddingLeft: `${level * 16 + 4}px` }}
         onClick={(e) => e.stopPropagation()}
       >
-        <TreeItemIcon item={item} isOpen={isOpen} renderFileIcon={renderFileIcon} />
+        <TreeItemIcon item={item} isOpen={isOpen} isExpandable={isExpandable} renderFileIcon={renderFileIcon} />
         <Input
           ref={renameInputRef}
           type="text"
@@ -144,7 +154,7 @@ export default function FileTreeNode({
       {viewMode === 'detailed' ? (
         <>
           <div className="col-span-5 flex min-w-0 items-center gap-1.5">
-            <TreeItemIcon item={item} isOpen={isOpen} renderFileIcon={renderFileIcon} />
+            <TreeItemIcon item={item} isOpen={isOpen} isExpandable={isExpandable} renderFileIcon={renderFileIcon} />
             <span className={nameClassName}>{item.name}</span>
           </div>
           <div className="col-span-2 text-sm tabular-nums text-muted-foreground">
@@ -156,7 +166,7 @@ export default function FileTreeNode({
       ) : viewMode === 'compact' ? (
         <>
           <div className="flex min-w-0 items-center gap-1.5">
-            <TreeItemIcon item={item} isOpen={isOpen} renderFileIcon={renderFileIcon} />
+            <TreeItemIcon item={item} isOpen={isOpen} isExpandable={isExpandable} renderFileIcon={renderFileIcon} />
             <span className={nameClassName}>{item.name}</span>
           </div>
           <div className="ml-2 flex flex-shrink-0 items-center gap-3 text-sm text-muted-foreground">
@@ -170,7 +180,7 @@ export default function FileTreeNode({
         </>
       ) : (
         <>
-          <TreeItemIcon item={item} isOpen={isOpen} renderFileIcon={renderFileIcon} />
+          <TreeItemIcon item={item} isOpen={isOpen} isExpandable={isExpandable} renderFileIcon={renderFileIcon} />
           <span className={nameClassName}>{item.name}</span>
         </>
       )}
@@ -199,13 +209,22 @@ export default function FileTreeNode({
         rowContent
       )}
 
-      {isDirectory && isOpen && hasChildren && (
+      {isDirectory && isOpen && (childrenNotLoaded || hasLoadedChildren) && (
         <div className="relative">
           <span
             className="absolute bottom-0 top-0 border-l border-border/40"
             style={{ left: `${level * 16 + 14}px` }}
             aria-hidden="true"
           />
+          {/* Children not yet fetched: show a spinner row (or nothing) until they arrive. */}
+          {childrenNotLoaded && isLoadingChildren && (
+            <div
+              className="flex items-center gap-1.5 py-[3px] pr-2 text-sm text-muted-foreground"
+              style={{ paddingLeft: `${(level + 1) * 16 + 4}px` }}
+            >
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            </div>
+          )}
           {item.children?.map((child) => (
             <FileTreeNode
               key={child.path}
@@ -213,6 +232,7 @@ export default function FileTreeNode({
               level={level + 1}
               viewMode={viewMode}
               expandedDirs={expandedDirs}
+              loadingDirs={loadingDirs}
               onItemClick={onItemClick}
               renderFileIcon={renderFileIcon}
               formatFileSize={formatFileSize}

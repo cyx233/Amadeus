@@ -48,7 +48,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     }
   }, [toast]);
 
-  const { files, loading, refreshFiles } = useFileTreeData(selectedProject);
+  const { files, loading, refreshFiles, loadDirChildren, loadingDirs } = useFileTreeData(selectedProject);
   const { viewMode, changeViewMode } = useFileTreeViewMode();
   const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } = useExpandedDirectories();
   const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({
@@ -96,6 +96,12 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
   const handleItemClick = useCallback(
     (item: FileTreeNode) => {
       if (item.type === 'directory') {
+        // If we're opening (not currently expanded) a directory whose children
+        // haven't been fetched yet, load them on demand and cache in the tree.
+        const isOpening = !expandedDirs.has(item.path);
+        if (isOpening && item.children === undefined && item.hasChildren) {
+          void loadDirChildren(item.path);
+        }
         toggleDirectory(item.path);
         return;
       }
@@ -114,7 +120,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
 
       onFileOpen?.(item.path);
     },
-    [onFileOpen, selectedProject, toggleDirectory],
+    [onFileOpen, selectedProject, toggleDirectory, expandedDirs, loadDirChildren],
   );
 
   const formatRelativeTimeLabel = useCallback(
@@ -202,6 +208,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           searchQuery={searchQuery}
           viewMode={viewMode}
           expandedDirs={expandedDirs}
+          loadingDirs={loadingDirs}
           onItemClick={handleItemClick}
           renderFileIcon={renderFileIcon}
           formatFileSize={formatFileSize}
