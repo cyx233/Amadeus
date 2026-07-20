@@ -20,10 +20,11 @@ const router = express.Router();
 router.get('/api-keys', async (req, res) => {
   try {
     const apiKeys = apiKeysDb.getApiKeys(req.user.id);
-    // Don't send the full API key in the list for security
+    // Only the hash is stored, so we can't show the real key. Surface the saved
+    // prefix (e.g. "ck_1234abcd") as a recognizable, non-sensitive hint.
     const sanitizedKeys = apiKeys.map(key => ({
       ...key,
-      api_key: key.api_key.substring(0, 10) + '...'
+      api_key: key.key_prefix ? `${key.key_prefix}...` : '••••••••'
     }));
     res.json({ apiKeys: sanitizedKeys });
   } catch (error) {

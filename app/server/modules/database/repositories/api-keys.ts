@@ -8,11 +8,12 @@
 import crypto from 'crypto';
 
 import { getConnection } from '@/modules/database/connection.js';
+import { hashApiKey } from '@/shared/secret-crypto.js';
 
 type ApiKeyRow = {
   id: number;
   key_name: string;
-  api_key: string;
+  key_prefix: string | null;
   created_at: string;
   last_used: string | null;
   is_active: number;
@@ -46,15 +47,20 @@ function generateApiKey(): string {
 export const apiKeysDb = {
   generateApiKey,
 
-  /** Creates a new API key for the given user and returns it for one-time display. */
+  /**
+   * Creates a new API key for the given user. Only the SHA-256 hash is stored;
+   * the plaintext is returned once here for the caller to show the user and is
+   * never persisted (like a password). A `key_prefix` (first 12 chars) is kept
+   * so the UI can still display a recognizable "ck_1234..." hint in the list.
+   */
   createApiKey(userId: number, keyName: string): CreateApiKeyResult {
     const db = getConnection();
     const apiKey = generateApiKey();
     const result = db
       .prepare(
-        'INSERT INTO api_keys (user_id, key_name, api_key) VALUES (?, ?, ?)'
+        'INSERT INTO api_keys (user_id, key_name, api_key, key_prefix) VALUES (?, ?, ?, ?)'
       )
-      .run(userId, keyName, apiKey);
+      .run(userId, keyName, hashApiKey(apiKey), apiKey.slice(0, 12));
     return { id: result.lastInsertRowid, keyName, apiKey };
   },
 
@@ -63,7 +69,7 @@ export const apiKeysDb = {
     const db = getConnection();
     return db
       .prepare(
-        'SELECT id, key_name, api_key, created_at, last_used, is_active FROM api_keys WHERE user_id = ? ORDER BY created_at DESC'
+        'SELECT id, key_name, key_prefix, created_at, last_used, is_active FROM api_keys WHERE user_id = ? ORDER BY created_at DESC'
       )
       .all(userId) as ApiKeyRow[];
   },
@@ -82,7 +88,7 @@ export const apiKeysDb = {
          JOIN users u ON ak.user_id = u.id
          WHERE ak.api_key = ? AND ak.is_active = 1 AND u.is_active = 1`
       )
-      .get(apiKey) as ValidatedApiKeyUser | undefined;
+      .get(hashApiKey(apiKey)) as ValidatedApiKeyUser | undefined;
 
     if (row) {
       db.prepare(

@@ -7,6 +7,7 @@
 
 import { getConnection } from '@/modules/database/connection.js';
 import { credentialsDb } from '@/modules/database/repositories/credentials.js';
+import { decryptSecret } from '@/shared/secret-crypto.js';
 import type {
   CredentialPublicRow,
   CreateCredentialResult,
@@ -74,7 +75,7 @@ export const githubTokensDb = {
 
     return {
       ...row,
-      github_token: row.credential_value,
+      github_token: decryptSecret(row.credential_value),
     };
   },
 

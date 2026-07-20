@@ -436,6 +436,15 @@ export const runMigrations = (db: Database) => {
       'BOOLEAN DEFAULT 0'
     );
 
+    // API keys are now stored as SHA-256 hashes (not plaintext). key_prefix
+    // holds the first chars for a human-readable list hint. Any pre-existing
+    // plaintext keys stop validating (hash mismatch) and must be regenerated.
+    if (tableExists(db, 'api_keys')) {
+      const apiKeyColumns = (db.prepare('PRAGMA table_info(api_keys)').all() as { name: string }[])
+        .map((column) => column.name);
+      addColumnToTableIfNotExists(db, 'api_keys', apiKeyColumns, 'key_prefix', 'TEXT');
+    }
+
     db.exec(APP_CONFIG_TABLE_SCHEMA_SQL);
     db.exec(USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL);
     db.exec(VAPID_KEYS_TABLE_SCHEMA_SQL);
