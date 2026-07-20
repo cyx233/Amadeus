@@ -14,6 +14,15 @@ RUN npm install -g \
     task-master-ai \
     && npm cache clean --force
 
+# Cursor Agent (Anysphere) — not on npm; its official installer downloads a
+# prebuilt binary from downloads.cursor.com into $HOME/.local. Point HOME at
+# /opt (outside the runtime home volume, which would otherwise shadow it) and
+# symlink into /usr/local/bin so `cursor-agent` is on PATH for every user.
+RUN HOME=/opt/cursor-home bash -c 'curl -fsSL https://cursor.com/install | bash' \
+    && ln -sf /opt/cursor-home/.local/bin/cursor-agent /usr/local/bin/cursor-agent \
+    && ln -sf /opt/cursor-home/.local/bin/agent /usr/local/bin/agent \
+    && cursor-agent --version
+
 # Non-root user. /home/agent is a single mounted volume at runtime, so app
 # code and entrypoint live in /opt (outside the volume) to avoid being shadowed.
 RUN useradd -m -s /bin/bash agent
