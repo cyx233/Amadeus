@@ -155,6 +155,8 @@ export const api = {
     authenticatedFetch(`/api/projects/${projectId}/files/content?path=${encodeURIComponent(filePath)}`),
   downloadFolder: (projectId, folderPath) =>
     authenticatedFetch(`/api/projects/${projectId}/files/download-folder?path=${encodeURIComponent(folderPath)}`),
+  searchProject: (projectId, query) =>
+    authenticatedFetch(`/api/projects/${projectId}/search?q=${encodeURIComponent(query)}`),
   saveFile: (projectId, filePath, content) =>
     authenticatedFetch(`/api/projects/${projectId}/file`, {
       method: 'PUT',

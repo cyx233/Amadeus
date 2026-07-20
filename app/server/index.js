@@ -568,6 +568,58 @@ app.get('/api/projects/:projectId/files/download', authenticateToken, async (req
     } catch { res.status(404).json({ error: 'File not found' }); }
 });
 
+// Project-wide content search (VS Code style) via ripgrep. Returns matches
+// grouped by file with line numbers. Bounded output so a broad query can't
+// flood the response.
+app.get('/api/projects/:projectId/search', authenticateToken, async (req, res) => {
+    try {
+        const projectRoot = await projectsDb.getProjectPathById(req.params.projectId);
+        if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
+        const query = typeof req.query.q === 'string' ? req.query.q : '';
+        if (query.trim().length < 2) return res.json({ results: [] });
+
+        const root = path.resolve(projectRoot);
+        const MAX_MATCHES = 500;
+        const { spawn } = await import('node:child_process');
+        // --json gives structured matches; -i case-insensitive; smart limits.
+        const rg = spawn('rg', [
+            '--json', '--smart-case', '--max-count', '50',
+            '--max-columns', '300', '--max-filesize', '2M',
+            '-g', '!.git', '-g', '!node_modules',
+            '--', query, root,
+        ], { cwd: root });
+
+        const byFile = new Map();
+        let count = 0;
+        let buf = '';
+        rg.stdout.on('data', (chunk) => {
+            buf += chunk.toString();
+            let nl;
+            while ((nl = buf.indexOf('\n')) !== -1) {
+                const line = buf.slice(0, nl);
+                buf = buf.slice(nl + 1);
+                if (!line || count >= MAX_MATCHES) continue;
+                let ev;
+                try { ev = JSON.parse(line); } catch { continue; }
+                if (ev.type !== 'match') continue;
+                const relPath = path.relative(root, ev.data.path.text);
+                const lineNumber = ev.data.line_number;
+                const text = (ev.data.lines.text || '').replace(/\n$/, '').slice(0, 300);
+                if (!byFile.has(relPath)) byFile.set(relPath, []);
+                byFile.get(relPath).push({ line: lineNumber, text });
+                count++;
+                if (count >= MAX_MATCHES) rg.kill();
+            }
+        });
+        rg.on('error', () => { if (!res.headersSent) res.status(500).json({ error: 'Search failed' }); });
+        rg.on('close', () => {
+            if (res.headersSent) return;
+            const results = [...byFile.entries()].map(([file, matches]) => ({ file, matches }));
+            res.json({ results, truncated: count >= MAX_MATCHES });
+        });
+    } catch { if (!res.headersSent) res.status(500).json({ error: 'Search failed' }); }
+});
+
 // Download a folder within the project as tar.gz. Streams from `tar` so the
 // whole subtree is archived server-side (complete — unlike client-side zipping
 // which only sees lazily-loaded nodes) without buffering it in memory.

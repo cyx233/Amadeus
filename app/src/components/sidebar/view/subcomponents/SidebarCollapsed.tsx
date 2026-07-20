@@ -1,7 +1,7 @@
-import { Settings, FolderOpen, GitBranch, ListTodo, LogOut } from 'lucide-react';
+import { Settings, FolderOpen, Search, GitBranch, ListTodo, LogOut } from 'lucide-react';
 import type { TFunction } from 'i18next';
 
-export type SidebarView = 'explorer' | 'git' | 'todo';
+export type SidebarView = 'explorer' | 'search' | 'git' | 'todo';
 
 type SidebarCollapsedProps = {
   activeView: SidebarView | null;
@@ -13,6 +13,7 @@ type SidebarCollapsedProps = {
 
 const VIEWS: Array<{ id: SidebarView; icon: typeof FolderOpen; title: string }> = [
   { id: 'explorer', icon: FolderOpen, title: 'Explorer' },
+  { id: 'search', icon: Search, title: 'Search' },
   { id: 'git', icon: GitBranch, title: 'Source Control' },
   { id: 'todo', icon: ListTodo, title: 'TODO' },
 ];

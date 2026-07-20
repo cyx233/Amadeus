@@ -148,8 +148,6 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
       <FileTreeHeader
         viewMode={viewMode}
         onViewModeChange={changeViewMode}
-        searchQuery={searchQuery}
-        onSearchQueryChange={setSearchQuery}
         onUploadFiles={upload.handleFileSelect}
         onNewFile={() => operations.handleStartCreate('', 'file')}
         onNewFolder={() => operations.handleStartCreate('', 'directory')}

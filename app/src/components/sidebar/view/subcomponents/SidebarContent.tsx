@@ -15,8 +15,6 @@ type SidebarContentProps = {
   onProjectSelect: (project: Project) => void;
   onSessionSelect: (session: ProjectSession) => void;
   onNewSession: () => void;
-  searchFilter: string;
-  onSearchFilterChange: (value: string) => void;
   onRefresh: () => Promise<void> | void;
   isRefreshing: boolean;
   onCreateProject: () => void;
@@ -31,8 +29,6 @@ export default function SidebarContent({
   onProjectSelect,
   onSessionSelect,
   onNewSession,
-  searchFilter,
-  onSearchFilterChange,
   onRefresh,
   isRefreshing,
   onCreateProject,
@@ -104,8 +100,6 @@ export default function SidebarContent({
     <div className="flex h-full w-full flex-col bg-background/80 backdrop-blur-sm select-none">
       <SidebarHeader
         isLoading={isLoading}
-        searchFilter={searchFilter}
-        onSearchFilterChange={onSearchFilterChange}
         onRefresh={onRefresh}
         isRefreshing={isRefreshing}
         onCreateProject={onCreateProject}

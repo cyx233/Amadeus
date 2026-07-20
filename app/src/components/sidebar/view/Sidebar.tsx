@@ -15,6 +15,7 @@ import type { MCPServerStatus, SidebarProps } from '../types/types';
 import SidebarCollapsed, { type SidebarView } from './subcomponents/SidebarCollapsed';
 import SidebarContent from './subcomponents/SidebarContent';
 import TodoPanel from './subcomponents/TodoPanel';
+import SearchPanel from './subcomponents/SearchPanel';
 import SidebarModals from './subcomponents/SidebarModals';
 
 type TaskMasterSidebarContext = {
@@ -61,7 +62,6 @@ function Sidebar({
     isSidebarCollapsed,
     showNewProject,
     isRefreshing,
-    searchFilter,
     deleteConfirmation,
     sessionDeleteConfirmation,
     showVersionModal,
@@ -72,7 +72,6 @@ function Sidebar({
     collapseSidebar: handleCollapseSidebar,
     expandSidebar: handleExpandSidebar,
     setShowNewProject,
-    setSearchFilter,
     setDeleteConfirmation,
     setSessionDeleteConfirmation,
     setShowVersionModal,
@@ -131,13 +130,14 @@ function Sidebar({
               onProjectSelect={handleProjectSelect}
               onSessionSelect={onSessionSelect}
               onNewSession={() => { if (selectedProject) onNewSession(selectedProject); }}
-              searchFilter={searchFilter}
-              onSearchFilterChange={setSearchFilter}
               onRefresh={() => refreshProjects()}
               isRefreshing={isRefreshing}
               onCreateProject={() => setShowNewProject(true)}
               onCollapseSidebar={handleCollapseSidebar}
             />
+          )}
+          {activeView === 'search' && (
+            <SearchPanel selectedProject={selectedProject} />
           )}
           {activeView === 'git' && (
             <GitPanel

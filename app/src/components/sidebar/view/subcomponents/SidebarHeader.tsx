@@ -1,12 +1,10 @@
-import { PanelLeftClose, Plus, RefreshCw, Search } from 'lucide-react';
+import { PanelLeftClose, Plus, RefreshCw } from 'lucide-react';
 
-import { Button, Input } from '../../../../shared/view/ui';
+import { Button } from '../../../../shared/view/ui';
 import { CLOUDCLI_WORDMARK_FONT_FAMILY } from '../../../../constants/branding';
 
 type SidebarHeaderProps = {
   isLoading: boolean;
-  searchFilter: string;
-  onSearchFilterChange: (value: string) => void;
   onRefresh: () => void;
   isRefreshing: boolean;
   onCreateProject: () => void;
@@ -15,8 +13,6 @@ type SidebarHeaderProps = {
 
 export default function SidebarHeader({
   isLoading,
-  searchFilter,
-  onSearchFilterChange,
   onRefresh,
   isRefreshing,
   onCreateProject,
@@ -48,19 +44,10 @@ export default function SidebarHeader({
         </div>
 
         {!isLoading && (
-          <div className="mt-2.5 flex items-center gap-1.5">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
-              <Input
-                type="text"
-                placeholder="Search projects..."
-                value={searchFilter}
-                onChange={(event) => onSearchFilterChange(event.target.value)}
-                className="h-8 rounded-lg border-0 bg-muted/50 pl-8 pr-3 text-sm placeholder:text-muted-foreground/40 focus-visible:ring-0"
-              />
-            </div>
-            <Button variant="ghost" size="sm" className="h-8 w-8 rounded-lg p-0 text-muted-foreground hover:bg-accent/80 hover:text-foreground" onClick={onCreateProject} title="New project">
+          <div className="mt-2.5 flex items-center justify-end">
+            <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-lg px-2 text-muted-foreground hover:bg-accent/80 hover:text-foreground" onClick={onCreateProject} title="New project">
               <Plus className="h-4 w-4" />
+              <span className="text-xs">New project</span>
             </Button>
           </div>
         )}
