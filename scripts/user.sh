@@ -14,6 +14,11 @@
 # you need on a fresh deployment. (AMADEUS_NO_UP=1 skips starting the backend.)
 set -e
 
+# Run from the repo root so relative paths and .env resolve.
+cd "$(dirname "$0")/.."
+# Load .env for AMADEUS_ADMIN_TOKEN (needed to authorize registration).
+[ -f .env ] && set -a && . ./.env && set +a
+
 MULTI_FILE="docker-compose.multi.yml"
 AUTH_URL="${AMADEUS_AUTH_URL:-http://localhost:3001}"
 COMPOSE=(docker compose -f docker-compose.yml -f "$MULTI_FILE")
@@ -50,6 +55,7 @@ cmd_add() {
   code=$(curl -s -o /tmp/user-resp.$$ -w "%{http_code}" \
     -X POST "${AUTH_URL}/api/auth/register" \
     -H 'Content-Type: application/json' \
+    -H "X-Admin-Token: ${AMADEUS_ADMIN_TOKEN:-}" \
     -d "{\"username\":$(printf '%s' "$USERNAME" | jq -R .),\"password\":$(printf '%s' "$PASSWORD" | jq -R .)}") || {
       echo "[!] Could not reach the auth-gateway."; exit 1; }
   if [ "$code" != "200" ]; then

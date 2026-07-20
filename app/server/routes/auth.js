@@ -9,6 +9,11 @@ import { generateToken, authenticateToken, AUTH_COOKIE_NAME } from '../middlewar
 // stay single-user.
 const ALLOW_MULTI_USER = process.env.AMADEUS_MULTI_USER === 'true';
 
+// In multi-user mode, /register is reachable through the public gateway, so it
+// must NOT be open self-registration. Require an admin token that only
+// scripts/user.sh (running on the host with .env) knows.
+const ADMIN_TOKEN = process.env.AMADEUS_ADMIN_TOKEN || '';
+
 // Sets the gateway auth cookie so the nginx gateway can route by identity.
 // 7d matches the JWT lifetime; HttpOnly keeps it out of JS/XSS reach.
 function setAuthCookie(res, token) {
@@ -41,6 +46,15 @@ router.get('/status', async (req, res) => {
 router.post('/register', async (req, res) => {
   try {
     const { username, password } = req.body;
+
+    // Multi-user registration is admin-only (scripts/user.sh). The public
+    // login page never registers, and /register is reachable via the gateway,
+    // so require the admin token here to prevent open self-registration.
+    if (ALLOW_MULTI_USER) {
+      if (!ADMIN_TOKEN || req.headers['x-admin-token'] !== ADMIN_TOKEN) {
+        return res.status(403).json({ error: 'Registration is managed by an administrator.' });
+      }
+    }
 
     // Validate input
     if (!username || !password) {

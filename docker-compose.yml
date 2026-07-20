@@ -41,6 +41,8 @@ services:
       # Without it the DB falls back to a path inside the image (lost on rebuild).
       - DATABASE_PATH=/home/agent/.cloudcli/auth.db
       - NODE_ENV=production
+      # Registration is admin-only; scripts/user.sh presents this token.
+      - AMADEUS_ADMIN_TOKEN=${AMADEUS_ADMIN_TOKEN:?set AMADEUS_ADMIN_TOKEN in .env}
     volumes:
       - auth-users:/home/agent
     expose:

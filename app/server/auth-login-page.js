@@ -38,6 +38,10 @@ export function renderLoginPage() {
   button:hover { filter: brightness(1.08); }
   button:disabled { opacity: .6; cursor: not-allowed; }
   .err { margin-top: 14px; font-size: 13px; color: #f87171; min-height: 18px; }
+  .foot { margin-top: 18px; font-size: 13px; color: #94a3b8; text-align: center; }
+  .foot a { color: #818cf8; text-decoration: none; cursor: pointer; }
+  .foot a:hover { text-decoration: underline; }
+  .note { margin-top: 10px; font-size: 13px; color: #cbd5e1; text-align: center; min-height: 18px; }
 </style>
 </head>
 <body>
@@ -50,22 +54,20 @@ export function renderLoginPage() {
     <input id="p" name="password" type="password" autocomplete="current-password" />
     <button type="submit" id="btn">Sign in</button>
     <div class="err" id="err"></div>
+    <div class="note" id="note"></div>
+    <div class="foot">Need an account? <a id="register">Register</a></div>
   </form>
 <script>
   const err = document.getElementById('err');
   const btn = document.getElementById('btn');
-  let mode = 'login';
+  const note = document.getElementById('note');
 
-  // First run (no users yet) -> show register.
-  fetch('/api/auth/status').then(r => r.json()).then(s => {
-    if (s && s.needsSetup === true) {
-      mode = 'register';
-      document.getElementById('title').textContent = 'Create account';
-      document.getElementById('sub').textContent = 'Set up the first Amadeus account';
-      btn.textContent = 'Create account';
-      document.getElementById('p').setAttribute('autocomplete', 'new-password');
-    }
-  }).catch(() => {});
+  // Registration is admin-managed (scripts/user.sh) — the link just tells the
+  // visitor how to get an account, it does not submit anything.
+  document.getElementById('register').addEventListener('click', () => {
+    err.textContent = '';
+    note.textContent = 'Registration is managed by an administrator — please contact them for an account.';
+  });
 
   document.getElementById('f').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -75,7 +77,7 @@ export function renderLoginPage() {
     if (!username || !password) { err.textContent = 'Username and password are required.'; return; }
     btn.disabled = true;
     try {
-      const res = await fetch('/api/auth/' + mode, {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
