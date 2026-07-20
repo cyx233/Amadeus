@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import type { ChangeEvent } from 'react';
-import { Eye, FileText, FolderPlus, List, ListCollapse, Loader2, RefreshCw, TableProperties, Upload } from 'lucide-react';
+import { AlignJustify, FileText, FolderPlus, List, ListCollapse, Loader2, RefreshCw, Table2, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../../shared/view/ui';
@@ -170,7 +170,7 @@ export default function FileTreeHeader({
             title={t('fileTree.compactView')}
             aria-label={t('fileTree.compactView')}
           >
-            <Eye className="h-3.5 w-3.5" />
+            <AlignJustify className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant={viewMode === 'detailed' ? 'default' : 'ghost'}
@@ -180,7 +180,7 @@ export default function FileTreeHeader({
             title={t('fileTree.detailedView')}
             aria-label={t('fileTree.detailedView')}
           >
-            <TableProperties className="h-3.5 w-3.5" />
+            <Table2 className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
