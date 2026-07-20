@@ -18,13 +18,28 @@ RUN npm install -g \
 # code and entrypoint live in /opt (outside the volume) to avoid being shadowed.
 RUN useradd -m -s /bin/bash agent
 
-# Install CloudCLI (the web UI) under /opt
-COPY --chown=agent:agent app/ /opt/cloudcli/
+# Install CloudCLI (the web UI) under /opt.
+# Copy the manifests first and install deps in their own layer so that editing
+# app source doesn't invalidate `npm ci` — that keeps the @vscode/ripgrep
+# postinstall (which downloads from GitHub and gets rate-limited) from re-running
+# on every code change. Only a package.json/lock change re-installs.
 WORKDIR /opt/cloudcli
+# WORKDIR creates /opt/cloudcli as root; hand it to agent so `npm ci` can write
+# node_modules there.
+RUN chown agent:agent /opt/cloudcli
+COPY --chown=agent:agent app/package.json app/package-lock.json ./
+# Scripts (fix-node-pty, @vscode/ripgrep) need to run, and node_modules must be
+# writable by the app user. Kept in its own layer (source is copied after) so
+# editing app code doesn't re-run npm ci — that avoids re-hitting the
+# rate-limited @vscode/ripgrep GitHub download on every code change.
 USER agent
+RUN npm ci
+
+# Now bring in the source and build.
+COPY --chown=agent:agent app/ /opt/cloudcli/
 # Multi-user mode requires login; add-user.sh sets SKIP_AUTH=false explicitly.
 ARG SKIP_AUTH=false
-RUN VITE_IS_PLATFORM=${SKIP_AUTH} npm ci && VITE_IS_PLATFORM=${SKIP_AUTH} npm run build && npm prune --omit=dev && npm cache clean --force
+RUN VITE_IS_PLATFORM=${SKIP_AUTH} npm run build && npm prune --omit=dev && npm cache clean --force
 
 # RAG skills — copied into the home volume's skills dir at startup by entrypoint
 COPY --chown=agent:agent skills/ /opt/cloudcli-skills/

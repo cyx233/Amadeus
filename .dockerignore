@@ -1,0 +1,11 @@
+# Keep the build context small and let the image install its own deps/build.
+# Crucially, NOT copying app/node_modules means the source COPY can't clobber
+# the node_modules installed in the earlier `npm ci` layer.
+**/node_modules
+app/dist
+app/dist-server
+**/.git
+*.log
+.env
+docker-compose.dev.yml
+docker-compose.multi.yml
