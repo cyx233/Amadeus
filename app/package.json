@@ -1,8 +1,8 @@
 {
-  "name": "@cloudcli-ai/cloudcli",
+  "name": "amadeus",
   "version": "1.36.1",
-  "productName": "CloudCLI",
-  "description": "A web-based UI for Claude Code CLI",
+  "productName": "Amadeus",
+  "description": "Self-hosted browser-based multi-agent coding platform (Claude Code, Codex, OpenCode)",
   "type": "module",
   "main": "dist-server/server/index.js",
   "bin": {
@@ -16,13 +16,13 @@
     "dist-server/",
     "scripts/"
   ],
-  "homepage": "https://cloudcli.ai",
+  "homepage": "https://github.com/cyx233/Amadeus",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/siteboon/claudecodeui.git"
+    "url": "git+https://github.com/cyx233/Amadeus.git"
   },
   "bugs": {
-    "url": "https://github.com/siteboon/claudecodeui/issues"
+    "url": "https://github.com/cyx233/Amadeus/issues"
   },
   "scripts": {
     "dev": "concurrently --kill-others \"npm run server:dev\" \"npm run client\"",
