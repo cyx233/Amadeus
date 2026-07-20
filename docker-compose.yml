@@ -18,8 +18,11 @@ services:
   lightrag:
     image: ghcr.io/hkuds/lightrag:latest
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:9621:9621"
+    # No host port mapping: the gateway and per-user containers reach it over
+    # the compose network as http://lightrag:9621. Keeps 9621 off the host
+    # (avoids clashing with a local dev stack) and off the public interface.
+    expose:
+      - "9621"
     volumes:
       - lightrag-data:/app/data
     environment:
