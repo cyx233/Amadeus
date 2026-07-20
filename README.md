@@ -4,23 +4,24 @@ Browser-based Claude Code agent platform with long-lived Docker sessions, self-r
 
 ## Quick Start
 
+Amadeus is multi-user: an nginx gateway on port 3001 handles login and routes
+each user to their own isolated container. Create at least one user first.
+
 ```bash
 cp .env.example .env
 # Fill in ONE of: ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, or AWS creds
 
-docker compose up -d
-open http://localhost:3001
+./scripts/add-user.sh alice           # prompts for a password
+docker compose -f docker-compose.yml -f docker-compose.multi.yml up -d
+open http://localhost:3001            # log in as alice
 ```
 
-### Bedrock / ASBX users
+`add-user.sh` writes the per-user service to `docker-compose.multi.yml`
+(gitignored — it contains usernames), adds an nginx route, and an htpasswd
+entry. Re-run it to add more users, then bring the stack back up.
 
-```bash
-docker compose -f docker-compose.yml -f docker-compose.bedrock.yml up -d
-```
-
-This mounts `~/.aws` read-only into the container. Set `AWS_PROFILE` and
-`AWS_REGION` in `.env`, and configure model routing in the Claude Code UI
-settings after first launch.
+Each user's container ships the coding-agent CLIs (Claude Code, Codex,
+OpenCode); sign in to a provider from the in-app settings after first launch.
 
 ## Architecture
 

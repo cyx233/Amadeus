@@ -6,7 +6,7 @@
 # usernames never land in the tracked compose file. Also adds nginx route,
 # htpasswd entry.
 #
-# Start: docker compose -f docker-compose.yml -f docker-compose.multi.yml --profile multi up -d
+# Start: docker compose -f docker-compose.yml -f docker-compose.multi.yml up -d
 set -e
 
 USERNAME="${1:?Usage: $0 <username> [password]}"
@@ -70,7 +70,6 @@ SERVICE_BLOCK=$(cat <<EOF
     depends_on:
       lightrag:
         condition: service_healthy
-    profiles: ["multi"]
 EOF
 )
 # Use a temp file: awk splits at "volumes:", inserting the service before it
@@ -86,6 +85,6 @@ echo "    Data volume: user-data-${USERNAME}"
 echo "    Container: amadeus-${USERNAME}"
 echo ""
 echo "Start multi-user mode:"
-echo "  docker compose -f docker-compose.yml -f docker-compose.multi.yml --profile multi up -d"
+echo "  docker compose -f docker-compose.yml -f docker-compose.multi.yml up -d"
 echo ""
 echo "Access: http://localhost:3001 (login as ${USERNAME})"

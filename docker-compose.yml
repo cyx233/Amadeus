@@ -1,47 +1,19 @@
 services:
-  # === Multi-user: nginx gateway + per-user containers ===
-  # Managed by scripts/add-user.sh
-  # Start: docker compose --profile multi up -d
+  # Amadeus is a multi-user deployment: an nginx gateway on 3001 does basic-auth
+  # login, then routes each user to their own container. Add users with
+  # scripts/add-user.sh (writes per-user services to docker-compose.multi.yml).
+  #
+  #   ./scripts/add-user.sh <username>
+  #   docker compose -f docker-compose.yml -f docker-compose.multi.yml up -d
   gateway:
     image: nginx:alpine
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3001:3001"
+      - "3001:3001"
     volumes:
       - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./gateway/htpasswd:/etc/nginx/htpasswd:ro
       - ./gateway/user-routes.conf:/etc/nginx/user-routes.conf:ro
-    profiles: ["multi"]
-
-  # === Single-user mode: no login, direct access ===
-  # Start: docker compose up -d
-  amadeus:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SKIP_AUTH: "true"
-    restart: unless-stopped
-    ports:
-      - "3002:3002"
-    volumes:
-      - user-data:/home/agent
-    environment:
-      - SERVER_PORT=3002
-      - VITE_IS_PLATFORM=true
-      - DISABLE_AUTOUPDATER=1
-      - LIGHTRAG_URL=http://lightrag:9621
-      - WORKSPACES_ROOT=/home/agent/workspace
-      - NODE_ENV=production
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:3002/api/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-    depends_on:
-      lightrag:
-        condition: service_healthy
 
   lightrag:
     image: ghcr.io/hkuds/lightrag:latest
@@ -61,5 +33,4 @@ services:
       start_period: 10s
 
 volumes:
-  user-data:
   lightrag-data:
