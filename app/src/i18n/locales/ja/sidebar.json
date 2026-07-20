@@ -127,5 +127,23 @@
     "deleteAllData": "すべてのデータを完全に削除",
     "allConversationsDeleted": "プロジェクトはサイドバーから除去されます。ファイル、メモリ、セッションデータは保持されます。",
     "cannotUndo": "後からプロジェクトを再追加できます。"
+  },
+  "search": {
+    "title": "検索",
+    "placeholder": "ファイル内を検索…",
+    "minChars": "2 文字以上入力して検索します。",
+    "noMatches": "一致なし。",
+    "inFolder": "対象",
+    "wholeProject": "プロジェクト全体を検索",
+    "matches": "{{f}} 件のファイルで {{m}} 件一致",
+    "truncated": "省略",
+    "selectProject": "検索するプロジェクトを選択してください"
+  },
+  "todo": {
+    "title": "TODO",
+    "add": "TODO を追加…",
+    "empty": "TODO はありません",
+    "refresh": "更新",
+    "delete": "削除"
   }
 }

@@ -129,7 +129,16 @@
     "matches_one": "{{count}} match",
     "matches_other": "{{count}} matches",
     "projectsScanned_one": "{{count}} project scanned",
-    "projectsScanned_other": "{{count}} projects scanned"
+    "projectsScanned_other": "{{count}} projects scanned",
+    "title": "Search",
+    "placeholder": "Search in files…",
+    "minChars": "Type at least 2 characters to search.",
+    "noMatches": "No matches.",
+    "inFolder": "in",
+    "wholeProject": "Search whole project",
+    "matches": "{{m}} matches in {{f}} files",
+    "truncated": "truncated",
+    "selectProject": "Select a project to search its files"
   },
   "deleteConfirmation": {
     "deleteProject": "Remove Project",
@@ -141,5 +150,12 @@
     "deleteAllData": "Delete all data permanently",
     "allConversationsDeleted": "The project will be removed from the sidebar. Your files, memories, and session data will be preserved.",
     "cannotUndo": "You can re-add the project later."
+  },
+  "todo": {
+    "title": "TODO",
+    "add": "Add a todo…",
+    "empty": "No todos yet",
+    "refresh": "Refresh",
+    "delete": "Delete"
   }
 }

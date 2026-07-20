@@ -129,7 +129,16 @@
     "matches_one": "{{count}} 个匹配",
     "matches_other": "{{count}} 个匹配",
     "projectsScanned_one": "{{count}} 个项目已扫描",
-    "projectsScanned_other": "{{count}} 个项目已扫描"
+    "projectsScanned_other": "{{count}} 个项目已扫描",
+    "title": "搜索",
+    "placeholder": "在文件中搜索…",
+    "minChars": "输入至少 2 个字符开始搜索。",
+    "noMatches": "无匹配。",
+    "inFolder": "在",
+    "wholeProject": "搜索整个项目",
+    "matches": "{{f}} 个文件中 {{m}} 处匹配",
+    "truncated": "已截断",
+    "selectProject": "选择一个项目来搜索其文件"
   },
   "deleteConfirmation": {
     "deleteProject": "移除项目",
@@ -141,5 +150,12 @@
     "deleteAllData": "永久删除所有数据",
     "allConversationsDeleted": "项目将从侧边栏中移除。您的文件、记忆和会话数据将会保留。",
     "cannotUndo": "您可以稍后重新添加此项目。"
+  },
+  "todo": {
+    "title": "待办",
+    "add": "添加待办…",
+    "empty": "暂无待办",
+    "refresh": "刷新",
+    "delete": "删除"
   }
 }

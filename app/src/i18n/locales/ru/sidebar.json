@@ -133,7 +133,16 @@
     "projectsScanned_one": "{{count}} проект просканирован",
     "projectsScanned_few": "{{count}} проекта просканировано",
     "projectsScanned_many": "{{count}} проектов просканировано",
-    "projectsScanned_other": "{{count}} проектов просканировано"
+    "projectsScanned_other": "{{count}} проектов просканировано",
+    "title": "Поиск",
+    "placeholder": "Искать в файлах…",
+    "minChars": "Введите не менее 2 символов.",
+    "noMatches": "Нет совпадений.",
+    "inFolder": "в",
+    "wholeProject": "Искать по всему проекту",
+    "matches": "{{m}} совпадений в {{f}} файлах",
+    "truncated": "сокращено",
+    "selectProject": "Выберите проект для поиска по его файлам"
   },
   "deleteConfirmation": {
     "deleteProject": "Убрать проект",
@@ -147,5 +156,12 @@
     "deleteAllData": "Удалить все данные навсегда",
     "allConversationsDeleted": "Проект будет убран из боковой панели. Ваши файлы, воспоминания и данные сеансов сохранятся.",
     "cannotUndo": "Вы сможете добавить проект позже."
+  },
+  "todo": {
+    "title": "Задачи",
+    "add": "Добавить задачу…",
+    "empty": "Пока нет задач",
+    "refresh": "Обновить",
+    "delete": "Удалить"
   }
 }

@@ -129,7 +129,16 @@
     "matches_one": "{{count}} Treffer",
     "matches_other": "{{count}} Treffer",
     "projectsScanned_one": "{{count}} Projekt durchsucht",
-    "projectsScanned_other": "{{count}} Projekte durchsucht"
+    "projectsScanned_other": "{{count}} Projekte durchsucht",
+    "title": "Suche",
+    "placeholder": "In Dateien suchen…",
+    "minChars": "Mindestens 2 Zeichen eingeben.",
+    "noMatches": "Keine Treffer.",
+    "inFolder": "in",
+    "wholeProject": "Gesamtes Projekt durchsuchen",
+    "matches": "{{m}} Treffer in {{f}} Dateien",
+    "truncated": "gekürzt",
+    "selectProject": "Wähle ein Projekt, um seine Dateien zu durchsuchen"
   },
   "deleteConfirmation": {
     "deleteProject": "Projekt entfernen",
@@ -141,5 +150,12 @@
     "deleteAllData": "Alle Daten dauerhaft löschen",
     "allConversationsDeleted": "Das Projekt wird aus der Seitenleiste entfernt. Deine Dateien, Erinnerungen und Sitzungsdaten bleiben erhalten.",
     "cannotUndo": "Du kannst das Projekt später erneut hinzufügen."
+  },
+  "todo": {
+    "title": "TODO",
+    "add": "Todo hinzufügen…",
+    "empty": "Noch keine Todos",
+    "refresh": "Aktualisieren",
+    "delete": "Löschen"
   }
 }

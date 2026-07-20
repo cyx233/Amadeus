@@ -129,7 +129,16 @@
     "matches_one": "{{count}} eşleşme",
     "matches_other": "{{count}} eşleşme",
     "projectsScanned_one": "{{count}} proje tarandı",
-    "projectsScanned_other": "{{count}} proje tarandı"
+    "projectsScanned_other": "{{count}} proje tarandı",
+    "title": "Ara",
+    "placeholder": "Dosyalarda ara…",
+    "minChars": "Aramak için en az 2 karakter girin.",
+    "noMatches": "Eşleşme yok.",
+    "inFolder": "içinde",
+    "wholeProject": "Tüm projede ara",
+    "matches": "{{f}} dosyada {{m}} eşleşme",
+    "truncated": "kısaltıldı",
+    "selectProject": "Dosyalarını aramak için bir proje seçin"
   },
   "deleteConfirmation": {
     "deleteProject": "Projeyi Kaldır",
@@ -141,5 +150,12 @@
     "deleteAllData": "Tüm veriyi kalıcı olarak sil",
     "allConversationsDeleted": "Proje kenar çubuğundan kaldırılacak. Dosyaların, bellek verilerin ve oturum verilerin korunacak.",
     "cannotUndo": "Projeyi sonra tekrar ekleyebilirsin."
+  },
+  "todo": {
+    "title": "Yapılacaklar",
+    "add": "Görev ekle…",
+    "empty": "Henüz görev yok",
+    "refresh": "Yenile",
+    "delete": "Sil"
   }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search, Loader2, X } from 'lucide-react';
 import { api } from '../../../../utils/api';
 import type { Project } from '../../../../types/app';
@@ -18,6 +19,7 @@ export default function SearchPanel({
   scopePath?: string | null;
   onClearScope?: () => void;
 }) {
+  const { t } = useTranslation('sidebar');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FileResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,7 +57,7 @@ export default function SearchPanel({
   if (!selectedProject) {
     return (
       <div className="flex h-full items-center justify-center px-4 text-center text-xs text-muted-foreground/60">
-        Select a project to search its files
+        {t('search.selectProject')}
       </div>
     );
   }
@@ -65,7 +67,7 @@ export default function SearchPanel({
   return (
     <div className="flex h-full w-full flex-col bg-background/80 backdrop-blur-sm">
       <div className="border-b border-border/40 px-3 py-2">
-        <span className="text-sm font-medium text-foreground">Search</span>
+        <span className="text-sm font-medium text-foreground">{t('search.title')}</span>
       </div>
       <div className="border-b border-border/40 px-3 py-2">
         <div className="relative">
@@ -76,19 +78,19 @@ export default function SearchPanel({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search in files…"
+            placeholder={t('search.placeholder')}
             autoFocus
             className="w-full rounded-md border border-border bg-background py-1 pl-8 pr-8 text-sm text-foreground outline-none focus:border-primary"
           />
         </div>
         {scopePath && (
           <div className="mt-1.5 flex items-center gap-1 rounded bg-muted/50 px-2 py-1 text-[11px] text-muted-foreground">
-            <span className="shrink-0">in</span>
+            <span className="shrink-0">{t('search.inFolder')}</span>
             <span className="truncate font-mono" title={scopePath}>{scopePath.split('/').pop() || scopePath}</span>
             <button
               onClick={onClearScope}
               className="ml-auto shrink-0 rounded p-0.5 hover:bg-accent hover:text-foreground"
-              title="Search whole project"
+              title={t('search.wholeProject')}
             >
               <X className="h-3 w-3" />
             </button>
@@ -96,17 +98,16 @@ export default function SearchPanel({
         )}
         {query.trim().length >= 2 && !loading && (
           <p className="mt-1.5 text-[11px] text-muted-foreground/70">
-            {totalMatches} match{totalMatches === 1 ? '' : 'es'} in {results.length} file{results.length === 1 ? '' : 's'}
-            {truncated ? ' (truncated)' : ''}
+            {t('search.matches', { m: totalMatches, f: results.length })}{truncated ? ` (${t('search.truncated')})` : ''}
           </p>
         )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-1 py-1">
         {query.trim().length < 2 ? (
-          <p className="px-2 py-3 text-xs text-muted-foreground/60">Type at least 2 characters to search.</p>
+          <p className="px-2 py-3 text-xs text-muted-foreground/60">{t('search.minChars')}</p>
         ) : (!loading && results.length === 0) ? (
-          <p className="px-2 py-3 text-xs text-muted-foreground/60">No matches.</p>
+          <p className="px-2 py-3 text-xs text-muted-foreground/60">{t('search.noMatches')}</p>
         ) : (
           results.map((r) => (
             <div key={r.file} className="mb-1">

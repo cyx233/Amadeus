@@ -128,5 +128,23 @@
     "deleteAllData": "모든 데이터 영구 삭제",
     "allConversationsDeleted": "프로젝트가 사이드바에서 제거됩니다. 파일, 메모리 및 세션 데이터는 보존됩니다.",
     "cannotUndo": "나중에 프로젝트를 다시 추가할 수 있습니다."
+  },
+  "search": {
+    "title": "검색",
+    "placeholder": "파일에서 검색…",
+    "minChars": "검색하려면 2자 이상 입력하세요.",
+    "noMatches": "일치 없음.",
+    "inFolder": "범위",
+    "wholeProject": "전체 프로젝트 검색",
+    "matches": "{{f}}개 파일에서 {{m}}개 일치",
+    "truncated": "잘림",
+    "selectProject": "검색할 프로젝트를 선택하세요"
+  },
+  "todo": {
+    "title": "할 일",
+    "add": "할 일 추가…",
+    "empty": "할 일이 없습니다",
+    "refresh": "새로고침",
+    "delete": "삭제"
   }
 }

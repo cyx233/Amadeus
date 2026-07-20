@@ -128,7 +128,16 @@
     "matches_one": "{{count}} 個符合",
     "matches_other": "{{count}} 個符合",
     "projectsScanned_one": "{{count}} 個專案已掃描",
-    "projectsScanned_other": "{{count}} 個專案已掃描"
+    "projectsScanned_other": "{{count}} 個專案已掃描",
+    "title": "搜尋",
+    "placeholder": "在檔案中搜尋…",
+    "minChars": "輸入至少 2 個字元開始搜尋。",
+    "noMatches": "無符合。",
+    "inFolder": "在",
+    "wholeProject": "搜尋整個專案",
+    "matches": "{{f}} 個檔案中 {{m}} 處符合",
+    "truncated": "已截斷",
+    "selectProject": "選擇一個專案來搜尋其檔案"
   },
   "deleteConfirmation": {
     "deleteProject": "移除專案",
@@ -140,5 +149,12 @@
     "deleteAllData": "永久刪除所有資料",
     "allConversationsDeleted": "專案將從側邊欄中移除。您的檔案、記憶和工作階段資料將會保留。",
     "cannotUndo": "您可以稍後重新新增此專案。"
+  },
+  "todo": {
+    "title": "待辦",
+    "add": "新增待辦…",
+    "empty": "尚無待辦",
+    "refresh": "重新整理",
+    "delete": "刪除"
   }
 }

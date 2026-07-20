@@ -129,7 +129,16 @@
     "matches_one": "{{count}} corrispondenza",
     "matches_other": "{{count}} corrispondenze",
     "projectsScanned_one": "{{count}} progetto analizzato",
-    "projectsScanned_other": "{{count}} progetti analizzati"
+    "projectsScanned_other": "{{count}} progetti analizzati",
+    "title": "Cerca",
+    "placeholder": "Cerca nei file…",
+    "minChars": "Digita almeno 2 caratteri.",
+    "noMatches": "Nessun risultato.",
+    "inFolder": "in",
+    "wholeProject": "Cerca in tutto il progetto",
+    "matches": "{{m}} risultati in {{f}} file",
+    "truncated": "troncato",
+    "selectProject": "Seleziona un progetto per cercare nei suoi file"
   },
   "deleteConfirmation": {
     "deleteProject": "Rimuovi progetto",
@@ -141,5 +150,12 @@
     "deleteAllData": "Elimina tutti i dati permanentemente",
     "allConversationsDeleted": "Il progetto verrà rimosso dalla barra laterale. I tuoi file, memorie e dati delle sessioni verranno preservati.",
     "cannotUndo": "Puoi riaggiungerlo in seguito."
+  },
+  "todo": {
+    "title": "TODO",
+    "add": "Aggiungi attività…",
+    "empty": "Nessuna attività",
+    "refresh": "Aggiorna",
+    "delete": "Elimina"
   }
 }
