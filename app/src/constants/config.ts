@@ -13,9 +13,13 @@ export const IS_PLATFORM = import.meta.env.VITE_IS_PLATFORM === 'true';
  * shell doesn't correspond to any real project row in the database; any API
  * call that routes through this placeholder must tolerate a missing match.
  */
+// Empty string lets the server pick the cwd: shell-websocket.service resolves a
+// real directory (WORKSPACES_ROOT, else HOME, else /tmp) when the requested path
+// is missing. Hardcoding '/workspace' here was wrong — that path doesn't exist in
+// our containers (workspace lives at $WORKSPACES_ROOT, e.g. ~/workspace).
 export const DEFAULT_PROJECT_FOR_EMPTY_SHELL = {
   projectId: 'default',
   displayName: 'default',
-  fullPath: IS_PLATFORM ? '/workspace' : '',
-  path: IS_PLATFORM ? '/workspace' : '',
+  fullPath: '',
+  path: '',
 };

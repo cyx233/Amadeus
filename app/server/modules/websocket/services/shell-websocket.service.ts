@@ -243,7 +243,13 @@ export function handleShellConnection(
       }
 
       if (data.type === 'init') {
-        const projectPath = readString(data.projectPath, process.cwd());
+        // Empty/absent projectPath (e.g. the login modal's placeholder shell)
+        // means "no specific project" — prefer the configured workspace root over
+        // the server's own cwd. If neither resolves to a real dir, the fallback
+        // block below still catches it.
+        const projectPath = readString(data.projectPath)
+          || process.env.WORKSPACES_ROOT
+          || process.cwd();
         const sessionId = readString(data.sessionId) || null;
         const hasSession = readBoolean(data.hasSession);
         const provider = readString(data.provider, 'claude');
@@ -471,7 +477,11 @@ export function handleShellConnection(
           shellProcess = null;
         });
 
-        let welcomeMsg = `\x1b[36mStarting terminal in: ${projectPath}\x1b[0m\r\n`;
+        // Print the directory the pty actually spawned in (resolvedProjectPath),
+        // not the requested projectPath — they differ when the requested path is
+        // missing (e.g. the login modal's /workspace placeholder) and we fell
+        // back to WORKSPACES_ROOT/HOME/tmp above.
+        let welcomeMsg = `\x1b[36mStarting terminal in: ${resolvedProjectPath}\x1b[0m\r\n`;
         if (!isPlainShell) {
           const providerName =
             provider === 'cursor'
@@ -482,8 +492,8 @@ export function handleShellConnection(
                     ? 'OpenCode'
                   : 'Claude';
           welcomeMsg = hasSession && resumeSessionId
-            ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${projectPath}\x1b[0m\r\n`
-            : `\x1b[36mStarting new ${providerName} session in: ${projectPath}\x1b[0m\r\n`;
+            ? `\x1b[36mResuming ${providerName} session ${resumeSessionId} in: ${resolvedProjectPath}\x1b[0m\r\n`
+            : `\x1b[36mStarting new ${providerName} session in: ${resolvedProjectPath}\x1b[0m\r\n`;
         }
 
         ws.send(
