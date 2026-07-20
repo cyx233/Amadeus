@@ -1,14 +1,23 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, X } from 'lucide-react';
 import { api } from '../../../../utils/api';
 import type { Project } from '../../../../types/app';
 
 // VS Code-style project-wide content search (ripgrep-backed). Matches are
 // grouped by file; clicking a line opens the file via the global opener.
+// scopePath (set by "Search in folder") limits the search to a subdirectory.
 type Match = { line: number; text: string };
 type FileResult = { file: string; matches: Match[] };
 
-export default function SearchPanel({ selectedProject }: { selectedProject: Project | null }) {
+export default function SearchPanel({
+  selectedProject,
+  scopePath = null,
+  onClearScope,
+}: {
+  selectedProject: Project | null;
+  scopePath?: string | null;
+  onClearScope?: () => void;
+}) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<FileResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -29,7 +38,7 @@ export default function SearchPanel({ selectedProject }: { selectedProject: Proj
     const seq = ++reqSeq.current;
     const timer = setTimeout(async () => {
       try {
-        const res = await api.searchProject(projectId, q);
+        const res = await api.searchProject(projectId, q, scopePath || '');
         if (seq !== reqSeq.current) return; // stale
         const data = res.ok ? await res.json() : { results: [] };
         setResults(Array.isArray(data.results) ? data.results : []);
@@ -41,7 +50,7 @@ export default function SearchPanel({ selectedProject }: { selectedProject: Proj
       }
     }, 250); // debounce
     return () => clearTimeout(timer);
-  }, [query, projectId]);
+  }, [query, projectId, scopePath]);
 
   if (!selectedProject) {
     return (
@@ -72,6 +81,19 @@ export default function SearchPanel({ selectedProject }: { selectedProject: Proj
             className="w-full rounded-md border border-border bg-background py-1 pl-8 pr-8 text-sm text-foreground outline-none focus:border-primary"
           />
         </div>
+        {scopePath && (
+          <div className="mt-1.5 flex items-center gap-1 rounded bg-muted/50 px-2 py-1 text-[11px] text-muted-foreground">
+            <span className="shrink-0">in</span>
+            <span className="truncate font-mono" title={scopePath}>{scopePath.split('/').pop() || scopePath}</span>
+            <button
+              onClick={onClearScope}
+              className="ml-auto shrink-0 rounded p-0.5 hover:bg-accent hover:text-foreground"
+              title="Search whole project"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
         {query.trim().length >= 2 && !loading && (
           <p className="mt-1.5 text-[11px] text-muted-foreground/70">
             {totalMatches} match{totalMatches === 1 ? '' : 'es'} in {results.length} file{results.length === 1 ? '' : 's'}

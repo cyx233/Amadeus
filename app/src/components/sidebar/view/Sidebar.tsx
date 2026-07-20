@@ -47,6 +47,16 @@ function Sidebar({
 }: SidebarProps & { expandedWidth?: number }) {
   const { t } = useTranslation(['sidebar', 'common']);
   const [activeView, setActiveView] = useState<SidebarView>('explorer');
+  // "Search in folder": the file tree calls the global opener, which switches
+  // to the search view scoped to that folder (VS Code's Find in Folder).
+  const [searchScope, setSearchScope] = useState<string | null>(null);
+  useEffect(() => {
+    (window as any).__amadeus_searchInFolder = (folderPath: string) => {
+      setSearchScope(folderPath || null);
+      setActiveView('search');
+    };
+    return () => { delete (window as any).__amadeus_searchInFolder; };
+  }, []);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
     'siteboon',
@@ -137,7 +147,7 @@ function Sidebar({
             />
           )}
           {activeView === 'search' && (
-            <SearchPanel selectedProject={selectedProject} />
+            <SearchPanel selectedProject={selectedProject} scopePath={searchScope} onClearScope={() => setSearchScope(null)} />
           )}
           {activeView === 'git' && (
             <GitPanel

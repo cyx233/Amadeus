@@ -579,14 +579,28 @@ app.get('/api/projects/:projectId/search', authenticateToken, async (req, res) =
         if (query.trim().length < 2) return res.json({ results: [] });
 
         const root = path.resolve(projectRoot);
+        // Optional ?path= scopes the search to a subdirectory ("Search in
+        // folder"). Validate it stays inside the project.
+        let searchRoot = root;
+        const sub = typeof req.query.path === 'string' ? req.query.path : '';
+        if (sub) {
+            const resolvedSub = path.isAbsolute(sub) ? path.resolve(sub) : path.resolve(root, sub);
+            if (resolvedSub !== root && !resolvedSub.startsWith(root + path.sep)) {
+                return res.status(403).json({ error: 'Forbidden' });
+            }
+            searchRoot = resolvedSub;
+        }
         const MAX_MATCHES = 500;
         const { spawn } = await import('node:child_process');
+        // Use the ripgrep binary bundled by @vscode/ripgrep (same one the
+        // conversation search uses) so there's a single ripgrep across the app.
+        const { rgPath } = await import('@vscode/ripgrep');
         // --json gives structured matches; -i case-insensitive; smart limits.
-        const rg = spawn('rg', [
+        const rg = spawn(rgPath, [
             '--json', '--smart-case', '--max-count', '50',
             '--max-columns', '300', '--max-filesize', '2M',
             '-g', '!.git', '-g', '!node_modules',
-            '--', query, root,
+            '--', query, searchRoot,
         ], { cwd: root });
 
         const byFile = new Map();

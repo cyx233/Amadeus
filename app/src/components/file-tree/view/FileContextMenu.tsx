@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Copy, Download, FileText, FolderPlus, Pencil, RefreshCw, Trash2, type LucideIcon } from 'lucide-react';
+import { Copy, Download, FileText, FolderPlus, Pencil, RefreshCw, Search, Trash2, type LucideIcon } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
 type FileContextItem = {
@@ -151,11 +151,17 @@ export default function FileContextMenu({
           isDanger: true,
         },
         {
+          key: 'searchInFolder',
+          icon: Search,
+          label: t('fileTree.context.searchInFolder', 'Search in folder'),
+          onSelect: () => (window as any).__amadeus_searchInFolder?.(item.path),
+          showDividerBefore: true,
+        },
+        {
           key: 'copyPath',
           icon: Copy,
           label: t('fileTree.context.copyPath', 'Copy Path'),
           onSelect: () => onCopyPath?.(item),
-          showDividerBefore: true,
         },
         {
           key: 'download',
