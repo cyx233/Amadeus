@@ -39,7 +39,7 @@ services:
       # Persist the user DB in the volume; the thin entrypoint bypasses the
       # env loader that would otherwise default this, so set it explicitly.
       # Without it the DB falls back to a path inside the image (lost on rebuild).
-      - DATABASE_PATH=/home/agent/.cloudcli/auth.db
+      - DATABASE_PATH=/home/agent/.amadeus/auth.db
       - NODE_ENV=production
       # Registration is admin-only; scripts/user.sh presents this token.
       - AMADEUS_ADMIN_TOKEN=${AMADEUS_ADMIN_TOKEN:?set AMADEUS_ADMIN_TOKEN in .env}

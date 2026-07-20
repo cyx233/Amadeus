@@ -113,6 +113,19 @@ export class AppError extends Error {
 export const WORKSPACES_ROOT = process.env.WORKSPACES_ROOT || os.homedir();
 
 /**
+ * Single source of truth for the backend's user-level data directory (auth DB,
+ * chat image assets, todo list, provider caches, browser-use profiles, ...).
+ *
+ * Overridable via `AMADEUS_DATA_DIR`; defaults to `~/.amadeus`. Everything that
+ * needs this location must build paths from `dataDir()` rather than re-joining
+ * `os.homedir()` with a literal, so the directory name lives in exactly one place.
+ */
+export function dataDir(...segments: string[]): string {
+  const root = process.env.AMADEUS_DATA_DIR || path.join(os.homedir(), '.amadeus');
+  return path.join(root, ...segments);
+}
+
+/**
  * System-critical paths that must never be used as workspace roots.
  *
  * The validation helper blocks these values directly and also blocks paths
@@ -532,13 +545,13 @@ const PROVIDER_SESSION_ACTIVE_MODEL_CHANGE_CACHE_VERSION = 1;
  * Resolves the backend-owned cache file used for session-scoped resume model
  * overrides.
  *
- * The file lives under `~/.cloudcli` because these overrides are an application
- * concern rather than a provider-native config file. Providers, routes, and
- * runtime command launchers should all use this helper instead of re-creating
- * the path so the storage location stays consistent.
+ * The file lives under the app data dir because these overrides are an
+ * application concern rather than a provider-native config file. Providers,
+ * routes, and runtime command launchers should all use this helper instead of
+ * re-creating the path so the storage location stays consistent.
  */
 export function getProviderSessionActiveModelChangesPath(): string {
-  return path.join(os.homedir(), '.cloudcli', 'provider-session-active-model-changes.json');
+  return dataDir('provider-session-active-model-changes.json');
 }
 
 const buildProviderSessionActiveModelChangeKey = (

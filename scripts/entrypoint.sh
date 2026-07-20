@@ -3,7 +3,7 @@ set -e
 
 APP=/opt/cloudcli
 
-mkdir -p ~/.claude/projects ~/.cloudcli ~/workspace
+mkdir -p ~/.claude/projects ~/.amadeus ~/workspace
 
 # Sync bundled RAG skills into the home volume (image is source of truth).
 # Volume shadows the image's ~/.claude, so seed from /opt on every start.
@@ -34,7 +34,7 @@ if [ "${VITE_IS_PLATFORM}" = "true" ]; then
   node dist-server/server/index.js &
   PID=$!
   for i in $(seq 1 15); do
-    sqlite3 ~/.cloudcli/auth.db "SELECT 1 FROM users LIMIT 1;" 2>/dev/null && break
+    sqlite3 ~/.amadeus/auth.db "SELECT 1 FROM users LIMIT 1;" 2>/dev/null && break
     sleep 1
   done
   # Seed the platform user. Use the real account name this container belongs to
@@ -44,7 +44,7 @@ if [ "${VITE_IS_PLATFORM}" = "true" ]; then
   # has_completed_onboarding=0 so the first login runs the onboarding flow.
   SEED_USER="${AMADEUS_USER:-user}"
   HASH=$(head -c 32 /dev/urandom | base64)
-  sqlite3 ~/.cloudcli/auth.db "INSERT OR IGNORE INTO users (username, password_hash, has_completed_onboarding) VALUES ('$SEED_USER', '$HASH', 0);"
+  sqlite3 ~/.amadeus/auth.db "INSERT OR IGNORE INTO users (username, password_hash, has_completed_onboarding) VALUES ('$SEED_USER', '$HASH', 0);"
   kill $PID 2>/dev/null; wait $PID 2>/dev/null || true
 fi
 

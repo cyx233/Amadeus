@@ -8,6 +8,7 @@ import {
   appendImagesInputTag,
   buildClaudeUserContent,
   buildCodexInputItems,
+  getGlobalImageAssetsDir,
   isAllowedImageSourcePath,
   normalizeImageDescriptors,
   parseImagesInputTag,
@@ -271,7 +272,7 @@ test('buildCodexInputItems emits text plus absolute local_image paths', () => {
 
 test('isAllowedImageSourcePath only accepts the upload store and the run cwd', () => {
   const cwd = path.join(os.tmpdir(), 'some-project');
-  const uploadStore = path.join(os.homedir(), '.cloudcli', 'assets');
+  const uploadStore = getGlobalImageAssetsDir();
 
   assert.equal(isAllowedImageSourcePath(path.join(uploadStore, 'shot.png'), cwd), true);
   assert.equal(isAllowedImageSourcePath(path.join(cwd, 'docs', 'diagram.png'), cwd), true);

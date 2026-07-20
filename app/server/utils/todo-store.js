@@ -1,12 +1,12 @@
 import { promises as fs } from 'fs';
-import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
+import { dataDir } from '@/shared/utils.js';
 
-// User-level global TODO list, stored in ~/.cloudcli/todo.json (persistent
+// User-level global TODO list, stored in <data-dir>/todo.json (persistent
 // volume). Not per-project — a personal scratchpad shared by the REST route
 // (routes/todos.js) and the in-process MCP tools the agent uses (claude-sdk.js).
-const TODO_FILE = path.join(os.homedir(), '.cloudcli', 'todo.json');
+const TODO_FILE = dataDir('todo.json');
 
 export async function readTodos() {
   try {

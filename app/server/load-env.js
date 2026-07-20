@@ -27,7 +27,10 @@ try {
 
 // Keep the default database in a stable user-level location so rebuilding dist-server
 // never changes where the backend stores auth.db when DATABASE_PATH is not set explicitly.
-const DEFAULT_DATABASE_PATH = path.join(os.homedir(), '.cloudcli', 'auth.db');
+// Kept inline (not imported from shared/utils) because this file runs before
+// any other import to populate process.env; mirror dataDir()'s default here.
+const DATA_DIR = process.env.AMADEUS_DATA_DIR || path.join(os.homedir(), '.amadeus');
+const DEFAULT_DATABASE_PATH = path.join(DATA_DIR, 'auth.db');
 
 if (!process.env.DATABASE_PATH) {
   process.env.DATABASE_PATH = DEFAULT_DATABASE_PATH;

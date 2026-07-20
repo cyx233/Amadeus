@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
@@ -8,8 +7,9 @@ import {
   isAllowedImageMimeType,
   resolveImageAssetFile,
 } from '@/modules/assets/services/image-assets.service.js';
+import { getGlobalImageAssetsDir } from '@/shared/image-attachments.js';
 
-const ASSETS_DIR = path.join(os.homedir(), '.cloudcli', 'assets');
+const ASSETS_DIR = getGlobalImageAssetsDir();
 
 test('isAllowedImageMimeType accepts image formats and rejects the rest', () => {
   assert.equal(isAllowedImageMimeType('image/png'), true);

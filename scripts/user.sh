@@ -23,7 +23,7 @@ MULTI_FILE="docker-compose.multi.yml"
 AUTH_URL="${AMADEUS_AUTH_URL:-http://localhost:3001}"
 COMPOSE=(docker compose -f docker-compose.yml -f "$MULTI_FILE")
 # Matches DATABASE_PATH set for auth-gateway in docker-compose.yml.
-AUTH_DB="/home/agent/.cloudcli/auth.db"
+AUTH_DB="/home/agent/.amadeus/auth.db"
 
 ensure_gateway() {
   if ! curl -s -o /dev/null --max-time 2 "${AUTH_URL}/api/auth/status"; then
