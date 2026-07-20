@@ -16,7 +16,7 @@ cp .env.example .env
 docker compose up -d
 
 # 2. Register users (auth-gateway must be up)
-./scripts/add-user.sh alice           # prompts for a password
+./scripts/user.sh add alice           # prompts for a password
 
 # 3. Bring up the per-user backends
 docker compose -f docker-compose.yml -f docker-compose.multi.yml up -d
@@ -31,7 +31,7 @@ How it fits together:
 - **gateway (nginx)** — verifies the cookie and routes each request to
   `amadeus-<username>`; unauthenticated requests get the login page.
 - **amadeus-&lt;user&gt;** — per-user backend containers, fully isolated
-  (own volume), generated into `docker-compose.multi.yml` by `add-user.sh`
+  (own volume), generated into `docker-compose.multi.yml` by `user.sh`
   (gitignored — it contains usernames).
 
 Each user's container ships the coding-agent CLIs (Claude Code, Codex,

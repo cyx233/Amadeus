@@ -4,8 +4,9 @@ import { userDb } from '../modules/database/index.js';
 import { getConnection } from '../modules/database/connection.js';
 import { generateToken, authenticateToken, AUTH_COOKIE_NAME } from '../middleware/auth.js';
 
-// Multi-user gateway deployment: the auth entrypoint accepts registrations for
-// more than one account. Single-instance deployments stay single-user.
+// Multi-user gateway deployment: the auth entrypoint (used by scripts/user.sh)
+// accepts registrations for more than one account. Single-instance deployments
+// stay single-user.
 const ALLOW_MULTI_USER = process.env.AMADEUS_MULTI_USER === 'true';
 
 // Sets the gateway auth cookie so the nginx gateway can route by identity.
@@ -40,16 +41,16 @@ router.get('/status', async (req, res) => {
 router.post('/register', async (req, res) => {
   try {
     const { username, password } = req.body;
-    
+
     // Validate input
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
-    
+
     if (username.length < 3 || password.length < 6) {
       return res.status(400).json({ error: 'Username must be at least 3 characters, password at least 6 characters' });
     }
-    
+
     // Use a transaction to prevent race conditions
     db.prepare('BEGIN').run();
     try {
@@ -60,17 +61,17 @@ router.post('/register', async (req, res) => {
         db.prepare('ROLLBACK').run();
         return res.status(403).json({ error: 'User already exists. This is a single-user system.' });
       }
-      
+
       // Hash password
       const saltRounds = 12;
       const passwordHash = await bcrypt.hash(password, saltRounds);
-      
+
       // Create user
       const user = userDb.createUser(username, passwordHash);
-      
+
       // Generate token
       const token = generateToken(user);
-      
+
       db.prepare('COMMIT').run();
 
       // Update last login (non-fatal, outside transaction)
