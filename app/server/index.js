@@ -56,7 +56,6 @@ import agentRoutes from './routes/agent.js';
 import projectModuleRoutes from './modules/projects/projects.routes.js';
 import notificationRoutes from './modules/notifications/notifications.routes.js';
 import userRoutes from './routes/user.js';
-import pluginsRoutes from './routes/plugins.js';
 import todosRoutes from './routes/todos.js';
 import providerRoutes from './modules/providers/provider.routes.js';
 import voiceRoutes from './voice-proxy.js';
@@ -64,7 +63,6 @@ import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
-import { startEnabledPluginServers, stopAllPlugins, getPluginPort } from './utils/plugin-process-manager.js';
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { createProject } from './modules/projects/services/project-management.service.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -105,7 +103,7 @@ function readUsageNumber(value) {
 const app = express();
 const server = http.createServer(app);
 
-// Single WebSocket server that handles chat, shell, and plugin proxy paths.
+// Single WebSocket server that handles chat and shell paths.
 const wss = createWebSocketServer(server, {
     verifyClient: {
         isPlatform: IS_PLATFORM,
@@ -141,7 +139,6 @@ const wss = createWebSocketServer(server, {
         extractUrlsFromText,
         shouldAutoOpenUrlFromOutput,
     },
-    getPluginPort,
 });
 
 // Make WebSocket server available to routes
@@ -206,9 +203,6 @@ app.use('/api/notifications', authenticateToken, notificationRoutes);
 // User API Routes (protected)
 app.use('/api/user', authenticateToken, userRoutes);
 app.use('/api/todos', authenticateToken, todosRoutes);
-
-// Plugins API Routes (protected)
-app.use('/api/plugins', authenticateToken, pluginsRoutes);
 
 // Browser MCP bridge API (local token protected)
 app.use('/api/browser-use-mcp', browserUseMcpRoutes);
@@ -1793,25 +1787,14 @@ async function startServer() {
 
             // Start watching the projects folder for changes
             await initializeSessionsWatcher();
-
-            // Start server-side plugin processes for enabled plugins
-            startEnabledPluginServers().catch(err => {
-                console.error('[Plugins] Error during startup:', err.message);
-            });
         });
 
         await closeSessionsWatcher();
-        // Clean up plugin processes on shutdown
         const shutdownRuntimeServices = async () => {
             try {
                 await browserUseService.stopAllSessions();
             } catch (err) {
                 console.error('[Browser] Error stopping sessions during shutdown:', err?.message || err);
-            }
-            try {
-                await stopAllPlugins();
-            } catch (err) {
-                console.error('[Plugins] Error stopping plugins during shutdown:', err?.message || err);
             }
             try {
                 await removeLocalServerMarker();

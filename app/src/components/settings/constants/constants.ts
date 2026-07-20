@@ -8,7 +8,6 @@ import {
   ListChecks,
   MonitorPlay,
   Palette,
-  Plug,
 } from 'lucide-react';
 
 import type {
@@ -35,7 +34,6 @@ export const SETTINGS_MAIN_TABS: SettingsMainTabMeta[] = [
   { id: 'tasks', label: 'Tasks', keywords: 'tasks taskmaster', icon: ListChecks },
   { id: 'browser', label: 'Browser', keywords: 'browser playwright chromium automation', icon: MonitorPlay },
   { id: 'notifications', label: 'Notifications', keywords: 'notifications alerts push', icon: Bell },
-  { id: 'plugins', label: 'Plugins', keywords: 'plugins extensions integrations', icon: Plug },
   { id: 'about', label: 'About', keywords: 'about version info', icon: Info },
 ];
 
