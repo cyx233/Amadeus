@@ -265,7 +265,7 @@ export default function FileContextMenu({
           ref={menuRef}
           role="menu"
           aria-label={t('fileTree.context.menuLabel', 'File context menu')}
-          style={{ position: 'fixed', left: menuPosition.x, top: menuPosition.y, zIndex: 9999 }}
+          style={{ position: 'fixed', left: menuPosition.x, top: menuPosition.y, zIndex: 10000 }}
           className={cn(
             'min-w-[180px] py-1 px-1',
             'bg-popover border border-border rounded-lg shadow-lg',
