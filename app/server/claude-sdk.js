@@ -33,6 +33,7 @@ import { sessionsService } from './modules/providers/services/sessions.service.j
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
 import { todoMcpServer } from './utils/todo-mcp.js';
+import { ragMcpServer } from './utils/rag-mcp.js';
 
 const activeSessions = new Map();
 const pendingToolApprovals = new Map();
@@ -494,9 +495,15 @@ async function queryClaudeSDK(command, options = {}, ws) {
     });
 
     const mcpServers = await loadMcpConfig(options.cwd);
-    // Always expose the in-process global TODO server; merge user-configured
-    // MCP servers on top so their names win on collision.
-    sdkOptions.mcpServers = { todo: todoMcpServer, ...(mcpServers || {}) };
+    // Always expose the in-process global TODO server; expose the RAG search
+    // tool only when this session opted into RAG (options.ragEnabled is threaded
+    // from chat-websocket runtimeOptions). User-configured MCP servers merge on
+    // top so their names win on collision.
+    sdkOptions.mcpServers = {
+      todo: todoMcpServer,
+      ...(options.ragEnabled ? { rag: ragMcpServer } : {}),
+      ...(mcpServers || {}),
+    };
 
     // Turns with image attachments switch to streaming input so the images
     // ride along as real content blocks. Built per query attempt because an

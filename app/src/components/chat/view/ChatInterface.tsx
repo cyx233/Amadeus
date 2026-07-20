@@ -11,6 +11,7 @@ import { useChatProviderState } from '../hooks/useChatProviderState';
 import { useChatSessionState } from '../hooks/useChatSessionState';
 import { useChatRealtimeHandlers } from '../hooks/useChatRealtimeHandlers';
 import { useChatComposerState } from '../hooks/useChatComposerState';
+import { useRagToggle } from '../hooks/useRagToggle';
 import { useSessionStore } from '../../../stores/useSessionStore';
 
 import ChatMessagesPane from './subcomponents/ChatMessagesPane';
@@ -39,6 +40,7 @@ function ChatInterface({
   const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
   const { t } = useTranslation('chat');
+  const { globalEnabled: ragGlobalEnabled, ragEnabled, toggleRag } = useRagToggle();
 
   const sessionStore = useSessionStore();
   const streamTimerRef = useRef<number | null>(null);
@@ -195,6 +197,7 @@ function ChatInterface({
     selectedSession,
     currentSessionId,
     provider,
+    ragEnabled,
     permissionMode,
     cyclePermissionMode,
     cursorModel,
@@ -395,6 +398,9 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
           onModeSwitch={cyclePermissionMode}
+          ragAvailable={ragGlobalEnabled}
+          ragEnabled={ragEnabled}
+          onRagToggle={toggleRag}
           effort={currentProviderEffort}
           availableEffortOptions={currentProviderEffortOptions}
           onSelectEffort={(nextEffort) => setStoredProviderEffort(provider, nextEffort)}

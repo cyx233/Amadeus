@@ -10,12 +10,13 @@ type SessionRow = {
   jsonl_path: string | null;
   custom_name: string | null;
   isArchived: number;
+  rag_enabled: number;
   created_at: string;
   updated_at: string;
 };
 
 const SESSION_ROW_COLUMNS =
-  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, isArchived, created_at, updated_at';
+  'session_id, provider, provider_session_id, project_path, jsonl_path, custom_name, isArchived, rag_enabled, created_at, updated_at';
 
 const SQLITE_UTC_TIMESTAMP_REGEX = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -151,16 +152,21 @@ export const sessionsDb = {
    * stays NULL until the provider runtime announces its own id and
    * `assignProviderSessionId` records the mapping.
    */
-  createAppSession(sessionId: string, provider: string, projectPath: string): string {
+  createAppSession(
+    sessionId: string,
+    provider: string,
+    projectPath: string,
+    ragEnabled = false
+  ): string {
     const db = getConnection();
     const normalizedProjectPath = normalizeProjectPathForProvider(provider, projectPath);
 
     projectsDb.createProjectPath(normalizedProjectPath);
 
     db.prepare(
-      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, created_at, updated_at)
-       VALUES (?, ?, NULL, NULL, ?, NULL, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-    ).run(sessionId, provider, normalizedProjectPath);
+      `INSERT INTO sessions (session_id, provider, provider_session_id, custom_name, project_path, jsonl_path, isArchived, rag_enabled, created_at, updated_at)
+       VALUES (?, ?, NULL, NULL, ?, NULL, 0, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    ).run(sessionId, provider, normalizedProjectPath, ragEnabled ? 1 : 0);
 
     return sessionId;
   },
