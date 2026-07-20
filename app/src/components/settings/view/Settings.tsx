@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { LogOut, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import ProviderLoginModal from '../../provider-auth/view/ProviderLoginModal';
+import { useAuth } from '../../auth/context/AuthContext';
 import { Button, Dialog, DialogContent, DialogTitle } from '../../../shared/view/ui';
 import SettingsSidebar from '../view/SettingsSidebar';
 import AgentsSettingsTab from '../view/tabs/agents-settings/AgentsSettingsTab';
@@ -29,6 +30,7 @@ type DesktopNotificationsState = {
 
 function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: SettingsProps) {
   const { t } = useTranslation('settings');
+  const { logout } = useAuth();
   const desktopNotificationsBridge = useMemo(() => (
     typeof window === 'undefined'
       ? null
@@ -143,6 +145,17 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
             {saveStatus === 'success' && (
               <span className="animate-in fade-in text-xs text-muted-foreground">{t('saveStatus.success')}</span>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={logout}
+              title={t('logout', 'Log out')}
+              aria-label={t('logout', 'Log out')}
+              className="h-10 gap-1.5 touch-manipulation px-2 text-muted-foreground hover:text-foreground active:bg-accent/50"
+            >
+              <LogOut className="h-4 w-4" />
+              <span className="hidden text-sm sm:inline">{t('logout', 'Log out')}</span>
+            </Button>
             <Button
               variant="ghost"
               size="sm"

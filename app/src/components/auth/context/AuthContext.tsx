@@ -184,10 +184,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const tokenToInvalidate = token;
     clearSession();
 
-    if (tokenToInvalidate) {
-      void api.auth.logout().catch((caughtError: unknown) => {
-        console.error('Logout endpoint error:', caughtError);
-      });
+    // In platform mode the gateway auth cookie (not a localStorage token) is
+    // what keeps us signed in, so always hit the endpoint to clear it, then
+    // send the browser back through the gateway to the login page.
+    if (tokenToInvalidate || IS_PLATFORM) {
+      void api.auth.logout()
+        .catch((caughtError: unknown) => {
+          console.error('Logout endpoint error:', caughtError);
+        })
+        .finally(() => {
+          if (IS_PLATFORM) {
+            window.location.href = '/login';
+          }
+        });
     }
   }, [clearSession, token]);
 
