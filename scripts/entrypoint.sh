@@ -37,10 +37,14 @@ if [ "${VITE_IS_PLATFORM}" = "true" ]; then
     sqlite3 ~/.cloudcli/auth.db "SELECT 1 FROM users LIMIT 1;" 2>/dev/null && break
     sleep 1
   done
-  # Always ensure a user exists. has_completed_onboarding=0 so the first login
-  # runs the onboarding flow (provider/LLM setup) instead of skipping it.
+  # Seed the platform user. Use the real account name this container belongs to
+  # (AMADEUS_USER, set per-user by scripts/user.sh) so identity is consistent —
+  # onboarding state, git author, prefs all attach to the actual user, not a
+  # generic 'user'. Falls back to 'user' for the single-container dev case.
+  # has_completed_onboarding=0 so the first login runs the onboarding flow.
+  SEED_USER="${AMADEUS_USER:-user}"
   HASH=$(head -c 32 /dev/urandom | base64)
-  sqlite3 ~/.cloudcli/auth.db "INSERT OR IGNORE INTO users (username, password_hash, has_completed_onboarding) VALUES ('user', '$HASH', 0);"
+  sqlite3 ~/.cloudcli/auth.db "INSERT OR IGNORE INTO users (username, password_hash, has_completed_onboarding) VALUES ('$SEED_USER', '$HASH', 0);"
   kill $PID 2>/dev/null; wait $PID 2>/dev/null || true
 fi
 

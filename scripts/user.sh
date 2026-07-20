@@ -85,6 +85,7 @@ cmd_add() {
       - user-data-${USERNAME}:/home/agent
     environment:
       - VITE_IS_PLATFORM=true
+      - AMADEUS_USER=${USERNAME}
       - JWT_SECRET=\${JWT_SECRET:?set JWT_SECRET in .env}
       - LIGHTRAG_URL=http://lightrag:9621
       - DISABLE_AUTOUPDATER=1
