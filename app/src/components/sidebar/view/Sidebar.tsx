@@ -59,8 +59,8 @@ function Sidebar({
   }, []);
   const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
-    'siteboon',
-    'claudecodeui',
+    'cyx233',
+    'Amadeus',
   );
   const { preferences, setPreference } = useUiPreferences();
   const { sidebarVisible } = preferences;
