@@ -107,7 +107,7 @@ export default function SidebarProjectList({
   );
 
   useEffect(() => {
-    let baseTitle = 'CloudCLI UI';
+    let baseTitle = 'Amadeus UI';
     const displayName = selectedProject?.displayName?.trim();
     if (displayName) {
       baseTitle = `${displayName} - ${baseTitle}`;

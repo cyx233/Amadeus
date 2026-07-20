@@ -1,6 +1,6 @@
 # Amadeus
 
-Browser-based Claude Code agent platform with long-lived Docker sessions, self-recovery, and integrated RAG.
+Browser-based coding-agent platform (Claude Code, Codex, OpenCode) with long-lived Docker sessions, self-recovery, and integrated RAG.
 
 ## Quick Start
 

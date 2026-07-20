@@ -86,13 +86,13 @@
     "openInEditor": "Open in Editor"
   },
   "mainContent": {
-    "loading": "Loading CloudCLI",
+    "loading": "Loading Amadeus",
     "settingUpWorkspace": "Setting up your workspace...",
     "chooseProject": "Choose Your Project",
     "selectProjectDescription": "Select a project from the sidebar to start coding with Claude. Each project contains your chat sessions and file history.",
     "tip": "Tip",
     "createProjectMobile": "Tap the menu button above to access projects",
-    "createProjectDesktop": "Create a new project by clicking the folder icon in the sidebar",
+    "createProjectDesktop": "Create a new project with the + button in the sidebar",
     "newSession": "New Session",
     "untitledSession": "Untitled Session",
     "projectFiles": "Project Files"

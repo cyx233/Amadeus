@@ -10,6 +10,9 @@ export function renderLoginPage() {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Amadeus — Sign in</title>
+<!-- Same tab icon as the app. Inlined as a data URI because the thin auth
+     server doesn't serve static files. Keep in sync with public/favicon.svg. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' width='64' height='64'%3E%3Crect x='0' y='0' width='64' height='64' fill='hsl(240 5.9%25 10%25)'/%3E%3Cg transform='translate(32,32) scale(1.333) translate(-12,-12)' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'/%3E%3C/g%3E%3C/svg%3E" />
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }

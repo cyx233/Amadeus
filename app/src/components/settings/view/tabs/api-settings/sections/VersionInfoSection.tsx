@@ -44,7 +44,7 @@ export default function VersionInfoSection({
 
   return (
     <div className="border-t border-border/50 pt-6">
-      {/* About CloudCLI */}
+      {/* About Amadeus */}
       <div className="space-y-4">
         {/* Logo + name + version */}
         <div className="flex items-center gap-3">
@@ -57,7 +57,7 @@ export default function VersionInfoSection({
                 className="text-sm font-semibold text-foreground"
                 style={{ fontFamily: CLOUDCLI_WORDMARK_FONT_FAMILY }}
               >
-                CloudCLI
+                Amadeus
               </span>
               <a
                 href={releasesUrl}

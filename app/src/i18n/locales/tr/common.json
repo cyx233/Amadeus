@@ -86,13 +86,13 @@
     "openInEditor": "Editörde Aç"
   },
   "mainContent": {
-    "loading": "CloudCLI Yükleniyor",
+    "loading": "Amadeus Yükleniyor",
     "settingUpWorkspace": "Çalışma alanın hazırlanıyor...",
     "chooseProject": "Projeni Seç",
     "selectProjectDescription": "Claude ile kodlamaya başlamak için kenar çubuğundan bir proje seç. Her proje kendi sohbet oturumlarını ve dosya geçmişini içerir.",
     "tip": "İpucu",
     "createProjectMobile": "Projelere erişmek için yukarıdaki menü düğmesine dokun",
-    "createProjectDesktop": "Kenar çubuğundaki klasör simgesine tıklayarak yeni bir proje oluştur",
+    "createProjectDesktop": "Kenar çubuğundaki + düğmesiyle yeni bir proje oluştur",
     "newSession": "Yeni Oturum",
     "untitledSession": "Adsız Oturum",
     "projectFiles": "Proje Dosyaları"

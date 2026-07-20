@@ -86,13 +86,13 @@
     "openInEditor": "Im Editor öffnen"
   },
   "mainContent": {
-    "loading": "CloudCLI wird geladen",
+    "loading": "Amadeus wird geladen",
     "settingUpWorkspace": "Arbeitsbereich wird eingerichtet...",
     "chooseProject": "Projekt auswählen",
     "selectProjectDescription": "Wähl ein Projekt aus der Seitenleiste, um mit Claude zu programmieren. Jedes Projekt enthält deine Chat-Sitzungen und den Dateiverlauf.",
     "tip": "Tipp",
     "createProjectMobile": "Tipp oben auf die Menüschaltfläche, um auf Projekte zuzugreifen",
-    "createProjectDesktop": "Erstell ein neues Projekt, indem du auf das Ordnersymbol in der Seitenleiste klickst",
+    "createProjectDesktop": "Erstell ein neues Projekt mit der +-Schaltfläche in der Seitenleiste",
     "newSession": "Neue Sitzung",
     "untitledSession": "Unbenannte Sitzung",
     "projectFiles": "Projektdateien"

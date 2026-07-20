@@ -1,7 +1,7 @@
 {
-  "name": "CloudCLI UI",
-  "short_name": "CloudCLI UI",
-  "description": "CloudCLI UI web application",
+  "name": "Amadeus",
+  "short_name": "Amadeus",
+  "description": "Amadeus — browser-based coding-agent platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

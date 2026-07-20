@@ -472,7 +472,7 @@
     },
     "managed": {
       "badge": "Managed",
-      "hint": "Managed by CloudCLI."
+      "hint": "Managed by Amadeus."
     },
     "help": {
       "title": "About Codex MCP",

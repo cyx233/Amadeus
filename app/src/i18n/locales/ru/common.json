@@ -86,13 +86,13 @@
     "openInEditor": "Открыть в редакторе"
   },
   "mainContent": {
-    "loading": "Загрузка CloudCLI",
+    "loading": "Загрузка Amadeus",
     "settingUpWorkspace": "Настройка рабочего пространства...",
     "chooseProject": "Выберите проект",
     "selectProjectDescription": "Выберите проект на боковой панели, чтобы начать работу с Claude. Каждый проект содержит ваши сеансы чата и историю файлов.",
     "tip": "Совет",
     "createProjectMobile": "Нажмите кнопку меню выше для доступа к проектам",
-    "createProjectDesktop": "Создайте новый проект, нажав на значок папки на боковой панели",
+    "createProjectDesktop": "Создайте новый проект кнопкой + на боковой панели",
     "newSession": "Новый сеанс",
     "untitledSession": "Безымянный сеанс",
     "projectFiles": "Файлы проекта"

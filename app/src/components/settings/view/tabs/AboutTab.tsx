@@ -21,7 +21,7 @@ export default function AboutTab() {
         <div>
           <span className="text-base font-semibold text-foreground">Amadeus</span>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Browser-based Claude Code agent platform
+            Browser-based coding-agent platform
           </p>
         </div>
       </div>
