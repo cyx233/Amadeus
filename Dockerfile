@@ -28,10 +28,14 @@ WORKDIR /opt/cloudcli
 # node_modules there.
 RUN chown agent:agent /opt/cloudcli
 COPY --chown=agent:agent app/package.json app/package-lock.json ./
-# Scripts (fix-node-pty, @vscode/ripgrep) need to run, and node_modules must be
-# writable by the app user. Kept in its own layer (source is copied after) so
-# editing app code doesn't re-run npm ci — that avoids re-hitting the
-# rate-limited @vscode/ripgrep GitHub download on every code change.
+# The postinstall (scripts/fix-node-pty.js) runs during npm ci, so its script
+# dir must be present before install. It's small and rarely changes, so it
+# doesn't meaningfully hurt the install-layer cache.
+COPY --chown=agent:agent app/scripts ./scripts
+# node_modules must be writable by the app user. Kept in its own layer (the rest
+# of the source is copied after) so editing app code doesn't re-run npm ci —
+# that avoids re-hitting the rate-limited @vscode/ripgrep GitHub download on
+# every code change.
 USER agent
 RUN npm ci
 
