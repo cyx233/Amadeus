@@ -233,7 +233,14 @@ export async function validateWorkspacePath(requestedPath: string): Promise<Work
       };
     }
 
-    const absolutePath = path.resolve(normalizedRequestedPath);
+    // Relative paths (a bare project name, or "foo/bar") resolve against the
+    // workspace root, not the server process cwd — the server runs from /opt,
+    // so resolving there would both trip the /opt system-dir guard and fail the
+    // WORKSPACES_ROOT containment check below. A bare name should land in the
+    // user's workspace, which is what they mean.
+    const absolutePath = path.isAbsolute(normalizedRequestedPath)
+      ? path.resolve(normalizedRequestedPath)
+      : path.resolve(WORKSPACES_ROOT, normalizedRequestedPath);
     const normalizedPath = normalizeProjectPath(absolutePath);
 
     if (FORBIDDEN_WORKSPACE_PATHS.includes(normalizedPath) || normalizedPath === '/') {
