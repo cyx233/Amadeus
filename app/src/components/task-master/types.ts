@@ -102,6 +102,9 @@ export type TaskMasterContextValue = {
   mcpServerStatus: TaskMasterMcpStatus;
   tasks: TaskMasterTask[];
   nextTask: TaskMasterTask | null;
+  currentTag: string;
+  availableTags: string[];
+  selectTag: (tag: string) => void;
   isLoading: boolean;
   isLoadingTasks: boolean;
   isLoadingMCP: boolean;

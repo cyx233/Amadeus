@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  Check,
   ChevronDown,
   Columns,
   FileText,
@@ -7,12 +8,19 @@ import {
   Grid,
   HelpCircle,
   List,
+  Loader2,
   Plus,
   Search,
+  Sparkles,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { cn } from '../../../lib/utils';
+import { api } from '../../../utils/api';
 import type { PrdFile, TaskBoardSortField, TaskBoardSortOrder, TaskBoardView } from '../types';
+import { useTaskMaster } from '../context/TaskMasterContext';
+import { prdNameToTag } from '../utils/prdTag';
+
 import TaskFiltersPanel from './shared/TaskFiltersPanel';
 import TaskQuickSortBar from './shared/TaskQuickSortBar';
 
@@ -74,8 +82,33 @@ export default function TaskBoardToolbar({
   onOpenCreateTask,
 }: TaskBoardToolbarProps) {
   const { t } = useTranslation('tasks');
+  const { currentTag, availableTags, selectTag, currentProject, refreshTasks } = useTaskMaster();
   const [isPrdDropdownOpen, setIsPrdDropdownOpen] = useState(false);
+  const [generatingTag, setGeneratingTag] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  // Tags that have tasks but no matching PRD file (e.g. PRD deleted, or the
+  // default 'master' set). Surfaced in the selector so their tasks stay reachable.
+  const prdTagSet = new Set(existingPrds.map((prd) => prdNameToTag(prd.name)));
+  const orphanTags = availableTags.filter((tagName) => !prdTagSet.has(tagName));
+
+  const handleGenerateTasks = async (prd: PrdFile) => {
+    if (!currentProject?.projectId) return;
+    const slug = prdNameToTag(prd.name);
+    try {
+      setGeneratingTag(slug);
+      await api.taskmaster.parsePRD(currentProject.projectId, {
+        fileName: prd.name,
+        tag: slug,
+        numTasks: undefined,
+        append: undefined,
+      });
+      selectTag(slug); // jump the board to the freshly-generated set
+      await refreshTasks();
+    } finally {
+      setGeneratingTag(null);
+    }
+  };
 
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
@@ -200,19 +233,79 @@ export default function TaskBoardToolbar({
 
                           <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
 
-                          {existingPrds.map((prd) => (
-                            <button
-                              key={prd.name}
-                              onClick={() => {
-                                onOpenPrd(prd);
-                                setIsPrdDropdownOpen(false);
-                              }}
-                              className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
-                            >
-                              <FileText className="h-4 w-4" />
-                              <span className="truncate">{prd.name}</span>
-                            </button>
-                          ))}
+                          {/* Default (master) task set — manual/unassigned tasks. */}
+                          <button
+                            onClick={() => { selectTag('master'); setIsPrdDropdownOpen(false); }}
+                            className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                          >
+                            {currentTag === 'master'
+                              ? <Check className="h-4 w-4 text-purple-600" />
+                              : <span className="h-4 w-4" />}
+                            <span className="truncate">{t('tags.default', 'Default')}</span>
+                          </button>
+
+                          {/* One row per PRD: click name to view its task set; the
+                              spark icon (re)generates tasks into that PRD's tag. */}
+                          {existingPrds.map((prd) => {
+                            const slug = prdNameToTag(prd.name);
+                            const isCurrent = currentTag === slug;
+                            const isGenerating = generatingTag === slug;
+                            return (
+                              <div
+                                key={prd.name}
+                                className={cn(
+                                  'group flex items-center gap-1 rounded',
+                                  isCurrent && 'bg-purple-50 dark:bg-purple-900/20'
+                                )}
+                              >
+                                <button
+                                  onClick={() => { selectTag(slug); setIsPrdDropdownOpen(false); }}
+                                  className="flex min-w-0 flex-1 items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                                >
+                                  {isCurrent
+                                    ? <Check className="h-4 w-4 flex-shrink-0 text-purple-600" />
+                                    : <FileText className="h-4 w-4 flex-shrink-0" />}
+                                  <span className="truncate">{prd.name}</span>
+                                </button>
+                                <button
+                                  onClick={() => { void handleGenerateTasks(prd); }}
+                                  disabled={isGenerating}
+                                  title={t('tags.generateTasks', 'Generate tasks from this PRD')}
+                                  className="mr-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:bg-purple-100 hover:text-purple-700 disabled:opacity-50 dark:hover:bg-purple-900/40"
+                                >
+                                  {isGenerating
+                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    : <Sparkles className="h-3.5 w-3.5" />}
+                                </button>
+                                <button
+                                  onClick={() => { onOpenPrd(prd); setIsPrdDropdownOpen(false); }}
+                                  title={t('tags.openEditor', 'Open PRD')}
+                                  className="mr-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-gray-500 opacity-0 hover:bg-gray-100 hover:text-gray-700 group-hover:opacity-100 dark:hover:bg-gray-700"
+                                >
+                                  <FileText className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
+
+                          {/* Orphan tags: task sets whose PRD file is gone. */}
+                          {orphanTags.length > 0 && (
+                            <>
+                              <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
+                              {orphanTags.map((tagName) => (
+                                <button
+                                  key={tagName}
+                                  onClick={() => { selectTag(tagName); setIsPrdDropdownOpen(false); }}
+                                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                >
+                                  {currentTag === tagName
+                                    ? <Check className="h-4 w-4 text-purple-600" />
+                                    : <span className="h-4 w-4" />}
+                                  <span className="truncate italic">{tagName}</span>
+                                </button>
+                              ))}
+                            </>
+                          )}
                         </div>
                       </div>
                     )}

@@ -69,6 +69,11 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
   const [tasks, setTasks] = useState<TaskMasterTask[]>([]);
   const [nextTask, setNextTask] = useState<TaskMasterTask | null>(null);
+  // Per-PRD task sets: each PRD parses into its own TaskMaster tag. currentTag
+  // is the selected set; availableTags is the list to switch between.
+  const [currentTag, setCurrentTag] = useState<string>('master');
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
@@ -281,17 +286,24 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setIsLoadingTasks(true);
       clearError();
 
-      const response = await api.get(`/taskmaster/tasks/${encodeURIComponent(projectId)}`);
+      const tagQuery = selectedTag ? `?tag=${encodeURIComponent(selectedTag)}` : '';
+      const response = await api.get(`/taskmaster/tasks/${encodeURIComponent(projectId)}${tagQuery}`);
       if (!response.ok) {
         const errorPayload = (await response.json()) as { message?: string };
         throw new Error(errorPayload.message ?? 'Failed to load tasks');
       }
 
-      const data = (await response.json()) as { tasks?: TaskMasterTask[] };
+      const data = (await response.json()) as {
+        tasks?: TaskMasterTask[];
+        currentTag?: string;
+        availableTags?: string[];
+      };
       const loadedTasks = Array.isArray(data.tasks) ? data.tasks : [];
 
       setTasks(loadedTasks);
       setNextTask(getNextTask(loadedTasks));
+      if (data.currentTag) setCurrentTag(data.currentTag);
+      setAvailableTags(Array.isArray(data.availableTags) ? data.availableTags : []);
     } catch (caughtError) {
       handleError('load tasks', caughtError);
       setTasks([]);
@@ -299,7 +311,13 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     } finally {
       setIsLoadingTasks(false);
     }
-  }, [clearError, currentProject?.projectId, handleError, token, user]);
+  }, [clearError, currentProject?.projectId, handleError, token, user, selectedTag]);
+
+  // Switch the visible task set (PRD). Triggers a refetch via the effect that
+  // depends on refreshTasks.
+  const selectTag = useCallback((tag: string) => {
+    setSelectedTag(tag);
+  }, []);
 
   const refreshMCPStatus = useCallback(async () => {
     if (!user || (!token && !IS_PLATFORM)) {
@@ -372,6 +390,9 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       mcpServerStatus,
       tasks,
       nextTask,
+      currentTag,
+      availableTags,
+      selectTag,
       isLoading,
       isLoadingTasks,
       isLoadingMCP,
@@ -383,8 +404,10 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       clearError,
     }),
     [
+      availableTags,
       clearError,
       currentProject,
+      currentTag,
       error,
       isLoading,
       isLoadingMCP,
@@ -396,6 +419,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       refreshMCPStatus,
       refreshProjects,
       refreshTasks,
+      selectTag,
       setCurrentProject,
       tasks,
     ],

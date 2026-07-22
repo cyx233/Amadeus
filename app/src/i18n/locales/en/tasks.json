@@ -119,6 +119,12 @@
     "createNewPRD": "Create New PRD",
     "prdsAvailable": "{{count}} PRD(s) available"
   },
+  "tags": {
+    "default": "Default",
+    "switch": "Switch task set (PRD)",
+    "generateTasks": "Generate tasks from this PRD",
+    "openEditor": "Open PRD"
+  },
   "prd": {
     "modified": "Modified: {{date}}"
   },

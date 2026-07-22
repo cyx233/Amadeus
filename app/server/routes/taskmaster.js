@@ -189,7 +189,13 @@ router.get('/tasks/:projectId', async (req, res) => {
             
             let tasks = [];
             let currentTag = 'master';
-            
+            let availableTags = [];
+
+            // Optional ?tag= selects which task set (PRD) to read. Each PRD is
+            // parsed into its own tag, so a project can hold multiple separate
+            // backlogs instead of one merged list.
+            const requestedTag = typeof req.query.tag === 'string' ? req.query.tag : null;
+
             // Handle both tagged and legacy formats
             if (Array.isArray(tasksData)) {
                 // Legacy format
@@ -198,21 +204,19 @@ router.get('/tasks/:projectId', async (req, res) => {
                 // Simple format with tasks array
                 tasks = tasksData.tasks;
             } else {
-                // Tagged format - get tasks from current tag or master
-                if (tasksData[currentTag] && tasksData[currentTag].tasks) {
-                    tasks = tasksData[currentTag].tasks;
-                } else if (tasksData.master && tasksData.master.tasks) {
-                    tasks = tasksData.master.tasks;
-                } else {
-                    // Get tasks from first available tag
-                    const firstTag = Object.keys(tasksData).find(key => 
-                        tasksData[key].tasks && Array.isArray(tasksData[key].tasks)
-                    );
-                    if (firstTag) {
-                        tasks = tasksData[firstTag].tasks;
-                        currentTag = firstTag;
-                    }
+                // Tagged format: { <tag>: { tasks: [...] }, ... }
+                availableTags = Object.keys(tasksData).filter(key =>
+                    tasksData[key] && Array.isArray(tasksData[key].tasks)
+                );
+
+                // Pick the tag: requested (if it exists) → master → first available.
+                if (requestedTag && availableTags.includes(requestedTag)) {
+                    currentTag = requestedTag;
+                } else if (!availableTags.includes('master') && availableTags.length > 0) {
+                    currentTag = availableTags[0];
                 }
+
+                tasks = tasksData[currentTag]?.tasks ?? [];
             }
 
             // Transform tasks to ensure all have required fields
@@ -235,6 +239,7 @@ router.get('/tasks/:projectId', async (req, res) => {
                 projectPath,
                 tasks: transformedTasks,
                 currentTag,
+                availableTags,
                 totalTasks: transformedTasks.length,
                 tasksByStatus: {
                     pending: transformedTasks.filter(t => t.status === 'pending').length,
@@ -578,7 +583,7 @@ router.post('/init/:projectId', async (req, res) => {
 router.post('/add-task/:projectId', async (req, res) => {
     try {
         const { projectId } = req.params;
-        const { prompt, title, description, priority = 'medium', dependencies } = req.body;
+        const { prompt, title, description, priority = 'medium', dependencies, research = false } = req.body;
 
         if (!prompt && (!title || !description)) {
             return res.status(400).json({
@@ -595,12 +600,18 @@ router.post('/add-task/:projectId', async (req, res) => {
             });
         }
 
-        // Build the task-master add-task command
-        const args = ['task-master-ai', 'add-task'];
+        // Build the task-master add-task command.
+        // NOTE: use the `task-master` bin (the CLI). `task-master-ai` resolves to
+        // the MCP server bin, so spawning it here never actually ran the command.
+        const args = ['task-master', 'add-task'];
         
         if (prompt) {
             args.push('--prompt', prompt);
-            args.push('--research'); // Use research for AI-generated tasks
+            // --research forces the Perplexity provider; only opt in when asked,
+            // otherwise it fails for users configured with Bedrock/Anthropic/etc.
+            if (research) {
+                args.push('--research');
+            }
         } else {
             args.push('--prompt', `Create a task titled "${title}" with description: ${description}`);
         }
@@ -692,7 +703,7 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
 
         // If only updating status, use set-status command
         if (status && Object.keys(req.body).length === 1) {
-            const setStatusProcess = spawn('npx', ['task-master-ai', 'set-status', `--id=${taskId}`, `--status=${status}`], {
+            const setStatusProcess = spawn('npx', ['task-master', 'set-status', `--id=${taskId}`, `--status=${status}`], {
                 cwd: projectPath,
                 stdio: ['pipe', 'pipe', 'pipe']
             });
@@ -744,7 +755,7 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
             
             const prompt = `Update task with the following changes: ${updates.join(', ')}`;
 
-            const updateProcess = spawn('npx', ['task-master-ai', 'update-task', `--id=${taskId}`, `--prompt=${prompt}`], {
+            const updateProcess = spawn('npx', ['task-master', 'update-task', `--id=${taskId}`, `--prompt=${prompt}`], {
                 cwd: projectPath,
                 stdio: ['pipe', 'pipe', 'pipe']
             });
@@ -804,7 +815,7 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
 router.post('/parse-prd/:projectId', async (req, res) => {
     try {
         const { projectId } = req.params;
-        const { fileName = 'prd.txt', numTasks, append = false } = req.body;
+        const { fileName = 'prd.txt', numTasks, append = false, tag, research = false } = req.body;
 
         const projectPath = await resolveProjectPathFromId(projectId);
         if (!projectPath) {
@@ -826,18 +837,30 @@ router.post('/parse-prd/:projectId', async (req, res) => {
             });
         }
 
-        // Build the command args
-        const args = ['task-master-ai', 'parse-prd', prdPath];
-        
+        // Build the command args. Use the `task-master` CLI bin (not
+        // `task-master-ai`, which is the MCP server bin).
+        const args = ['task-master', 'parse-prd', prdPath];
+
         if (numTasks) {
             args.push('--num-tasks', numTasks.toString());
         }
-        
+
         if (append) {
             args.push('--append');
         }
-        
-        args.push('--research'); // Use research for better PRD parsing
+
+        // Per-PRD task sets: parse each doc into its own tag so multiple design
+        // docs in one project don't merge into a single backlog. Falls back to
+        // the default (master) tag when no tag is given.
+        if (tag) {
+            args.push('--tag', String(tag));
+        }
+
+        // --research forces the Perplexity provider; only opt in when asked, so
+        // parse works for users on Bedrock/Anthropic/etc. without a Perplexity key.
+        if (research) {
+            args.push('--research');
+        }
 
         // Run task-master parse-prd command
         const parsePRDProcess = spawn('npx', args, {

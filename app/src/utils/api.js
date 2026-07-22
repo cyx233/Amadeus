@@ -208,11 +208,12 @@ export const api = {
         body: JSON.stringify({ prompt, title, description, priority, dependencies }),
       }),
 
-    // Parse PRD to generate tasks
-    parsePRD: (projectId, { fileName, numTasks, append }) =>
+    // Parse PRD to generate tasks. `tag` scopes the generated tasks to a
+    // per-PRD task set (see prdNameToTag); omit for the default (master) set.
+    parsePRD: (projectId, { fileName, numTasks, append, tag }) =>
       authenticatedFetch(`/api/taskmaster/parse-prd/${projectId}`, {
         method: 'POST',
-        body: JSON.stringify({ fileName, numTasks, append }),
+        body: JSON.stringify({ fileName, numTasks, append, tag }),
       }),
 
     // Get available PRD templates
