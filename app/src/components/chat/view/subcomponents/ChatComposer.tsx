@@ -11,7 +11,7 @@ import type {
   RefObject,
   TouchEvent,
 } from 'react';
-import { ImageIcon, MessageSquareIcon, XIcon, Loader2, ChevronDown, Check, ArrowUpIcon, Database } from 'lucide-react';
+import { ImageIcon, MessageSquareIcon, XIcon, Loader2, ChevronDown, Check, ArrowUpIcon } from 'lucide-react';
 
 import { useVoiceInput } from '../../hooks/useVoiceInput';
 import { useVoiceAvailable } from '../../hooks/useVoiceAvailable';
@@ -65,11 +65,6 @@ interface ChatComposerProps {
   onAbortSession: () => void;
   permissionMode: PermissionMode | string;
   onModeSwitch: () => void;
-  /** RAG globally enabled (hides the toggle when the deployment disabled RAG). */
-  ragAvailable?: boolean;
-  /** Per-new-session RAG opt-in (only meaningful before the session's first send). */
-  ragEnabled?: boolean;
-  onRagToggle?: () => void;
   effort: string;
   availableEffortOptions: NonNullable<ProviderModelOption['effort']>['values'];
   onSelectEffort: (effort: string) => void;
@@ -128,9 +123,6 @@ export default function ChatComposer({
   onAbortSession,
   permissionMode,
   onModeSwitch,
-  ragAvailable,
-  ragEnabled,
-  onRagToggle,
   effort,
   availableEffortOptions,
   onSelectEffort,
@@ -485,25 +477,6 @@ export default function ChatComposer({
                 </span>
               </div>
             </button>
-
-            {ragAvailable && onRagToggle && (
-              <button
-                type="button"
-                onClick={onRagToggle}
-                aria-pressed={ragEnabled}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-lg border px-2 text-xs font-medium transition-all duration-200 sm:px-2.5 ${
-                  ragEnabled
-                    ? 'border-purple-300/60 bg-purple-50 text-purple-700 hover:bg-purple-100 dark:border-purple-600/40 dark:bg-purple-900/15 dark:text-purple-300 dark:hover:bg-purple-900/25'
-                    : 'border-border/60 bg-muted/50 text-muted-foreground hover:bg-muted'
-                }`}
-                title={t('input.ragToggle', 'Retrieve workspace knowledge for this session')}
-              >
-                <Database className="h-3.5 w-3.5" />
-                <span className="hidden whitespace-nowrap sm:inline">
-                  {t('input.ragLabel', 'RAG')}
-                </span>
-              </button>
-            )}
 
             {availableEffortOptions.length > 0 && (
               <div ref={effortDropdownRef} className="relative">

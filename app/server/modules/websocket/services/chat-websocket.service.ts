@@ -3,7 +3,6 @@ import path from 'node:path';
 import type { WebSocket } from 'ws';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { isRagGloballyEnabled, retrieveContext, wrapKnowledge } from '@/modules/rag/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import { getGlobalImageAssetsDir, normalizeImageDescriptors } from '@/shared/image-attachments.js';
@@ -188,23 +187,7 @@ async function handleChatSend(
   }
 
   const clientOptions = (data.options ?? {}) as AnyRecord;
-  let command = typeof data.content === 'string' ? data.content : '';
-
-  // Deterministic RAG: when this session opted in (and RAG isn't globally
-  // disabled), retrieve workspace knowledge and prepend it to the message
-  // BEFORE the agent runs, so retrieval can't be skipped. Best-effort —
-  // retrieveContext degrades to null on any failure/timeout, and the flag is
-  // threaded into runtimeOptions so the claude runtime can also expose the
-  // rag_search MCP tool for agent-driven follow-up queries.
-  const ragEnabled = isRagGloballyEnabled() && Boolean((session as AnyRecord).rag_enabled);
-  if (ragEnabled && command.trim()) {
-    const context = await retrieveContext(command);
-    if (context) {
-      command = `${wrapKnowledge(context)}\n\n${command}`;
-      // Surface a small, non-black-box marker to the client.
-      sendJson(ws, { type: 'rag.injected', sessionId });
-    }
-  }
+  const command = typeof data.content === 'string' ? data.content : '';
 
   // The provider runtimes receive the provider-native session id (that is the
   // id their CLI/SDK understands for resume). Brand-new sessions have no
@@ -219,8 +202,6 @@ async function handleChatSend(
     resume: Boolean(session.provider_session_id),
     cwd: clientOptions.cwd ?? session.project_path ?? undefined,
     projectPath: session.project_path ?? clientOptions.projectPath,
-    // Lets the claude runtime conditionally register the rag_search MCP tool.
-    ragEnabled,
   };
 
   try {

@@ -535,8 +535,7 @@ router.post(
     const body = (req.body ?? {}) as Record<string, unknown>;
     const provider = parseProvider(body.provider);
     const projectPath = typeof body.projectPath === 'string' ? body.projectPath : '';
-    const ragEnabled = body.ragEnabled === true;
-    const result = sessionsService.createAppSession(provider, projectPath, ragEnabled);
+    const result = sessionsService.createAppSession(provider, projectPath);
     res.status(201).json(createApiSuccessResponse(result));
   }),
 );

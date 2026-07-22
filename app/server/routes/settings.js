@@ -9,34 +9,8 @@ import {
 import { getPublicKey } from '../services/vapid-keys.js';
 import { createNotificationEvent, notifyUserIfEnabled } from '../services/notification-orchestrator.js';
 import { syncGitCredentials } from '../utils/git-credentials.js';
-import { getRagSettings, setRagGloballyEnabled } from '../modules/rag/index.js';
 
 const router = express.Router();
-
-// ===============================
-// RAG (knowledge-base retrieval) — global on/off
-// ===============================
-
-// Read the global RAG setting (deployment-wide kill switch).
-router.get('/rag', (req, res) => {
-  try {
-    res.json({ settings: getRagSettings() });
-  } catch (error) {
-    console.error('Error reading RAG settings:', error);
-    res.status(500).json({ error: 'Failed to read RAG settings' });
-  }
-});
-
-// Toggle the global RAG setting.
-router.put('/rag', (req, res) => {
-  try {
-    const settings = setRagGloballyEnabled(req.body?.enabled === true);
-    res.json({ settings });
-  } catch (error) {
-    console.error('Error updating RAG settings:', error);
-    res.status(500).json({ error: 'Failed to update RAG settings' });
-  }
-});
 
 // ===============================
 // API Keys Management

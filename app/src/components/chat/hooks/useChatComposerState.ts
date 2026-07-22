@@ -38,8 +38,6 @@ interface UseChatComposerStateArgs {
   selectedSession: ProjectSession | null;
   currentSessionId: string | null;
   provider: LLMProvider;
-  /** Per-new-session RAG opt-in, sent when creating the session. */
-  ragEnabled?: boolean;
   permissionMode: PermissionMode | string;
   cyclePermissionMode: () => void;
   resolvePermissionModeForProvider: (provider: LLMProvider, requestedMode: PermissionMode | string) => PermissionMode;
@@ -192,7 +190,6 @@ export function useChatComposerState({
   selectedSession,
   currentSessionId,
   provider,
-  ragEnabled = false,
   permissionMode,
   cyclePermissionMode,
   resolvePermissionModeForProvider,
@@ -765,7 +762,6 @@ export function useChatComposerState({
             body: JSON.stringify({
               provider,
               projectPath: resolvedProjectPath,
-              ragEnabled,
             }),
           });
           if (!response.ok) {
@@ -856,7 +852,6 @@ export function useChatComposerState({
       onSessionProcessing,
       onSessionEstablished,
       provider,
-      ragEnabled,
       resetCommandMenuState,
       scrollToBottom,
       selectedProject,

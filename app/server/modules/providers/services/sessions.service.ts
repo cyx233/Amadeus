@@ -17,7 +17,6 @@ type CreateAppSessionResult = {
   sessionId: string;
   provider: LLMProvider;
   projectPath: string;
-  ragEnabled: boolean;
 };
 
 type ArchivedSessionListItem = {
@@ -121,11 +120,7 @@ export const sessionsService = {
    * for the lifetime of the conversation. The provider-native id is mapped to
    * this row later, when the provider runtime announces it mid-run.
    */
-  createAppSession(
-    provider: LLMProvider,
-    projectPath: string,
-    ragEnabled = false
-  ): CreateAppSessionResult {
+  createAppSession(provider: LLMProvider, projectPath: string): CreateAppSessionResult {
     const normalizedProjectPath = projectPath.trim();
     if (!normalizedProjectPath) {
       throw new AppError('projectPath is required.', {
@@ -135,13 +130,12 @@ export const sessionsService = {
     }
 
     const sessionId = randomUUID();
-    sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath, ragEnabled);
+    sessionsDb.createAppSession(sessionId, provider, normalizedProjectPath);
 
     return {
       sessionId,
       provider,
       projectPath: normalizedProjectPath,
-      ragEnabled,
     };
   },
 
