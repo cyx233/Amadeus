@@ -54,9 +54,6 @@ COPY --chown=agent:agent app/ /opt/cloudcli/
 ARG SKIP_AUTH=false
 RUN VITE_IS_PLATFORM=${SKIP_AUTH} npm run build && npm prune --omit=dev && npm cache clean --force
 
-# RAG skills — copied into the home volume's skills dir at startup by entrypoint
-COPY --chown=agent:agent skills/ /opt/cloudcli-skills/
-
 # Entrypoint
 COPY --chown=agent:agent scripts/entrypoint.sh /opt/entrypoint.sh
 USER root

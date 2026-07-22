@@ -48,26 +48,5 @@ services:
     expose:
       - "3001"
 
-  lightrag:
-    image: ghcr.io/hkuds/lightrag:latest
-    restart: unless-stopped
-    # No host port mapping: the gateway and per-user containers reach it over
-    # the compose network as http://lightrag:9621. Keeps 9621 off the host
-    # (avoids clashing with a local dev stack) and off the public interface.
-    expose:
-      - "9621"
-    volumes:
-      - lightrag-data:/app/data
-    environment:
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
-      - LLM_MODEL=${LLM_MODEL:-claude-sonnet-4-20250514}
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9621/health')"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
 volumes:
   auth-users:
-  lightrag-data:

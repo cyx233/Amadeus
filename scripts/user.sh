@@ -28,7 +28,7 @@ AUTH_DB="/home/agent/.amadeus/auth.db"
 ensure_gateway() {
   if ! curl -s -o /dev/null --max-time 2 "${AUTH_URL}/api/auth/status"; then
     echo "[*] Gateway not responding — starting gateway + auth-gateway ..."
-    docker compose up -d --build gateway auth-gateway lightrag
+    docker compose up -d --build gateway auth-gateway
     for _ in $(seq 1 30); do
       curl -s -o /dev/null --max-time 2 "${AUTH_URL}/api/auth/status" && break
       sleep 1
@@ -87,7 +87,6 @@ cmd_add() {
       - VITE_IS_PLATFORM=true
       - AMADEUS_USER=${USERNAME}
       - JWT_SECRET=\${JWT_SECRET:?set JWT_SECRET in .env}
-      - LIGHTRAG_URL=http://lightrag:9621
       - DISABLE_AUTOUPDATER=1
       - WORKSPACES_ROOT=/home/agent/workspace
       - NODE_ENV=production
@@ -97,9 +96,6 @@ cmd_add() {
       timeout: 5s
       retries: 3
       start_period: 15s
-    depends_on:
-      lightrag:
-        condition: service_healthy
 EOF
 )
   awk -v svc="$block" -v vol="  user-data-${USERNAME}:" '
@@ -163,10 +159,10 @@ cmd_list() {
     || echo "(auth-gateway not running)"
   echo ""
   echo "=== Backend containers ==="
-  # Only per-user backends: exclude infra (gateway/auth/lightrag) and the
+  # Only per-user backends: exclude infra (gateway/auth) and the
   # separate dev stack (amadeus-dev-*).
   docker ps -a --filter "name=amadeus-" --format '{{.Names}}\t{{.Status}}' \
-    | grep -vE "^amadeus-(gateway|auth-gateway|lightrag|dev-)" || echo "(none)"
+    | grep -vE "^amadeus-(gateway|auth-gateway|dev-)" || echo "(none)"
 }
 
 case "${1:-}" in

@@ -1,6 +1,6 @@
 # Amadeus
 
-Browser-based coding-agent platform (Claude Code, Codex, Cursor, OpenCode) with long-lived Docker sessions, self-recovery, and integrated RAG.
+Browser-based coding-agent platform (Claude Code, Codex, Cursor, OpenCode) with long-lived Docker sessions and self-recovery.
 
 ## Quick Start
 
@@ -67,14 +67,8 @@ it can point at any backend (e.g. DeepSeek) you configure.
 │  │ /home/agent volume (per-user, isolated)     │  │
 │  │  ├─ .amadeus/   auth.db, assets, todo, ...   │  │
 │  │  │              (API keys hashed, tokens enc)│  │
-│  │  ├─ .claude/ .codex/ .local/share/opencode/  │  │
-│  │  │              (LLM creds, CLI-owned)        │  │
-│  │  └─ .claude/skills/  (rag-query, rag-ingest) │  │
-│  └────────────────────────────────────────────┘  │
-│       │ curl                                     │
-│  ┌────▼───────────────────────────────────────┐  │
-│  │ lightrag container (RAG retrieval)         │  │
-│  │  REST: /query, /documents                  │  │
+│  │  └─ .claude/ .codex/ .local/share/opencode/  │  │
+│  │                 (LLM creds, CLI-owned)        │  │
 │  └────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────┘
 ```
@@ -123,7 +117,6 @@ volumes) is a host-level concern and left to the operator.
 | Session recovery | SDK `resume` by session ID; watchdog aborts stalled sessions; frontend reconnects via writer-swap |
 | File + code editing | File tree + content search (ripgrep) + CodeMirror editor, real-time sync with agent workspace |
 | Task management | TaskMaster as an MCP server any agent can drive |
-| RAG | LightRAG (hybrid graph+vector), queried via skill — session artifacts and workspace files all indexed there |
 
 ## Session Recovery Flow
 
@@ -148,6 +141,5 @@ See `.env.example`. Key knobs:
 
 - `JWT_SECRET` — signs login cookies and derives the credential-encryption key (required)
 - `WATCHDOG_STALL_MS` — how long before a silent session is considered stalled (default: 5 min)
-- `LIGHTRAG_URL` — override if running LightRAG separately
 - `AMADEUS_DATA_DIR` — backend data dir (auth.db, assets, todo, …); defaults to `~/.amadeus`
 - `WORKSPACES_ROOT` — where per-user project workspaces live (default: `~/workspace`)

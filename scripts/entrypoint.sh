@@ -5,11 +5,6 @@ APP=/opt/cloudcli
 
 mkdir -p ~/.claude/projects ~/.amadeus ~/workspace
 
-# Sync bundled RAG skills into the home volume (image is source of truth).
-# Volume shadows the image's ~/.claude, so seed from /opt on every start.
-mkdir -p ~/.claude/skills
-cp -r /opt/cloudcli-skills/. ~/.claude/skills/
-
 git config --global --add safe.directory '*'
 
 # Optional local hook — dev mounts one to install host-forwarding shims,
