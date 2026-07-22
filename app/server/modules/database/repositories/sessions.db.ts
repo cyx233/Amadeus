@@ -217,6 +217,21 @@ export const sessionsDb = {
     merge();
   },
 
+  /**
+   * Drops a session's provider-native id mapping. Used to recover from a phantom
+   * resume target: the row references a provider conversation that was never
+   * actually persisted, so clearing it lets the next run start fresh instead of
+   * failing "No conversation found" forever.
+   */
+  clearProviderSessionId(sessionId: string): void {
+    const db = getConnection();
+    db.prepare(
+      `UPDATE sessions
+       SET provider_session_id = NULL, updated_at = CURRENT_TIMESTAMP
+       WHERE session_id = ?`
+    ).run(sessionId);
+  },
+
   updateSessionCustomName(sessionId: string, customName: string): void {
     const db = getConnection();
     db.prepare(

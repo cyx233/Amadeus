@@ -728,6 +728,23 @@ async function queryClaudeSDK(command, options = {}, ws) {
       return;
     }
 
+    // Resume recovery: the DB can hold a provider_session_id for a conversation
+    // Claude Code never actually persisted (e.g. the first run errored before the
+    // JSONL was written). Every later message then fails "No conversation found".
+    // Detect that, drop the phantom mapping, and retry once as a fresh session so
+    // the user isn't permanently stuck. Guard with _resumeRetried to avoid loops.
+    const isMissingConversation = /No conversation found with session ID/i.test(error?.message || '');
+    if (isMissingConversation && options.resume && sessionId && !options._resumeRetried) {
+      console.warn(`[Claude SDK] Resume target ${sessionId} not found; clearing phantom mapping and retrying fresh.`);
+      try {
+        const { sessionsDb } = await import('./modules/database/index.js');
+        sessionsDb.clearProviderSessionId?.(sessionId);
+      } catch (e) {
+        console.warn('[Claude SDK] Failed to clear phantom provider_session_id:', e?.message || e);
+      }
+      return queryClaudeSDK(command, { ...options, resume: false, sessionId: undefined, _resumeRetried: true }, ws);
+    }
+
     // Check if Claude CLI is installed for a clearer error message
     const installed = await providerAuthService.isProviderInstalled('claude');
     const errorContent = !installed
