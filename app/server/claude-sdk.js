@@ -308,11 +308,64 @@ function readNumber(value) {
  * @param {Object} sdkMessage - SDK stream message
  * @returns {Object|null} Token budget object or null
  */
+// The model's real context window comes from the SDK's `modelUsage[model]`
+// (its `contextWindow` field reflects the actual model — 1M for opus[1m]/
+// sonnet[1m], 200K otherwise). Only fall back to CONTEXT_WINDOW/a default when
+// the SDK didn't report it, so the usage bar isn't pinned to a wrong fixed size.
+function resolveContextWindow(sdkMessage) {
+  const modelUsage = sdkMessage?.modelUsage;
+  if (modelUsage && typeof modelUsage === 'object') {
+    for (const entry of Object.values(modelUsage)) {
+      const cw = readNumber(entry?.contextWindow);
+      if (cw > 0) {
+        return cw;
+      }
+    }
+  }
+  return parseInt(process.env.CONTEXT_WINDOW, 10) || 200_000;
+}
+
 function extractTokenBudget(sdkMessage) {
   if (!sdkMessage || typeof sdkMessage !== 'object') {
     return null;
   }
 
+  // Prefer `modelUsage` (on the terminal `result`): it carries the whole run's
+  // CUMULATIVE input/output across every agentic step, plus the model's real
+  // context window. `message.usage` only reports the LAST step, so an agentic
+  // run with tool calls under-reported output (e.g. showing 176 for the final
+  // step instead of the sum). Sum across models in case a run switched models.
+  const modelUsage = sdkMessage.modelUsage;
+  if (modelUsage && typeof modelUsage === 'object' && Object.keys(modelUsage).length > 0) {
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cacheReadTokens = 0;
+    let cacheCreationTokens = 0;
+    for (const entry of Object.values(modelUsage)) {
+      if (!entry || typeof entry !== 'object') continue;
+      const directInput = readNumber(entry.inputTokens ?? entry.cumulativeInputTokens);
+      cacheReadTokens += readNumber(entry.cacheReadInputTokens ?? entry.cacheReadTokens);
+      cacheCreationTokens += readNumber(entry.cacheCreationInputTokens ?? entry.cacheCreationTokens);
+      inputTokens += directInput;
+      outputTokens += readNumber(entry.outputTokens ?? entry.cumulativeOutputTokens);
+    }
+    inputTokens += cacheReadTokens + cacheCreationTokens;
+    const contextWindow = resolveContextWindow(sdkMessage);
+    return {
+      used: inputTokens + outputTokens,
+      total: contextWindow,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+      cacheTokens: cacheReadTokens + cacheCreationTokens,
+      breakdown: { input: inputTokens, output: outputTokens },
+    };
+  }
+
+  // Fallback: single-step `message.usage` (no modelUsage present, e.g. an
+  // intermediate assistant message). This is the last step only, not the run
+  // total, but it's the best available until the `result` arrives.
   const messageUsage = sdkMessage.message?.usage || sdkMessage.usage;
   if (messageUsage && typeof messageUsage === 'object') {
     const directInputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
@@ -321,11 +374,10 @@ function extractTokenBudget(sdkMessage) {
     const cacheTokens = cacheCreationTokens + cacheReadTokens;
     const inputTokens = directInputTokens + cacheTokens;
     const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
-    const totalUsed = inputTokens + outputTokens;
-    const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
+    const contextWindow = resolveContextWindow(sdkMessage);
 
     return {
-      used: totalUsed,
+      used: inputTokens + outputTokens,
       total: contextWindow,
       inputTokens,
       outputTokens,
@@ -339,33 +391,7 @@ function extractTokenBudget(sdkMessage) {
     };
   }
 
-  if (!sdkMessage.modelUsage || typeof sdkMessage.modelUsage !== 'object') {
-    return null;
-  }
-
-  // Fallback for older SDK messages with only modelUsage
-  const modelKey = Object.keys(sdkMessage.modelUsage)[0];
-  const modelData = sdkMessage.modelUsage[modelKey];
-
-  if (!modelData || typeof modelData !== 'object') {
-    return null;
-  }
-
-  const inputTokens = readNumber(modelData.cumulativeInputTokens ?? modelData.inputTokens);
-  const outputTokens = readNumber(modelData.cumulativeOutputTokens ?? modelData.outputTokens);
-  const totalUsed = inputTokens + outputTokens;
-  const contextWindow = parseInt(process.env.CONTEXT_WINDOW, 10) || 160000;
-
-  return {
-    used: totalUsed,
-    total: contextWindow,
-    inputTokens,
-    outputTokens,
-    breakdown: {
-      input: inputTokens,
-      output: outputTokens,
-    },
-  };
+  return null;
 }
 
 /**
