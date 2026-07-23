@@ -156,6 +156,9 @@ export default function CodeEditor({
           highlightChanges: true,
           syntaxHighlightDeletions: false,
           gutter: true,
+          // Collapse unchanged stretches so the result reads as separate hunks
+          // with a few lines of context, matching the git panel's @@ blocks.
+          collapseUnchanged: { margin: 3, minSize: 4 },
         }),
       );
       allExtensions.push(...minimapExtension);
