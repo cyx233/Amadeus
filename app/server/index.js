@@ -63,6 +63,7 @@ import browserUseRoutes from './modules/browser-use/browser-use.routes.js';
 import { assetsRoutes } from './modules/assets/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
+import { shutdown as shutdownTaskmasterMcp } from './modules/taskmaster-mcp/client.js';
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { createProject } from './modules/projects/services/project-management.service.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -1663,6 +1664,11 @@ async function startServer() {
                 await browserUseService.stopAllSessions();
             } catch (err) {
                 console.error('[Browser] Error stopping sessions during shutdown:', err?.message || err);
+            }
+            try {
+                await shutdownTaskmasterMcp();
+            } catch (err) {
+                console.error('[TaskMaster MCP] Error stopping resident process during shutdown:', err?.message || err);
             }
             try {
                 await removeLocalServerMarker();

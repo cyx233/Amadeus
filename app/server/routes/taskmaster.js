@@ -17,6 +17,7 @@ import express from 'express';
 import rawSpawn from 'cross-spawn';
 
 import { projectsDb } from '../modules/database/index.js';
+import { callTool as mcpCallTool } from '../modules/taskmaster-mcp/client.js';
 import { detectTaskMasterMCPServer } from '../utils/mcp-detector.js';
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from '../utils/taskmaster-websocket.js';
 
@@ -715,87 +716,30 @@ router.post('/add-task/:projectId', async (req, res) => {
             });
         }
 
-        // Build the task-master add-task command.
-        // NOTE: use the `task-master` bin (the CLI). `task-master-ai` resolves to
-        // the MCP server bin, so spawning it here never actually ran the command.
-        const args = ['task-master', 'add-task'];
-        
-        if (prompt) {
-            args.push('--prompt', prompt);
-            // --research forces the Perplexity provider; only opt in when asked,
-            // otherwise it fails for users configured with Bedrock/Anthropic/etc.
-            if (research) {
-                args.push('--research');
-            }
-        } else {
-            args.push('--prompt', `Create a task titled "${title}" with description: ${description}`);
-        }
-        
-        if (priority) {
-            args.push('--priority', priority);
+        // add_task takes either a free-form prompt (AI generates the task) or
+        // explicit title/description. research forces the Perplexity provider, so
+        // only pass it when asked (otherwise it fails for Bedrock/Anthropic users).
+        const args = {
+            projectRoot: projectPath,
+            priority,
+            ...(prompt ? { prompt, ...(research ? { research: true } : {}) } : { title, description }),
+            ...(dependencies ? { dependencies: String(dependencies) } : {}),
+            ...(tag ? { tag: String(tag) } : {}),
+        };
+
+        const result = await mcpCallTool('add_task', args);
+
+        if (req.app.locals.wss) {
+            broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
         }
 
-        if (dependencies) {
-            args.push('--dependencies', dependencies);
-        }
-
-        // Target a specific task set (per-PRD tag). Omitting it writes to the
-        // default (master) tag, matching TaskMaster's own default.
-        if (tag) {
-            args.push('--tag', String(tag));
-        }
-
-        // Run task-master add-task command
-        const addTaskProcess = spawn('npx', args, {
-            cwd: projectPath,
-            stdio: ['pipe', 'pipe', 'pipe']
+        res.json({
+            projectId,
+            projectPath,
+            message: 'Task added successfully',
+            output: result,
+            timestamp: new Date().toISOString()
         });
-
-        let stdout = '';
-        let stderr = '';
-
-        addTaskProcess.stdout.on('data', (data) => {
-            stdout += data.toString();
-        });
-
-        addTaskProcess.stderr.on('data', (data) => {
-            stderr += data.toString();
-        });
-
-        addTaskProcess.on('close', (code) => {
-            console.log('Add task process completed with code:', code);
-            console.log('Stdout:', stdout);
-            console.log('Stderr:', stderr);
-            
-            if (code === 0) {
-                // Broadcast task update via WebSocket using the projectId so
-                // clients subscribed to this project get notified immediately.
-                if (req.app.locals.wss) {
-                    broadcastTaskMasterTasksUpdate(
-                        req.app.locals.wss,
-                        projectId
-                    );
-                }
-
-                res.json({
-                    projectId,
-                    projectPath,
-                    message: 'Task added successfully',
-                    output: stdout,
-                    timestamp: new Date().toISOString()
-                });
-            } else {
-                console.error('Add task failed:', stderr);
-                res.status(500).json({
-                    error: 'Failed to add task',
-                    message: stderr || stdout,
-                    code
-                });
-            }
-        });
-
-        addTaskProcess.stdin.end();
-
     } catch (error) {
         console.error('Add task error:', error);
         res.status(500).json({
@@ -822,45 +766,24 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
             });
         }
 
-        // Tasks live inside a tag (per-PRD set), so tag-aware sub-commands must
-        // target the same tag or they'd touch the wrong set. add/remove-dependency
-        // and update-task accept --tag; set-status and `tags use` do NOT, so pass
-        // tagged=false for those (see the status branch).
-        const tagArgs = tag && tag !== 'master' ? ['--tag', String(tag)] : [];
+        // All sub-operations go through the resident MCP server, whose tools take
+        // `tag` natively (no active-tag switching) and `projectRoot` per call. tag
+        // is only meaningful when non-default; omit it for master.
+        const tagArg = tag && tag !== 'master' ? { tag: String(tag) } : {};
 
-        // Promisified spawn so we can run several structured sub-commands (status,
-        // deps, prompt) in sequence and fail fast on the first error.
-        const run = (args, tagged = true) => new Promise((resolve, reject) => {
-            const cmdArgs = tagged ? [...args, ...tagArgs] : args;
-            const child = spawn('npx', ['task-master', ...cmdArgs], {
-                cwd: projectPath,
-                stdio: ['ignore', 'pipe', 'pipe'],
-            });
-            let stdout = '';
-            let stderr = '';
-            child.stdout.on('data', (d) => { stdout += d.toString(); });
-            child.stderr.on('data', (d) => { stderr += d.toString(); });
-            child.on('error', reject);
-            child.on('close', (code) => {
-                if (code === 0) resolve(stdout);
-                else reject(new Error(stderr || stdout || `command failed: task-master ${args[0]}`));
-            });
-        });
-
-        // Status → `set-status`. The CLI's set-status (v0.43.1) has no --tag flag:
-        // it acts on the tag marked active in state.json. The UI is single-select
-        // (one PRD = one active tag at a time), so we make the active tag match the
-        // task's tag via `tags use` before setting status — the board is already
-        // showing exactly this tag, so this aligns the active tag with the view
-        // rather than causing a hidden side effect. Neither command accepts --tag,
-        // hence tagged=false.
+        // Status → set_task_status. Calls tmCore.tasks.updateStatus(id,status,tag)
+        // directly — no side effect. ~ms vs ~7s for the old two-spawn path.
         if (typeof status === 'string' && status) {
-            if (tag) await run(['tags', 'use', String(tag)], false);
-            await run(['set-status', `--id=${taskId}`, `--status=${status}`], false);
+            await mcpCallTool('set_task_status', {
+                id: String(taskId),
+                status,
+                projectRoot: projectPath,
+                ...tagArg,
+            });
         }
 
         // Dependencies → diff the requested list against the current one and add/
-        // remove individually via TaskMaster's structured dependency commands.
+        // remove individually via TaskMaster's structured dependency tools.
         if (Array.isArray(dependencies)) {
             const tasksFilePath = path.join(projectPath, '.taskmaster', 'tasks', 'tasks.json');
             let currentDeps = [];
@@ -877,16 +800,16 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
             const toAdd = wanted.filter((d) => !currentDeps.includes(d));
             const toRemove = currentDeps.filter((d) => !wanted.includes(d));
             for (const dep of toAdd) {
-                await run(['add-dependency', `--id=${taskId}`, `--depends-on=${dep}`]);
+                await mcpCallTool('add_dependency', { id: String(taskId), dependsOn: dep, projectRoot: projectPath, ...tagArg });
             }
             for (const dep of toRemove) {
-                await run(['remove-dependency', `--id=${taskId}`, `--depends-on=${dep}`]);
+                await mcpCallTool('remove_dependency', { id: String(taskId), dependsOn: dep, projectRoot: projectPath, ...tagArg });
             }
         }
 
         // Title / description / details / priority are applied via one AI-prompt
-        // update-task — TaskMaster's update-task has no structured flags for these
-        // (only --prompt), so we describe the change and let it rewrite the task.
+        // update_task — TaskMaster has no structured flags for these (only a
+        // prompt), so we describe the change and let it rewrite the task.
         const textUpdates = [];
         if (title) textUpdates.push(`title: "${title}"`);
         if (description) textUpdates.push(`description: "${description}"`);
@@ -894,7 +817,7 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
         if (priority) textUpdates.push(`priority: "${priority}"`);
         if (textUpdates.length > 0) {
             const prompt = `Update task with the following changes: ${textUpdates.join(', ')}`;
-            await run(['update-task', `--id=${taskId}`, `--prompt=${prompt}`]);
+            await mcpCallTool('update_task', { id: String(taskId), prompt, projectRoot: projectPath, ...tagArg });
         }
 
         if (req.app.locals.wss) {
@@ -918,7 +841,8 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
 
 /**
  * DELETE /api/taskmaster/task/:projectId/:taskId
- * Remove a task (or subtask, id like "5.2") from a tag via `remove-task`.
+ * Remove a task (or subtask, id like "5.2") from a tag via the MCP remove_task
+ * tool (tag-native, no interactive prompt).
  */
 router.delete('/task/:projectId/:taskId', async (req, res) => {
     try {
@@ -930,28 +854,16 @@ router.delete('/task/:projectId/:taskId', async (req, res) => {
             return res.status(404).json({ error: 'Project not found', message: `Project "${projectId}" does not exist` });
         }
 
-        // remove-task accepts --tag; -y skips the confirmation prompt (otherwise it
-        // blocks on stdin, which we've closed).
-        const args = ['task-master', 'remove-task', `--id=${taskId}`, '-y'];
-        if (tag && tag !== 'master') args.push('--tag', tag);
+        await mcpCallTool('remove_task', {
+            id: String(taskId),
+            projectRoot: projectPath,
+            ...(tag && tag !== 'master' ? { tag } : {}),
+        });
 
-        const child = spawn('npx', args, { cwd: projectPath, stdio: ['ignore', 'pipe', 'pipe'] });
-        let stdout = '';
-        let stderr = '';
-        child.stdout.on('data', (d) => { stdout += d.toString(); });
-        child.stderr.on('data', (d) => { stderr += d.toString(); });
-        child.on('close', (code) => {
-            if (code !== 0) {
-                return res.status(500).json({ error: 'Failed to remove task', message: stderr || stdout || `remove-task exited with code ${code}` });
-            }
-            if (req.app.locals.wss) {
-                broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
-            }
-            res.json({ projectId, taskId, message: 'Task removed successfully', timestamp: new Date().toISOString() });
-        });
-        child.on('error', (err) => {
-            res.status(500).json({ error: 'Failed to remove task', message: err.message });
-        });
+        if (req.app.locals.wss) {
+            broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
+        }
+        res.json({ projectId, taskId, message: 'Task removed successfully', timestamp: new Date().toISOString() });
     } catch (error) {
         console.error('Remove task error:', error);
         res.status(500).json({ error: 'Failed to remove task', message: error.message });
