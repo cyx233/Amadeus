@@ -340,7 +340,7 @@ function pruneRealtimeSupersededByServer(
       return false;
     }
 
-    if (message.id.startsWith('local_') && hasServerEchoForLocalUser(message, serverMessages)) {
+    if (typeof message.id === 'string' && message.id.startsWith('local_') && hasServerEchoForLocalUser(message, serverMessages)) {
       return false;
     }
 
@@ -388,7 +388,7 @@ function computeMerged(server: NormalizedMessage[], realtime: NormalizedMessage[
     // Optimistic user rows use `local_*` ids; once the same text exists on the
     // server-backed copy from the same send window, drop the realtime echo to
     // avoid duplicate bubbles without hiding repeated prompts from history.
-    if (message.id.startsWith('local_')) {
+    if (typeof message.id === 'string' && message.id.startsWith('local_')) {
       if (hasServerEchoForLocalUser(message, server)) {
         return false;
       }
