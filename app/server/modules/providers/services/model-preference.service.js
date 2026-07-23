@@ -74,3 +74,38 @@ export async function resolveModel(userId, feature, opts = {}) {
 
   return { provider, model };
 }
+
+/**
+ * The one entry point for "what { provider, model } should this run/view use?",
+ * composing the preference layer (resolveModel) and the session layer
+ * (providerModelsService.resolveSessionModel) so callers never re-assemble the
+ * order themselves. Provider comes from the preference layer (feature override →
+ * global default). Model:
+ *   - With a session: the in-session override (a `/model` switch), else the
+ *     preference default. (We don't read the transcript — see resolveSessionModel.)
+ *   - No session: the requested model (this call's explicit choice), else the
+ *     preference default.
+ *   - null → the caller uses the provider's own default.
+ *
+ * @param {number} userId
+ * @param {string} feature
+ * @param {{ provider?: string, sessionId?: string|null, requested?: string|null }} [opts]
+ * @returns {Promise<{ provider: string, model: string | null }>}
+ */
+export async function resolveEffectiveModel(userId, feature, opts = {}) {
+  const pref = await resolveModel(userId, feature, { provider: opts.provider });
+
+  // Session override (or, with no session, the requested model) wins over the
+  // preference default. resolveSessionModel returns undefined when neither
+  // applies, so we fall through to the preference.
+  const sessionModel = await providerModelsService.resolveSessionModel(
+    pref.provider,
+    opts.sessionId,
+    opts.requested,
+  );
+  if (sessionModel) {
+    return { provider: pref.provider, model: sessionModel };
+  }
+
+  return pref;
+}

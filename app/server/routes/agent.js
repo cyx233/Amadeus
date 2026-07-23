@@ -7,8 +7,7 @@ import { promises as fs } from 'fs';
 import crypto from 'crypto';
 import { userDb, apiKeysDb, githubTokensDb, projectsDb } from '../modules/database/index.js';
 import { Octokit } from '@octokit/rest';
-import { providerModelsService } from '../modules/providers/services/provider-models.service.js';
-import { resolveModel, CHAT_PROVIDERS } from '../modules/providers/services/model-preference.service.js';
+import { resolveEffectiveModel, CHAT_PROVIDERS } from '../modules/providers/services/model-preference.service.js';
 import { getProviderRunner } from '../modules/providers/services/provider-runtime.service.js';
 import { IS_PLATFORM } from '../constants/config.js';
 import { normalizeProjectPath } from '../shared/utils.js';
@@ -947,13 +946,17 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       });
     }
 
-    // When the request doesn't pin a model, use the user's Model Preference for
-    // this provider (its default model → null). null means "let the provider use
-    // its own default", so each branch keeps its existing fallback for that case.
-    // A resuming session's own model still wins downstream (resolveSessionModel).
+    // Single resolver for "which model does this send run": in-session override
+    // for a resumed session, else the requested model, else the user's chat Model
+    // Preference for this provider. null means "let the provider use its own
+    // default", so each branch keeps its existing fallback.
     let resolvedModel = model || undefined;
-    if (!resolvedModel && CHAT_PROVIDERS.includes(provider)) {
-      resolvedModel = (await resolveModel(req.user.id, 'chat', { provider })).model || undefined;
+    if (CHAT_PROVIDERS.includes(provider)) {
+      resolvedModel = (await resolveEffectiveModel(req.user.id, 'chat', {
+        provider,
+        sessionId: sessionId || null,
+        requested: model || null,
+      })).model || undefined;
     }
 
     // Start the session via the shared provider-runner registry (no per-provider

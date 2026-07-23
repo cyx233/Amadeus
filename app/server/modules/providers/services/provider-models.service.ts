@@ -16,7 +16,11 @@ import { dataDir, readProviderSessionActiveModelChange } from '@/shared/utils.js
 
 export const PROVIDER_MODELS_CACHE_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 const PROVIDER_MODELS_CACHE_VERSION = 2;
-const UNCACHED_PROVIDERS = new Set<LLMProvider>(['claude']);
+// No provider is force-uncached: claude used to be (it returned a static list
+// for free), but it now spawns a CLI query to read the account's real models,
+// so it caches like the others. A re-login / fresh list is available via the
+// `bypassCache` option (?refresh=1), used by the "Refresh models" UI.
+const UNCACHED_PROVIDERS = new Set<LLMProvider>([]);
 
 type ProviderModelsServiceDependencies = {
   resolveProvider?: (provider: LLMProvider) => Pick<IProvider, 'models'>;
@@ -317,21 +321,24 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
 
   // The single resolver for "which model is this session on" — used by both the
   // UI picker (/api/user/effective-model) and the runtime (before spawning a
-  // resume). Order by intent, most explicit first:
-  //   1. change-override — the user's explicit in-session switch (written the
-  //      moment they pick, so it already captures their current choice)
-  //   2. requested — a model the caller explicitly passed THIS call (current
-  //      intent for flows that don't persist an override, e.g. no-UI callers)
-  //   3. transcript — what the session last actually ran (history fallback)
-  // requested beats transcript so an explicit choice is never overridden by past
-  // history; it sits below override because override IS the persisted choice.
+  // resume). Two cases; both fall through to `undefined` so the caller uses the
+  // Model Preference default:
+  //   - No session: the caller's requested model is the only per-call intent
+  //     (a new conversation being pinned to a model), else undefined.
+  //   - With a session: the change-override — the user's in-session model switch,
+  //     written the moment they pick (`/model` → POST .../active-model). This is
+  //     the ONLY per-session state we read: we re-spawn passing it, so switching
+  //     works because we always send the override's model. We deliberately do NOT
+  //     read the session transcript: a resumed CLI keeps its own model regardless
+  //     of what we pass, so reading it back only risks disagreeing with the
+  //     override without changing what actually runs.
   const resolveSessionModel = async (
     provider: LLMProvider,
     sessionId: string | undefined,
     requestedModel?: string | null,
   ): Promise<string | undefined> => {
-    const normalizedRequestedModel = typeof requestedModel === 'string' ? requestedModel.trim() : '';
     if (!sessionId?.trim()) {
+      const normalizedRequestedModel = typeof requestedModel === 'string' ? requestedModel.trim() : '';
       return normalizedRequestedModel || undefined;
     }
 
@@ -340,12 +347,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       return changedModel.model.trim();
     }
 
-    if (normalizedRequestedModel) {
-      return normalizedRequestedModel;
-    }
-
-    const active = await getCurrentActiveModel(provider, sessionId);
-    return active?.model?.trim() || undefined;
+    return undefined;
   };
 
   const clearCache = (): void => {

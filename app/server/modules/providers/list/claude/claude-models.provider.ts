@@ -1,4 +1,7 @@
 import { readFile } from 'node:fs/promises';
+import os from 'node:os';
+
+import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import { sessionsDb } from '@/modules/database/index.js';
 import type { IProviderModels } from '@/shared/interfaces.js';
@@ -9,6 +12,7 @@ import type {
   ProviderModelsDefinition,
   ProviderSessionActiveModelChange,
 } from '@/shared/types.js';
+import { resolveClaudeCodeExecutablePath } from '@/shared/claude-cli-path.js';
 import {
   buildDefaultProviderCurrentActiveModel,
   writeProviderSessionActiveModelChange,
@@ -232,19 +236,64 @@ const readClaudeSessionModelFromJsonl = async (
   return null;
 };
 
+// Map the SDK's ModelInfo[] (from query().supportedModels()) into our catalog.
+// The SDK reports exactly the models this auth/provider can use — including the
+// account's real Bedrock ids — so this is the single source of truth instead of
+// a hard-coded list. `value` is what we pass back as `--model`.
+function toModelsDefinition(models: SupportedModelInfo[]): ProviderModelsDefinition {
+  const OPTIONS: ProviderModelOption[] = [];
+  for (const m of models) {
+    const value = typeof m?.value === 'string' ? m.value.trim() : '';
+    if (!value) continue;
+    const option: ProviderModelOption = {
+      value,
+      label: m.displayName || value,
+      description: m.description || undefined,
+    };
+    if (m.supportsEffort && Array.isArray(m.supportedEffortLevels) && m.supportedEffortLevels.length > 0) {
+      option.effort = { default: 'high', values: m.supportedEffortLevels.map((v) => ({ value: v })) };
+    }
+    OPTIONS.push(option);
+  }
+  // Prefer the SDK's own default sentinel ('default') when present; else the first option.
+  const DEFAULT = OPTIONS.some((o) => o.value === 'default') ? 'default' : (OPTIONS[0]?.value ?? 'default');
+  return { OPTIONS, DEFAULT };
+}
+
+type SupportedModelInfo = {
+  value?: string;
+  displayName?: string;
+  description?: string;
+  supportsEffort?: boolean;
+  supportedEffortLevels?: string[];
+};
+
 export class ClaudeProviderModels implements IProviderModels {
   async getSupportedModels(): Promise<ProviderModelsDefinition> {
-    // claude creates a new jsonl file as a separate session for this request.
-    // As a result, it lists the workspace where this is invoked when it shouldn't.
-    //
-    // Disabled for now:
-    // const queryInstance = query({
-    //   prompt: 'Get supported models',
-    //   options: buildClaudeQueryOptions(),
-    // });
-    // const supportedModels = await queryInstance.supportedModels();
-    // queryInstance.close();
-    // return buildClaudeModelsDefinition(supportedModels);
+    // Ask the CLI what models this account actually has (via the Agent SDK), so
+    // the catalog matches `/model` exactly. Runs a throwaway query() purely to
+    // read supportedModels() — it never sends a prompt. On any failure (spawn,
+    // auth, older SDK without the method) fall back to the static list so the
+    // picker still works.
+    let queryInstance: ReturnType<typeof query> | undefined;
+    try {
+      queryInstance = query({
+        prompt: 'models',
+        options: {
+          cwd: os.tmpdir(),
+          settingSources: ['project', 'user', 'local'],
+          pathToClaudeCodeExecutable: resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH),
+        },
+      });
+      const supported = (await queryInstance.supportedModels()) as SupportedModelInfo[] | undefined;
+      if (Array.isArray(supported) && supported.length > 0) {
+        return toModelsDefinition(supported);
+      }
+    } catch (error) {
+      console.warn('[Claude models] supportedModels() failed, using fallback list:', (error as Error)?.message || error);
+    } finally {
+      try { queryInstance?.close?.(); } catch { /* best-effort */ }
+    }
     return CLAUDE_FALLBACK_MODELS;
   }
 

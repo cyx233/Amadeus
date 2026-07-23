@@ -318,7 +318,7 @@ test('provider models service delegates active model change requests to the prov
   assert.equal(changedModel.model, 'opus');
 });
 
-test('resolveSessionModel prefers a stored changed model over the requested one', async () => {
+test('resolveSessionModel returns the in-session override, ignoring the requested model', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-change-'));
   const activeModelChangesPath = path.join(tempRoot, 'session-model-changes.json');
 
@@ -346,4 +346,44 @@ test('resolveSessionModel prefers a stored changed model over the requested one'
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
+});
+
+test('resolveSessionModel returns undefined for a session with no override (falls back to preference)', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-nochange-'));
+  const activeModelChangesPath = path.join(tempRoot, 'session-model-changes.json');
+
+  try {
+    const service = createProviderModelsService({
+      activeModelChangesPath,
+      resolveProvider: (provider) => ({
+        models: {
+          getSupportedModels: async () => createModels(`${provider}-models`),
+          // A transcript model exists, but with no override we must NOT read it —
+          // the caller falls back to the Model Preference default instead.
+          getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
+          changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
+        },
+      }),
+    });
+
+    const model = await service.resolveSessionModel('cursor', 'session-no-override', 'composer-2-fast');
+    assert.equal(model, undefined);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('resolveSessionModel returns the requested model when there is no session', async () => {
+  const service = createProviderModelsService({
+    resolveProvider: (provider) => ({
+      models: {
+        getSupportedModels: async () => createModels(`${provider}-models`),
+        getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
+        changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
+      },
+    }),
+  });
+
+  assert.equal(await service.resolveSessionModel('cursor', undefined, 'composer-2-fast'), 'composer-2-fast');
+  assert.equal(await service.resolveSessionModel('cursor', '  ', null), undefined);
 });

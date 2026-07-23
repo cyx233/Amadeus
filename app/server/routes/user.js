@@ -5,7 +5,7 @@ import { userDb, modelPreferencesDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
 import { providerModelsService } from '../modules/providers/services/provider-models.service.js';
-import { CHAT_PROVIDERS, MODEL_FEATURES, prefKeys, resolveModel } from '../modules/providers/services/model-preference.service.js';
+import { CHAT_PROVIDERS, MODEL_FEATURES, prefKeys, resolveEffectiveModel } from '../modules/providers/services/model-preference.service.js';
 
 const router = express.Router();
 
@@ -242,21 +242,11 @@ router.get('/effective-model', authenticateToken, async (req, res) => {
     const providerPin = typeof req.query.provider === 'string' && req.query.provider ? req.query.provider : undefined;
     const sessionId = typeof req.query.sessionId === 'string' && req.query.sessionId.trim() ? req.query.sessionId.trim() : null;
 
-    const resolved = await resolveModel(req.user.id, feature, { provider: providerPin });
-
-    // A concrete session overrides the preference default with its own model.
-    // Single source of truth for that (change-override → transcript) is
-    // resolveSessionModel — no hand-rolled ordering here.
-    if (sessionId) {
-      try {
-        const sessionModel = await providerModelsService.resolveSessionModel(resolved.provider, sessionId);
-        if (sessionModel) {
-          return res.json({ provider: resolved.provider, model: sessionModel });
-        }
-      } catch {
-        // Session lookup is best-effort; fall through to the preference model.
-      }
-    }
+    // One resolver composes preference + session ordering (no hand-rolled steps).
+    const resolved = await resolveEffectiveModel(req.user.id, feature, {
+      provider: providerPin,
+      sessionId,
+    });
     res.json(resolved);
   } catch (error) {
     console.error('Error resolving effective model:', error);
