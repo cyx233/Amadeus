@@ -17,7 +17,7 @@ import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { query, InMemorySessionStore } from '@anthropic-ai/claude-agent-sdk';
+import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import { buildClaudeUserContent, normalizeImageDescriptors } from './shared/image-attachments.js';
 import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
@@ -850,80 +850,9 @@ function reconnectSessionWriter(sessionId, newRawWs) {
   return true;
 }
 
-/**
- * One-shot text generation via the Claude Agent SDK — a stripped-down sibling of
- * queryClaudeSDK for prompt-in/text-out tasks (e.g. commit messages) that don't
- * want the full agent session. No MCP servers, no tools, no hooks, no session
- * tracking, capped at a single turn — so there's nothing to stall on. Reuses the
- * same SDK/executable/env as queryClaudeSDK, so auth (Bedrock creds, etc.) is
- * identical. Returns the final result text.
- *
- * @param {string} prompt
- * @param {{ cwd?: string, model?: string, signal?: AbortSignal }} [options]
- * @returns {Promise<string>}
- */
-async function generateTextOnce(prompt, options = {}) {
-  const sdkOptions = {
-    env: { ...process.env },
-    pathToClaudeCodeExecutable: resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH),
-    // One question, one answer: no agent loop, no tools, no MCP, no side effects.
-    maxTurns: 1,
-    permissionMode: 'bypassPermissions',
-    allowedTools: [],
-    disallowedTools: [],
-    mcpServers: {},
-    // Keep the transcript in memory so this throwaway call doesn't leave a
-    // session record in ~/.claude/projects (which would clutter the history UI).
-    sessionStore: new InMemorySessionStore(),
-  };
-  // Only pin a model when the caller explicitly asks. Otherwise inherit whatever
-  // the container's claude is configured to use — an alias like 'sonnet' resolves
-  // to a bare model ARN in the wrong region and 403s on Bedrock accounts that are
-  // only authorized for a specific `us.` inference profile (which is the default
-  // the entrypoint already configured and knows works).
-  if (options.model) sdkOptions.model = options.model;
-  if (options.cwd) sdkOptions.cwd = options.cwd;
-  if (options.signal) sdkOptions.abortController = { signal: options.signal };
-
-  // Without this, the SDK's stdout stream doesn't close after the response ends,
-  // so the query generator never completes and the call hangs until aborted (the
-  // "aborted by user" we saw was our own 60s timeout firing). queryClaudeSDK sets
-  // the same env; the Query constructor reads it synchronously, so set it around
-  // construction and restore immediately after.
-  const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
-  process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
-  let queryInstance;
-  try {
-    queryInstance = query({ prompt, options: sdkOptions });
-  } finally {
-    if (prevStreamTimeout !== undefined) {
-      process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = prevStreamTimeout;
-    } else {
-      delete process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
-    }
-  }
-
-  let text = '';
-  for await (const message of queryInstance) {
-    // The terminal `result` message carries the full text on success; prefer it.
-    if (message.type === 'result' && message.subtype === 'success' && typeof message.result === 'string') {
-      text = message.result;
-      break;
-    }
-    // Fallback: accumulate assistant text blocks in case the result subtype differs.
-    if (message.type === 'assistant' && Array.isArray(message.message?.content)) {
-      for (const block of message.message.content) {
-        if (block.type === 'text' && block.text) text += block.text;
-      }
-    }
-  }
-  return text;
-}
-
 // Export public API
 export {
   queryClaudeSDK,
-  generateTextOnce,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,
   getActiveClaudeSDKSessions,
