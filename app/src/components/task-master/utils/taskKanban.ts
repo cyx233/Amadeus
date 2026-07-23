@@ -17,6 +17,13 @@ const KANBAN_COLUMN_CONFIG = [
     headerColor: 'bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200',
   },
   {
+    id: 'review',
+    titleKey: 'kanban.review',
+    status: 'review',
+    color: 'bg-purple-50 dark:bg-purple-900/50 border-purple-200 dark:border-purple-700',
+    headerColor: 'bg-purple-100 dark:bg-purple-800 text-purple-800 dark:text-purple-200',
+  },
+  {
     id: 'done',
     titleKey: 'kanban.done',
     status: 'done',

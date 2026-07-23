@@ -101,6 +101,7 @@
   "kanban": {
     "pending": "📋 待辦",
     "inProgress": "🚀 進行中",
+    "review": "👀 審查",
     "done": "✅ 已完成",
     "blocked": "🚫 已封鎖",
     "deferred": "⏳ 已延後",

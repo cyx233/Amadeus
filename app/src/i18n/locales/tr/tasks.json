@@ -101,6 +101,7 @@
   "kanban": {
     "pending": "📋 Yapılacak",
     "inProgress": "🚀 Sürüyor",
+    "review": "👀 İnceleme",
     "done": "✅ Tamamlandı",
     "blocked": "🚫 Engellendi",
     "deferred": "⏳ Ertelendi",
