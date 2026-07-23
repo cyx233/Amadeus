@@ -101,6 +101,7 @@
   "kanban": {
     "pending": "📋 Da fare",
     "inProgress": "🚀 In corso",
+    "review": "👀 Revisione",
     "done": "✅ Completate",
     "blocked": "🚫 Bloccate",
     "deferred": "⏳ Rimandate",
