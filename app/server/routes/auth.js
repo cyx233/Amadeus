@@ -160,6 +160,41 @@ router.get('/user', authenticateToken, (req, res) => {
   });
 });
 
+// Change the logged-in user's password. Lives here (auth surface) rather than in
+// /api/user so it runs on the auth-gateway, which owns the shared user DB — the
+// per-user backend containers don't hold the credential. `currentPassword` is
+// verified so a stolen cookie alone can't silently rotate the password.
+const MIN_PASSWORD_LENGTH = 6;
+router.post('/change-password', authenticateToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body ?? {};
+
+    if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({
+        error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      });
+    }
+
+    const account = userDb.getUserByUsername(req.user.username);
+    if (!account) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const currentValid = await bcrypt.compare(String(currentPassword ?? ''), account.password_hash);
+    if (!currentValid) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 12);
+    userDb.updatePassword(account.id, newHash);
+
+    res.json({ success: true, message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
 // Gateway verify endpoint for nginx auth_request. authenticateToken reads the
 // JWT from the amadeus_token cookie; on success we echo the username in a
 // response header so nginx can route the request to amadeus-<username>.

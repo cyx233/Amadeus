@@ -1,14 +1,9 @@
-import bcrypt from 'bcrypt';
 import express from 'express';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import spawn from 'cross-spawn';
 import { userDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
-
-// Match the cost factor used at registration (server/routes/auth.js).
-const BCRYPT_SALT_ROUNDS = 12;
-const MIN_PASSWORD_LENGTH = 6;
 
 const router = express.Router();
 
@@ -126,39 +121,5 @@ router.get('/onboarding-status', authenticateToken, async (req, res) => {
   }
 });
 
-// Change the logged-in user's password. Used by the onboarding "set password"
-// step (the admin-set initial password should not persist) and any later
-// settings entry. `currentPassword` is required and verified so a stolen cookie
-// alone can't silently rotate the password.
-router.post('/change-password', authenticateToken, async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body ?? {};
-
-    if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH) {
-      return res.status(400).json({
-        error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters`,
-      });
-    }
-
-    // req.user carries the username; fetch the full row (with hash) to verify.
-    const account = userDb.getUserByUsername(req.user.username);
-    if (!account) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    const currentValid = await bcrypt.compare(String(currentPassword ?? ''), account.password_hash);
-    if (!currentValid) {
-      return res.status(400).json({ error: 'Current password is incorrect' });
-    }
-
-    const newHash = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
-    userDb.updatePassword(account.id, newHash);
-
-    res.json({ success: true, message: 'Password updated successfully' });
-  } catch (error) {
-    console.error('Error changing password:', error);
-    res.status(500).json({ error: 'Failed to change password' });
-  }
-});
 
 export default router;

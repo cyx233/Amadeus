@@ -268,8 +268,10 @@ export const api = {
       authenticatedFetch('/api/user/complete-onboarding', {
         method: 'POST',
       }),
+    // Routed to /api/auth (the auth-gateway) — it owns the shared user DB; the
+    // per-user backend containers don't hold credentials.
     changePassword: (currentPassword, newPassword) =>
-      authenticatedFetch('/api/user/change-password', {
+      authenticatedFetch('/api/auth/change-password', {
         method: 'POST',
         body: JSON.stringify({ currentPassword, newPassword }),
       }),
