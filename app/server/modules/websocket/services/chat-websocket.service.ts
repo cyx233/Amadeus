@@ -403,6 +403,15 @@ export function handleChatConnection(
         case 'chat.permission-response':
           handlePermissionResponse(data, dependencies);
           return;
+        case 'ping':
+          // App-level keepalive: the client sends this periodically so there is
+          // always client→server traffic, which keeps reverse proxies that only
+          // watch the upstream direction from closing an otherwise-idle socket
+          // (protocol-level server pings don't always reset those timers).
+          if (ws.readyState === ws.OPEN) {
+            ws.send(JSON.stringify({ kind: 'pong', timestamp: Date.now() }));
+          }
+          return;
         default:
           sendProtocolError(ws, 'UNKNOWN_MESSAGE_TYPE', `Unknown message type "${messageType}".`);
           return;
