@@ -168,7 +168,7 @@ function TaskCard({ task, onClick = null, showParent = false, className = '' }: 
             )}
           </div>
 
-          <h3 className="line-clamp-2 text-sm font-medium leading-tight text-gray-900 dark:text-white">
+          <h3 className="break-words text-sm font-medium leading-tight text-gray-900 dark:text-white">
             {task.title}
           </h3>
 
