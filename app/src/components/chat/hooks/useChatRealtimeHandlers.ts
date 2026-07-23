@@ -314,7 +314,15 @@ export function useChatRealtimeHandlers({
 
         case 'status': {
           if (msg.text === 'token_budget' && msg.tokenBudget) {
-            setTokenBudget(msg.tokenBudget as Record<string, unknown>);
+            // `tokenBudget` is a single global state for the session the user
+            // is *viewing*. Concurrent background runs each stream their own
+            // token_budget snapshots over the same socket; applying them here
+            // unconditionally let another session's numbers overwrite (and
+            // flicker) the viewed session's usage. Scope it to the active view
+            // like every other UI side-effect in this handler.
+            if (sid === activeViewSessionId) {
+              setTokenBudget(msg.tokenBudget as Record<string, unknown>);
+            }
           } else if (msg.text && sid) {
             onSessionProcessing?.(sid, {
               statusText: msg.text as string,
