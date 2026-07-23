@@ -129,6 +129,12 @@ cmd_add() {
       args:
         SKIP_AUTH: "true"
     restart: unless-stopped
+    # Per-user resource caps so one runaway agent can't starve the host or other
+    # users. Plain-compose keys (deploy.resources needs Swarm). Tune AMADEUS_USER_CPUS
+    # / AMADEUS_USER_MEM in the environment before \`add\` to override the defaults.
+    cpus: "${AMADEUS_USER_CPUS:-6}"
+    mem_limit: ${AMADEUS_USER_MEM:-6g}
+    memswap_limit: ${AMADEUS_USER_MEM:-6g}
     container_name: amadeus-${USERNAME}
     expose:
       - "3001"
