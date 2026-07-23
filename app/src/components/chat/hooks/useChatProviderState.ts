@@ -87,7 +87,7 @@ type ChangeActiveModelApiResponse = {
   };
 };
 
-export function useChatProviderState({ selectedSession, selectedProject: _selectedProject }: UseChatProviderStateArgs) {
+export function useChatProviderState({ selectedSession, selectedProject }: UseChatProviderStateArgs) {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [provider, setProvider] = useState<LLMProvider>(readStoredProvider);
@@ -145,7 +145,10 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   //     (Settings → Model Preference), so a fresh chat/project starts there.
   //   - an existing session → that session's own provider + model.
   // No localStorage: the default lives in the DB, the per-session model on the
-  // server, so nothing sticks across projects/sessions.
+  // server, so nothing sticks across projects/sessions. Re-seed on project
+  // change too: switching between two session-less projects leaves session id
+  // and provider both undefined, so without selectedProject in the deps the
+  // picker would keep the in-memory model chosen in the previous project.
   useEffect(() => {
     let cancelled = false;
     const sessionId = selectedSession?.id;
@@ -176,7 +179,7 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedSession?.id, selectedSession?.__provider]);
+  }, [selectedSession?.id, selectedSession?.__provider, selectedProject?.projectId]);
 
   const setStoredProviderEffort = useCallback((targetProvider: LLMProvider, effort: string) => {
     setProviderEfforts((previous) => (
