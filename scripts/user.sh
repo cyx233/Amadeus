@@ -16,7 +16,28 @@ set -e
 
 # Run from the repo root so relative paths and .env resolve.
 cd "$(dirname "$0")/.."
-# Load .env for AMADEUS_ADMIN_TOKEN (needed to authorize registration).
+
+# The multi-user gateway shares JWT_SECRET across the auth-gateway and every
+# per-user backend container, so it must come from .env (a DB-generated secret
+# would differ per container and break token verification). ADMIN_TOKEN gates
+# registration. Generate either if absent so a fresh deployment just works —
+# must run BEFORE sourcing .env below so the new values are loaded.
+ensure_secret() {
+  local key="$1"
+  [ -f .env ] || touch .env
+  if ! grep -q "^${key}=." .env 2>/dev/null; then
+    # Drop any empty "KEY=" line, then append a freshly generated value.
+    sed -i.bak "/^${key}=$/d" .env && rm -f .env.bak
+    echo "${key}=$(openssl rand -hex 32)" >> .env
+    echo "[*] Generated ${key} in .env"
+  fi
+}
+ensure_secret JWT_SECRET
+ensure_secret AMADEUS_ADMIN_TOKEN
+# .env now holds the deployment's root secret — restrict it to the owner.
+[ -f .env ] && chmod 600 .env
+
+# Load .env so AMADEUS_ADMIN_TOKEN / JWT_SECRET are available to curl + compose.
 [ -f .env ] && set -a && . ./.env && set +a
 
 MULTI_FILE="docker-compose.multi.yml"
@@ -28,7 +49,7 @@ AUTH_DB="/home/agent/.amadeus/auth.db"
 ensure_gateway() {
   if ! curl -s -o /dev/null --max-time 2 "${AUTH_URL}/api/auth/status"; then
     echo "[*] Gateway not responding — starting gateway + auth-gateway ..."
-    docker compose up -d --build gateway auth-gateway
+    "${COMPOSE[@]}" up -d --build gateway auth-gateway
     for _ in $(seq 1 30); do
       curl -s -o /dev/null --max-time 2 "${AUTH_URL}/api/auth/status" && break
       sleep 1
