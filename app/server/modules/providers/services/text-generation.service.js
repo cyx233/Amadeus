@@ -12,10 +12,8 @@
  */
 
 import { generateTextOnce } from '../../../claude-sdk.js';
-import { spawnCursor } from '../../../cursor-cli.js';
-import { queryCodex } from '../../../openai-codex.js';
-import { spawnOpenCode } from '../../../opencode-cli.js';
 
+import { getProviderRunner } from './provider-runtime.service.js';
 import { resolveModel } from './model-preference.service.js';
 
 const DEFAULT_TIMEOUT_MS = 60_000;
@@ -61,18 +59,15 @@ export async function generateOnce({ userId, feature, prompt, cwd, provider: pro
   try {
     let text = '';
     if (provider === 'claude') {
-      // claude uniquely has an SDK one-shot mode that leaves no session record.
+      // claude uniquely has an SDK one-shot mode that leaves no session record;
+      // the external CLIs have no such mode, so they use the shared streaming
+      // runner and always create their own session (unavoidable for those tools).
       text = await generateTextOnce(prompt, { cwd, model: modelArg, signal: abort.signal });
     } else {
-      // External CLIs: stream to a writer and collect. Each always creates its
-      // own session (no in-memory mode), which is unavoidable for these tools.
+      const runner = getProviderRunner(provider);
+      if (!runner) throw new Error(`Unsupported provider for one-shot generation: ${provider}`);
       const writer = { send: (d) => collectText(d, (t) => { text += t; }), setSessionId: () => {} };
       const opts = { cwd, model: modelArg, skipPermissions: true, permissionMode: 'bypassPermissions' };
-      const runner = provider === 'cursor' ? spawnCursor
-        : provider === 'codex' ? queryCodex
-        : provider === 'opencode' ? spawnOpenCode
-        : null;
-      if (!runner) throw new Error(`Unsupported provider for one-shot generation: ${provider}`);
       const timeout = new Promise((_, reject) => {
         abort.signal.addEventListener('abort', () => reject(new Error(`${feature} generation timed out`)));
       });
