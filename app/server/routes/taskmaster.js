@@ -14,11 +14,27 @@ import path from 'path';
 import express from 'express';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution — required
 // here since task-master/npx are .cmd shims on Windows.
-import spawn from 'cross-spawn';
+import rawSpawn from 'cross-spawn';
 
 import { projectsDb } from '../modules/database/index.js';
 import { detectTaskMasterMCPServer } from '../utils/mcp-detector.js';
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from '../utils/taskmaster-websocket.js';
+
+// Every task-master invocation in this module goes through this wrapped spawn.
+// It injects a NODE_OPTIONS preload that sets AI SDK 5's
+// `globalThis.AI_SDK_LOG_WARNINGS=false` inside the spawned process, silencing
+// the harmless "System messages in the prompt..." warning. The SDK only reads
+// that global (not an env var), so it must be set in task-master's own runtime;
+// NODE_OPTIONS carries the `--import data:` across the npx -> node hop with no
+// preload file. Harmless for non-AI calls (which/--version) — they ignore it.
+function spawn(command, args, options = {}) {
+  const preload = '--import data:text/javascript,globalThis.AI_SDK_LOG_WARNINGS=false';
+  const env = {
+    ...(options.env ?? process.env),
+    NODE_OPTIONS: [(options.env ?? process.env).NODE_OPTIONS, preload].filter(Boolean).join(' '),
+  };
+  return rawSpawn(command, args, { ...options, env });
+}
 
 /**
  * Resolve the absolute project directory from a DB-assigned `projectId`.
@@ -806,15 +822,16 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
             });
         }
 
-        // Tasks live inside a tag (per-PRD set), so every sub-command must target
-        // the same tag or it would touch the wrong set. `tagArgs` is spread into
-        // each spawn (empty for master / when no tag is given).
+        // Tasks live inside a tag (per-PRD set), so tag-aware sub-commands must
+        // target the same tag or they'd touch the wrong set. All commands routed
+        // through run() below (add/remove-dependency, update-task) accept --tag.
         const tagArgs = tag && tag !== 'master' ? ['--tag', String(tag)] : [];
 
-        // Promisified spawn so we can run several structured sub-commands (status,
-        // priority, deps, prompt) in sequence and fail fast on the first error.
+        // Promisified spawn so we can run several structured sub-commands (deps,
+        // prompt) in sequence and fail fast on the first error.
         const run = (args) => new Promise((resolve, reject) => {
-            const child = spawn('npx', ['task-master', ...args, ...tagArgs], {
+            const cmdArgs = [...args, ...tagArgs];
+            const child = spawn('npx', ['task-master', ...cmdArgs], {
                 cwd: projectPath,
                 stdio: ['ignore', 'pipe', 'pipe'],
             });
@@ -829,9 +846,40 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
             });
         });
 
-        // Status → dedicated set-status command.
+        // Status → write tasks.json directly. TaskMaster's CLI `set-status` (v0.43.1,
+        // apps/cli/src/commands/set-status.command.ts) has NO --tag option — it calls
+        // tmCore.tasks.updateStatus(id, status) against whatever tag state.json marks
+        // active, so it can't target a tag without a global `tags use` side effect.
+        // The tag-aware core isn't importable (published as minified, hashed chunks
+        // with no `exports`). A status change is a single-field write, so we do it in
+        // place under the correct tag, replicating updateStatus's two guards: valid
+        // status, and no done→pending. Supports "5" (task) and "5.2" (subtask) ids.
         if (typeof status === 'string' && status) {
-            await run(['set-status', `--id=${taskId}`, `--status=${status}`]);
+            // Mirror tm-core Task.isValidStatus (config-manager). Trust boundary: status
+            // comes from the request body.
+            const VALID_STATUSES = ['pending', 'in-progress', 'done', 'deferred', 'cancelled', 'blocked', 'review'];
+            if (!VALID_STATUSES.includes(status)) {
+                return res.status(400).json({ error: 'Invalid status', message: `Status must be one of: ${VALID_STATUSES.join(', ')}` });
+            }
+            const tasksFilePath = path.join(projectPath, '.taskmaster', 'tasks', 'tasks.json');
+            const data = JSON.parse(await fsPromises.readFile(tasksFilePath, 'utf8'));
+            const tagKey = tag || 'master';
+            const list = data[tagKey]?.tasks ?? data.tasks;
+            if (!Array.isArray(list)) {
+                return res.status(404).json({ error: 'Tag not found', message: `Tag "${tagKey}" has no tasks` });
+            }
+            const [parentId, subId] = String(taskId).split('.');
+            const task = list.find((tk) => String(tk.id) === parentId);
+            const target = subId != null ? task?.subtasks?.find((st) => String(st.id) === subId) : task;
+            if (!target) {
+                return res.status(404).json({ error: 'Task not found', message: `Task "${taskId}" not found in tag "${tagKey}"` });
+            }
+            if (target.status === 'done' && status === 'pending') {
+                return res.status(400).json({ error: 'Invalid transition', message: 'Cannot move a completed task back to pending' });
+            }
+            target.status = status;
+            target.updatedAt = new Date().toISOString();
+            await fsPromises.writeFile(tasksFilePath, JSON.stringify(data, null, 2) + '\n');
         }
 
         // Dependencies → diff the requested list against the current one and add/
