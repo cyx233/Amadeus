@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
 
@@ -238,8 +239,9 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         />
       )}
 
-      {/* Delete Confirmation Dialog */}
-      {operations.deleteConfirmation.isOpen && operations.deleteConfirmation.item && (
+      {/* Delete Confirmation Dialog — portaled to body so `fixed` positions against
+          the viewport, not the blur-filtered sidebar ancestor (which would clip it). */}
+      {operations.deleteConfirmation.isOpen && operations.deleteConfirmation.item && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
           <div className="mx-4 max-w-sm rounded-lg border border-border bg-background p-4 shadow-lg">
             <div className="mb-4 flex items-center gap-3">
@@ -280,11 +282,12 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      {/* Toast Notification */}
-      {toast && (
+      {/* Toast Notification — portaled for the same reason as the dialog above. */}
+      {toast && createPortal(
         <div
           className={cn(
             'fixed bottom-4 right-4 z-[9999] px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-bottom-2',
@@ -299,7 +302,8 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
             <X className="h-4 w-4" />
           )}
           <span className="text-sm">{toast.message}</span>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

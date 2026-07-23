@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState, useRef } from 'react';
-import { MessageSquare, Plus, MoreVertical, Archive, Trash2, RotateCcw } from 'lucide-react';
+import { MessageSquare, Plus, MoreVertical, Trash2, RotateCcw } from 'lucide-react';
 import { ScrollArea } from '../../../../shared/view/ui';
 import { authenticatedFetch } from '../../../../utils/api';
 import type { Project, ProjectSession } from '../../../../types/app';
@@ -19,6 +19,7 @@ type SidebarContentProps = {
   isRefreshing: boolean;
   onCreateProject: () => void;
   onCollapseSidebar: () => void;
+  onRequestDeleteProject: (project: Project) => void;
 };
 
 export default function SidebarContent({
@@ -33,6 +34,7 @@ export default function SidebarContent({
   isRefreshing,
   onCreateProject,
   onCollapseSidebar,
+  onRequestDeleteProject,
 }: SidebarContentProps) {
   // Project auto-selection/restore lives in useProjectsState (URL-session
   // resolution, persisted selection, single-project). Selecting projects[0]
@@ -51,25 +53,14 @@ export default function SidebarContent({
     return projects.find(p => p.projectId === id) ?? selectedProject;
   }, [projects, selectedProject]);
 
-  const handleArchiveProject = useCallback(async () => {
+  // Delete opens the rich confirmation modal (archive vs. permanent-delete with
+  // type-to-confirm and a download-first link) instead of a native confirm().
+  const handleDeleteProject = useCallback(() => {
     const project = getActiveProject();
     if (!project) return;
-    const name = project.displayName || project.fullPath?.split('/').pop() || 'project';
-    if (!confirm(`Archive "${name}"? You can restore it later.`)) return;
-    await authenticatedFetch(`/api/projects/${project.projectId}`, { method: 'DELETE' });
     setProjectMenu(false);
-    await onRefresh();
-  }, [getActiveProject, onRefresh]);
-
-  const handleDeleteProject = useCallback(async () => {
-    const project = getActiveProject();
-    if (!project) return;
-    const name = project.displayName || project.fullPath?.split('/').pop() || 'project';
-    if (!confirm(`Permanently delete "${name}" and all its sessions? This cannot be undone.`)) return;
-    await authenticatedFetch(`/api/projects/${project.projectId}?force=true`, { method: 'DELETE' });
-    setProjectMenu(false);
-    await onRefresh();
-  }, [getActiveProject, onRefresh]);
+    onRequestDeleteProject(project);
+  }, [getActiveProject, onRequestDeleteProject]);
 
   const handleShowArchived = useCallback(async () => {
     const res = await authenticatedFetch('/api/projects/archived');
@@ -140,15 +131,8 @@ export default function SidebarContent({
             </button>
             {projectMenu && (
               <div className="absolute right-0 top-8 z-50 min-w-[140px] rounded-md border border-border bg-popover p-1 shadow-md">
-                <button className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent" onClick={() => { window.open(`/api/projects/${getActiveProject()?.projectId}/download`, '_blank'); setProjectMenu(false); }}>
-                  <Archive className="h-3 w-3" /> Download
-                </button>
-                <div className="my-1 border-t border-border" />
-                <button className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent" onClick={handleArchiveProject}>
-                  <Archive className="h-3 w-3" /> Archive
-                </button>
                 <button className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-destructive hover:bg-destructive/10" onClick={handleDeleteProject}>
-                  <Trash2 className="h-3 w-3" /> Delete
+                  <Trash2 className="h-3 w-3" /> Delete…
                 </button>
                 <div className="my-1 border-t border-border" />
                 <button className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent" onClick={handleShowArchived}>

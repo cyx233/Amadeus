@@ -77,6 +77,7 @@ function Sidebar({
     showVersionModal,
     confirmDeleteSession,
     confirmDeleteProject,
+    requestProjectDelete,
     handleProjectSelect,
     refreshProjects,
     collapseSidebar: handleCollapseSidebar,
@@ -144,6 +145,7 @@ function Sidebar({
               isRefreshing={isRefreshing}
               onCreateProject={() => setShowNewProject(true)}
               onCollapseSidebar={handleCollapseSidebar}
+              onRequestDeleteProject={requestProjectDelete}
             />
           )}
           {activeView === 'search' && (
