@@ -111,7 +111,25 @@
     "tasks": "Tasks",
     "browser": "Browser",
     "notifications": "Notifications",
+    "account": "Account",
     "about": "About"
+  },
+  "account": {
+    "password": {
+      "title": "Change Password",
+      "description": "Update the password for your account.",
+      "current": "Current Password",
+      "new": "New Password",
+      "newPlaceholder": "At least {{count}} characters",
+      "confirm": "Confirm New Password",
+      "submit": "Update Password"
+    },
+    "success": "Password updated successfully.",
+    "errors": {
+      "tooShort": "New password must be at least {{count}} characters.",
+      "mismatch": "Passwords do not match.",
+      "failed": "Failed to update password."
+    }
   },
   "notifications": {
     "title": "Notifications",

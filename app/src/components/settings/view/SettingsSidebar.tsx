@@ -1,7 +1,8 @@
-import { Bell, Bot, GitBranch, Info, Key, ListChecks, Mic, MonitorPlay, Palette } from 'lucide-react';
+import { Bell, Bot, GitBranch, Info, Key, ListChecks, Mic, MonitorPlay, Palette, UserCog } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '../../../lib/utils';
+import { IS_PLATFORM } from '../../../constants/config';
 import { PillBar, Pill } from '../../../shared/view/ui';
 import type { SettingsMainTab } from '../types/types';
 
@@ -25,6 +26,9 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'tasks', labelKey: 'mainTabs.tasks', icon: ListChecks },
   { id: 'browser', labelKey: 'mainTabs.browser', icon: MonitorPlay },
   { id: 'notifications', labelKey: 'mainTabs.notifications', icon: Bell },
+  // Account/password only applies to the multi-user gateway deploy (platform
+  // mode); single-user has no login to change.
+  ...(IS_PLATFORM ? [{ id: 'account' as const, labelKey: 'mainTabs.account', icon: UserCog }] : []),
   { id: 'about', labelKey: 'mainTabs.about', icon: Info },
 ];
 
