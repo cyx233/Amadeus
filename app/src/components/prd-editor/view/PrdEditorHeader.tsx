@@ -6,10 +6,8 @@ import {
   FileText,
   Maximize2,
   Minimize2,
-  Moon,
   Save,
   Sparkles,
-  Sun,
   X,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
@@ -18,12 +16,11 @@ type PrdEditorHeaderProps = {
   fileName: string;
   onFileNameChange: (nextFileName: string) => void;
   isNewFile: boolean;
+  fileNameReadOnly: boolean;
   previewMode: boolean;
   onTogglePreview: () => void;
   wordWrap: boolean;
   onToggleWordWrap: () => void;
-  isDarkMode: boolean;
-  onToggleTheme: () => void;
   onDownload: () => void;
   onOpenGenerateTasks: () => void;
   canGenerateTasks: boolean;
@@ -63,12 +60,11 @@ export default function PrdEditorHeader({
   fileName,
   onFileNameChange,
   isNewFile,
+  fileNameReadOnly,
   previewMode,
   onTogglePreview,
   wordWrap,
   onToggleWordWrap,
-  isDarkMode,
-  onToggleTheme,
   onDownload,
   onOpenGenerateTasks,
   canGenerateTasks,
@@ -97,7 +93,12 @@ export default function PrdEditorHeader({
                   type="text"
                   value={fileName}
                   onChange={(event) => onFileNameChange(event.target.value)}
-                  className="min-w-0 flex-1 border-none bg-transparent text-base font-medium text-gray-900 placeholder-gray-400 outline-none dark:text-white dark:placeholder-gray-500 sm:text-sm"
+                  readOnly={fileNameReadOnly}
+                  title={fileNameReadOnly ? 'Filename is fixed for an existing PRD' : undefined}
+                  className={cn(
+                    'min-w-0 flex-1 border-none bg-transparent text-base font-medium text-gray-900 placeholder-gray-400 outline-none dark:text-white dark:placeholder-gray-500 sm:text-sm',
+                    fileNameReadOnly && 'cursor-default text-gray-500 dark:text-gray-400',
+                  )}
                   placeholder="Enter PRD filename"
                   maxLength={100}
                 />
@@ -153,18 +154,6 @@ export default function PrdEditorHeader({
           onClick={onToggleWordWrap}
           icon={<span className="font-mono text-sm font-bold md:text-xs">WRAP</span>}
           active={wordWrap}
-        />
-
-        <HeaderIconButton
-          title="Toggle theme"
-          onClick={onToggleTheme}
-          icon={
-            isDarkMode ? (
-              <Sun className="h-5 w-5 md:h-4 md:w-4" />
-            ) : (
-              <Moon className="h-5 w-5 md:h-4 md:w-4" />
-            )
-          }
         />
 
         <HeaderIconButton

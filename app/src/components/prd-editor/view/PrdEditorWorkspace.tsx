@@ -1,6 +1,9 @@
 import { useState } from 'react';
+
 import { cn } from '../../../lib/utils';
+import { useTheme } from '../../../contexts/ThemeContext';
 import { ensurePrdExtension } from '../utils/fileName';
+
 import GenerateTasksModal from './GenerateTasksModal';
 import PrdEditorBody from './PrdEditorBody';
 import PrdEditorFooter from './PrdEditorFooter';
@@ -34,7 +37,9 @@ export default function PrdEditorWorkspace({
   loadError,
 }: PrdEditorWorkspaceProps) {
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-  const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
+  // Theme follows the IDE-wide setting; no separate per-editor toggle (it would
+  // desync from the surrounding `dark:` chrome). CodeMirror needs the boolean.
+  const { isDarkMode } = useTheme();
   const [previewMode, setPreviewMode] = useState<boolean>(false);
   const [wordWrap, setWordWrap] = useState<boolean>(true);
   const [showGenerateModal, setShowGenerateModal] = useState<boolean>(false);
@@ -74,12 +79,11 @@ export default function PrdEditorWorkspace({
           fileName={fileName}
           onFileNameChange={onFileNameChange}
           isNewFile={isNewFile}
+          fileNameReadOnly={!isNewFile}
           previewMode={previewMode}
           onTogglePreview={() => setPreviewMode((current) => !current)}
           wordWrap={wordWrap}
           onToggleWordWrap={() => setWordWrap((current) => !current)}
-          isDarkMode={isDarkMode}
-          onToggleTheme={() => setIsDarkMode((current) => !current)}
           onDownload={onDownload}
           onOpenGenerateTasks={handleOpenGenerateTasks}
           canGenerateTasks={Boolean(content.trim())}
