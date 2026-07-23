@@ -1,17 +1,25 @@
-import { Sparkles, X } from 'lucide-react';
-import { PRD_DOCS_URL } from '../constants';
+import { Loader2, Sparkles, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '../../../shared/view/ui';
 
 type GenerateTasksModalProps = {
   isOpen: boolean;
   fileName: string;
   onClose: () => void;
+  // Kicks off generation for this PRD (streams progress in a separate modal).
+  onGenerate: () => void;
+  // Generation reads the saved file from disk, so it's only enabled once the
+  // PRD has been saved (no unsaved edits pending).
+  canGenerate: boolean;
+  generating: boolean;
 };
 
 export default function GenerateTasksModal({
   isOpen,
   fileName,
   onClose,
+  onGenerate,
+  canGenerate,
+  generating,
 }: GenerateTasksModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -25,9 +33,7 @@ export default function GenerateTasksModal({
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100 dark:bg-purple-900/50">
               <Sparkles className="h-4 w-4 text-purple-600 dark:text-purple-400" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Generate Tasks from PRD
-            </h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Generate Tasks from PRD</h3>
           </div>
           <button
             onClick={onClose}
@@ -38,38 +44,24 @@ export default function GenerateTasksModal({
         </div>
 
         <div className="space-y-4 p-6">
-          <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 dark:border-purple-800 dark:bg-purple-900/20">
-            <h4 className="mb-2 font-semibold text-purple-900 dark:text-purple-100">
-              Ask Claude Code directly
-            </h4>
-            <p className="mb-3 text-sm text-purple-800 dark:text-purple-200">
-              Save this PRD, then ask Claude Code in chat to parse the file and create your initial tasks.
+          <p className="text-sm text-gray-700 dark:text-gray-300">
+            TaskMaster will parse <span className="font-mono text-xs">{fileName}</span> and generate a task set
+            (its own tag, kept separate from other PRDs). This takes up to a couple of minutes.
+          </p>
+
+          {!canGenerate && (
+            <p className="rounded-md bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+              Save the PRD first — generation reads the saved file.
             </p>
-
-            <div className="rounded border border-purple-200 bg-white p-3 dark:border-purple-700 dark:bg-gray-800">
-              <p className="mb-1 text-xs font-medium text-gray-600 dark:text-gray-400">Example prompt</p>
-              <p className="font-mono text-xs text-gray-900 dark:text-white">
-                I have a PRD at .taskmaster/docs/{fileName}. Parse it and create the initial tasks.
-              </p>
-            </div>
-          </div>
-
-          <div className="border-t border-gray-200 pt-4 text-center dark:border-gray-700">
-            <a
-              href={PRD_DOCS_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-block text-sm font-medium text-purple-600 underline hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
-            >
-              View TaskMaster documentation
-            </a>
-          </div>
+          )}
 
           <button
-            onClick={onClose}
-            className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600"
+            onClick={onGenerate}
+            disabled={!canGenerate || generating}
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Got it
+            {generating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {generating ? 'Generating…' : 'Generate Tasks'}
           </button>
         </div>
       </DialogContent>

@@ -1,5 +1,8 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { Project } from '../../types/app';
+import { useGenerateTasks } from '../task-master/hooks/useGenerateTasks';
+import { prdNameToTag } from '../task-master/utils/prdTag';
+import GenerateProgressModal from '../task-master/view/modals/GenerateProgressModal';
 import { usePrdDocument } from './hooks/usePrdDocument';
 import { usePrdKeyboardShortcuts } from './hooks/usePrdKeyboardShortcuts';
 import { usePrdRegistry } from './hooks/usePrdRegistry';
@@ -122,6 +125,20 @@ export default function PRDEditor({
     setFileName(newName);
   }, [content, fileName, savePrd, setFileName]);
 
+  // Generate tasks from this PRD (streams progress). Generation reads the saved
+  // file on disk, so it targets the current fileName's tag.
+  const generate = useGenerateTasks();
+  const handleGenerate = useCallback(() => {
+    if (!project?.projectId) return;
+    const name = ensurePrdExtension(fileName || 'prd');
+    generate.start({
+      projectId: project.projectId,
+      fileName: name,
+      tag: prdNameToTag(name),
+      onComplete: () => { void refreshExistingPrds(); },
+    });
+  }, [project?.projectId, fileName, generate, refreshExistingPrds]);
+
   usePrdKeyboardShortcuts({
     onSave: () => {
       void handleSave();
@@ -152,7 +169,14 @@ export default function PRDEditor({
         onDownload={handleDownload}
         onClose={onClose}
         loadError={loadError}
+        onGenerate={handleGenerate}
+        canGenerate={Boolean(project?.projectId) && existingPrds.some((prd) => prd.name === ensurePrdExtension(fileName || 'prd'))}
+        generating={generate.isRunning}
       />
+
+      {generate.progress && (
+        <GenerateProgressModal progress={generate.progress} onStop={generate.stop} onClose={generate.dismiss} />
+      )}
 
       <OverwriteConfirmModal
         isOpen={showOverwriteConfirm}

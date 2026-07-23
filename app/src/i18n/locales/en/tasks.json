@@ -132,6 +132,10 @@
     "starting": "Starting…",
     "generating": "Generating…"
   },
+  "actions": {
+    "stop": "Stop",
+    "close": "Close"
+  },
   "prd": {
     "modified": "Modified: {{date}}"
   },

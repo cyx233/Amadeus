@@ -22,6 +22,10 @@ type PrdEditorWorkspaceProps = {
   onDownload: () => void;
   onClose: () => void;
   loadError: string | null;
+  // Generate tasks from the saved PRD (streams progress via the parent).
+  onGenerate: () => void;
+  canGenerate: boolean;
+  generating: boolean;
 };
 
 export default function PrdEditorWorkspace({
@@ -37,6 +41,9 @@ export default function PrdEditorWorkspace({
   onDownload,
   onClose,
   loadError,
+  onGenerate,
+  canGenerate,
+  generating,
 }: PrdEditorWorkspaceProps) {
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   // Theme follows the IDE-wide setting; no separate per-editor toggle (it would
@@ -115,6 +122,9 @@ export default function PrdEditorWorkspace({
         isOpen={showGenerateModal}
         fileName={ensurePrdExtension(fileName || 'prd')}
         onClose={() => setShowGenerateModal(false)}
+        onGenerate={() => { setShowGenerateModal(false); onGenerate(); }}
+        canGenerate={canGenerate}
+        generating={generating}
       />
     </div>
   );
