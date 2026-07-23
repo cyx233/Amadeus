@@ -5,7 +5,7 @@ import { userDb, modelPreferencesDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
 import { providerModelsService } from '../modules/providers/services/provider-models.service.js';
-import { CHAT_PROVIDERS, prefKeys } from '../modules/providers/services/model-preference.service.js';
+import { CHAT_PROVIDERS, MODEL_FEATURES, prefKeys } from '../modules/providers/services/model-preference.service.js';
 
 const router = express.Router();
 
@@ -127,10 +127,8 @@ router.get('/onboarding-status', authenticateToken, async (req, res) => {
 // fallback and optional per-feature override — the single source of truth that
 // keeps features model-id agnostic. Keys are owned by the model-preference
 // service (prefKeys); catalogs come from providerModelsService.
-const catalogProviderFor = (provider) => (provider === 'taskmaster' ? 'claude' : provider);
-
 async function providerCatalog(provider) {
-  const catalog = (await providerModelsService.getProviderModels(catalogProviderFor(provider))).models;
+  const catalog = (await providerModelsService.getProviderModels(provider)).models;
   return {
     provider,
     defaultModel: catalog.DEFAULT,
@@ -146,8 +144,7 @@ router.get('/models', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const prefs = modelPreferencesDb.getAll(userId);
-    const providerNames = [...CHAT_PROVIDERS, 'taskmaster'];
-    const providers = await Promise.all(providerNames.map(async (provider) => {
+    const providers = await Promise.all(CHAT_PROVIDERS.map(async (provider) => {
       const cat = await providerCatalog(provider);
       return {
         provider,
@@ -156,10 +153,20 @@ router.get('/models', authenticateToken, async (req, res) => {
         options: cat.options,
       };
     }));
+    // Per-feature overrides (for the Feature Preference tab). Empty override =
+    // inherits the defaults above; surface null so the UI can show "Default".
+    const features = MODEL_FEATURES.map((f) => ({
+      id: f.id,
+      label: f.label,
+      provider: prefs[prefKeys.featureProvider(f.id)] || null,
+      model: prefs[prefKeys.featureModel(f.id)] || null,
+    }));
+
     res.json({
       globalProvider: prefs[prefKeys.globalProvider()] || CHAT_PROVIDERS[0],
       chatProviders: CHAT_PROVIDERS,
       providers,
+      features,
     });
   } catch (error) {
     console.error('Error reading model preferences:', error);
@@ -175,7 +182,14 @@ router.get('/models', authenticateToken, async (req, res) => {
 router.put('/models', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { globalProvider, provider, model, feature } = req.body;
+    const { globalProvider, provider, model, feature, clear } = req.body;
+
+    // Clear a per-feature override → revert to the defaults.
+    if (feature && (clear === 'provider' || clear === 'model')) {
+      const key = clear === 'provider' ? prefKeys.featureProvider(feature) : prefKeys.featureModel(feature);
+      modelPreferencesDb.unset(userId, key);
+      return res.json({ success: true });
+    }
 
     if (typeof globalProvider === 'string') {
       if (!CHAT_PROVIDERS.includes(globalProvider)) {
@@ -185,8 +199,8 @@ router.put('/models', authenticateToken, async (req, res) => {
       return res.json({ success: true });
     }
 
-    // Provider must be a known catalog for anything model-related below.
-    if (typeof provider !== 'string' || (![...CHAT_PROVIDERS, 'taskmaster'].includes(provider))) {
+    // Provider must be a known chat provider for anything model-related below.
+    if (typeof provider !== 'string' || !CHAT_PROVIDERS.includes(provider)) {
       return res.status(400).json({ error: `Unknown provider: ${provider}` });
     }
 

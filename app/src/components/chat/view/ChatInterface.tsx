@@ -36,7 +36,7 @@ function ChatInterface({
   externalMessageUpdate,
   newSessionTrigger,
 }: ChatInterfaceProps) {
-  const { tasksEnabled, isTaskMasterInstalled } = useTasksSettings();
+  const { isTaskMasterInstalled } = useTasksSettings();
   const { subscribe } = useWebSocket();
   const { t } = useTranslation('chat');
 
@@ -347,7 +347,6 @@ function ChatInterface({
           setOpenCodeModel={setOpenCodeModel}
           providerModelCatalog={providerModelCatalog}
           providerModelsLoading={providerModelsLoading}
-          tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           setInput={setInput}
           isLoadingMoreMessages={isLoadingMoreMessages}

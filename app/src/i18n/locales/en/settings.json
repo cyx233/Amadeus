@@ -108,6 +108,8 @@
     "git": "Git",
     "apiTokens": "API & Tokens",
     "features": "Features",
+    "models": "Model Preference",
+    "featurePrefs": "Feature Preference",
     "notifications": "Notifications",
     "account": "Account",
     "about": "About"

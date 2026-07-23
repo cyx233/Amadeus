@@ -60,7 +60,6 @@ type ProviderSelectionEmptyStateProps = {
   setOpenCodeModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelsLoading: boolean;
-  tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   setInput: React.Dispatch<React.SetStateAction<string>>;
 };
@@ -116,7 +115,6 @@ export default function ProviderSelectionEmptyState({
   setOpenCodeModel,
   providerModelCatalog,
   providerModelsLoading,
-  tasksEnabled,
   isTaskMasterInstalled,
   setInput,
 }: ProviderSelectionEmptyStateProps) {
@@ -331,7 +329,7 @@ export default function ProviderSelectionEmptyState({
             />
           </p>
 
-          {provider && tasksEnabled && isTaskMasterInstalled && (
+          {provider && isTaskMasterInstalled && (
             <div className="mt-5">
               <NextTaskBanner
                 onStartTask={() => setInput(nextTaskPrompt)}
@@ -354,7 +352,7 @@ export default function ProviderSelectionEmptyState({
             {t("session.continue.description")}
           </p>
 
-          {tasksEnabled && isTaskMasterInstalled && (
+          {isTaskMasterInstalled && (
             <div className="mt-5">
               <NextTaskBanner
                 onStartTask={() => setInput(nextTaskPrompt)}

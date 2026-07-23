@@ -6,7 +6,6 @@ import { TaskMasterPanel } from '../../task-master';
 import type { MainContentProps } from '../types/types';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
 import { usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
-import { useTasksSettings } from '../../../contexts/TasksSettingsContext';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useEditorSidebar } from '../../code-editor/hooks/useEditorSidebar';
 import CodeEditor from '../../code-editor/view/CodeEditor';
@@ -18,12 +17,6 @@ import ErrorBoundary from './ErrorBoundary';
 type TaskMasterContextValue = {
   currentProject?: Project | null;
   setCurrentProject?: ((project: Project) => void) | null;
-};
-
-type TasksSettingsContextValue = {
-  tasksEnabled: boolean;
-  isTaskMasterInstalled: boolean | null;
-  isTaskMasterReady: boolean | null;
 };
 
 function MainContent({
@@ -50,7 +43,6 @@ function MainContent({
   const { showRawParameters, showThinking, sendByCtrlEnter } = preferences;
 
   const { currentProject, setCurrentProject } = useTaskMaster() as TaskMasterContextValue;
-  const { tasksEnabled } = useTasksSettings() as TasksSettingsContextValue;
   const [bottomPanel, setBottomPanel] = useState<'terminal' | 'tasks' | null>(null);
   const [bottomHeight, setBottomHeight] = useState(250);
   const [chatPercent, setChatPercent] = useState(50);

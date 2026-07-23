@@ -53,12 +53,12 @@ type NotificationPreferencesResponse = {
 
 type ActiveLoginProvider = AgentProvider | '';
 
-const KNOWN_MAIN_TABS: SettingsMainTab[] = ['agents', 'appearance', 'git', 'api', 'features', 'notifications', 'account', 'about'];
+const KNOWN_MAIN_TABS: SettingsMainTab[] = ['appearance', 'api', 'features', 'models', 'notifications', 'account', 'about'];
 
 const normalizeMainTab = (tab: string): SettingsMainTab => {
-  // Keep backwards compatibility with older callers that still pass "tools".
-  if (tab === 'tools') {
-    return 'agents';
+  // 'agents' and 'git' merged into 'account' (incl. legacy "tools").
+  if (tab === 'tools' || tab === 'agents' || tab === 'git') {
+    return 'account';
   }
 
   // voice/tasks/browser were merged into the single "features" tab.
@@ -66,7 +66,12 @@ const normalizeMainTab = (tab: string): SettingsMainTab => {
     return 'features';
   }
 
-  return KNOWN_MAIN_TABS.includes(tab as SettingsMainTab) ? (tab as SettingsMainTab) : 'agents';
+  // 'featurePrefs' merged into the combined 'models' tab.
+  if (tab === 'featurePrefs') {
+    return 'models';
+  }
+
+  return KNOWN_MAIN_TABS.includes(tab as SettingsMainTab) ? (tab as SettingsMainTab) : 'account';
 };
 
 const parseJson = <T>(value: string | null, fallback: T): T => {
