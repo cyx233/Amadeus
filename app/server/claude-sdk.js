@@ -227,6 +227,12 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
+  // Emit SDKPartialAssistantMessage ('stream_event') so assistant text streams
+  // token-by-token. Without this the SDK only delivers the full assistant block
+  // at turn end, so the UI shows nothing until the reply completes (and a mid-run
+  // stop flushes just the partial block) — looking like streaming is broken.
+  sdkOptions.includePartialMessages = true;
+
   if (sessionId) {
     sdkOptions.resume = sessionId;
   }
