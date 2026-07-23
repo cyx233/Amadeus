@@ -71,6 +71,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [latestMessage, setLatestMessage] = useState<ServerEvent | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { token } = useAuth();
 
   const dispatch = useCallback((event: ServerEvent) => {
@@ -96,6 +97,10 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
+      if (heartbeatTimerRef.current) {
+        clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = null;
+      }
       if (wsRef.current) {
         wsRef.current.close();
       }
@@ -120,6 +125,18 @@ const useWebSocketProviderState = (): WebSocketContextType => {
           dispatch({ kind: 'websocket_reconnected', timestamp: Date.now() });
         }
         hasConnectedRef.current = true;
+
+        // App-level heartbeat: guarantee periodic client→server traffic so a
+        // reverse proxy that only watches the upstream direction can't tear down
+        // an otherwise-idle socket (the server also protocol-pings, but that's
+        // server→client and some proxies ignore it). Well under the common
+        // 60-100s idle windows. Backend replies with `{kind:'pong'}`.
+        if (heartbeatTimerRef.current) clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = setInterval(() => {
+          if (websocket.readyState === WebSocket.OPEN) {
+            websocket.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 25_000);
       };
 
       websocket.onmessage = (event) => {
@@ -134,6 +151,10 @@ const useWebSocketProviderState = (): WebSocketContextType => {
       websocket.onclose = () => {
         setIsConnected(false);
         wsRef.current = null;
+        if (heartbeatTimerRef.current) {
+          clearInterval(heartbeatTimerRef.current);
+          heartbeatTimerRef.current = null;
+        }
 
         // Attempt to reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
