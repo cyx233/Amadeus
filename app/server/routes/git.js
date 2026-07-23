@@ -4,8 +4,7 @@ import spawn from 'cross-spawn';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { projectsDb } from '../modules/database/index.js';
-import { generateTextOnce } from '../claude-sdk.js';
-import { spawnCursor } from '../cursor-cli.js';
+import { generateOnce } from '../modules/providers/services/text-generation.service.js';
 
 const router = express.Router();
 const COMMIT_DIFF_CHARACTER_LIMIT = 500_000;
@@ -1087,15 +1086,10 @@ router.get('/commit-diff', async (req, res) => {
 
 // Generate commit message based on staged changes using AI
 router.post('/generate-commit-message', async (req, res) => {
-  const { project, files, provider = 'claude' } = req.body;
+  const { project, files } = req.body;
 
   if (!project || !files || files.length === 0) {
     return res.status(400).json({ error: 'Project id and files are required' });
-  }
-
-  // Validate provider
-  if (!['claude', 'cursor'].includes(provider)) {
-    return res.status(400).json({ error: 'provider must be "claude" or "cursor"' });
   }
 
   try {
@@ -1141,8 +1135,8 @@ router.post('/generate-commit-message', async (req, res) => {
       }
     }
 
-    // Generate commit message using AI
-    const message = await generateCommitMessageWithAI(files, diffContext, provider, projectPath);
+    // Generate commit message using the resolved provider + model.
+    const message = await generateCommitMessageWithAI(req.user.id, files, diffContext, projectPath);
 
     res.json({ message });
   } catch (error) {
@@ -1152,19 +1146,14 @@ router.post('/generate-commit-message', async (req, res) => {
 });
 
 /**
- * Generates a commit message using AI (Claude SDK or Cursor CLI)
+ * Generates a commit message via the provider-agnostic one-shot layer.
+ * @param {number} userId
  * @param {Array<string>} files - List of changed files
  * @param {string} diffContext - Git diff content
- * @param {string} provider - 'claude' or 'cursor'
  * @param {string} projectPath - Project directory path
  * @returns {Promise<string>} Generated commit message
  */
-// A commit message is a quick one-shot generation; if the agent hasn't produced
-// one in this long it's stalled, so time out and fall back rather than hang.
-const COMMIT_MESSAGE_TIMEOUT_MS = 60_000;
-
-async function generateCommitMessageWithAI(files, diffContext, provider, projectPath) {
-  // Create the prompt
+async function generateCommitMessageWithAI(userId, files, diffContext, projectPath) {
   const prompt = `Generate a conventional commit message for these changes.
 
 REQUIREMENTS:
@@ -1184,59 +1173,15 @@ ${diffContext.substring(0, 4000)}
 
 Generate the commit message:`;
 
-  // Bound the whole thing with a timeout: on expiry we abort the underlying call
-  // (so no orphaned subprocess) and fall back to a generated default, so the
-  // request can never hang the UI spinner.
-  const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), COMMIT_MESSAGE_TIMEOUT_MS);
-
   try {
-    console.log('🚀 Generating commit message with provider:', provider, '| prompt length:', prompt.length);
-
-    let responseText = '';
-    if (provider === 'claude') {
-      // One-shot text generation — no agent session, tools, or MCP servers to
-      // stall on (unlike queryClaudeSDK). See generateTextOnce.
-      responseText = await generateTextOnce(prompt, {
-        cwd: projectPath,
-        // No model override: inherit whatever the user's chat is set to (claude's
-        // settings.json `model`, changed via /model or Settings). One source of
-        // truth the user actually sees — commit messages follow the chat model.
-        // Never pass an alias like 'sonnet': it resolves to a bare ARN in the
-        // wrong region and 403s.
-        signal: abort.signal,
-      });
-    } else {
-      // Cursor has no one-shot helper yet; keep the streaming writer path, still
-      // bounded by the abort/timeout below.
-      const writer = {
-        send: (data) => {
-          try {
-            const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-            if (parsed.type === 'cursor-output' && parsed.output) responseText += parsed.output;
-            else if (parsed.type === 'text' && parsed.text) responseText += parsed.text;
-          } catch (e) {
-            console.error('Error parsing writer data:', e);
-          }
-        },
-        setSessionId: () => {},
-      };
-      const cursorCall = spawnCursor(prompt, { cwd: projectPath, skipPermissions: true }, writer);
-      const timeout = new Promise((_, reject) => {
-        abort.signal.addEventListener('abort', () => reject(new Error('commit-message generation timed out')));
-      });
-      await Promise.race([cursorCall, timeout]);
-    }
-
-    const cleanedMessage = cleanCommitMessage(responseText);
-    console.log('🧹 Cleaned message:', cleanedMessage.substring(0, 200));
-    return cleanedMessage || 'chore: update files';
+    // The provider layer owns model resolution, dispatch, text collection, and
+    // the timeout — this route stays model-id/provider agnostic.
+    const { text } = await generateOnce({ userId, feature: 'commit-message', prompt, cwd: projectPath });
+    return cleanCommitMessage(text) || 'chore: update files';
   } catch (error) {
     console.error('Error generating commit message with AI:', error);
     // Fallback to a simple message (also covers the timeout/abort path).
     return `chore: update ${files.length} file${files.length !== 1 ? 's' : ''}`;
-  } finally {
-    clearTimeout(timer);
   }
 }
 

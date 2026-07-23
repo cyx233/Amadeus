@@ -171,7 +171,14 @@ export default tseslint.config(
           pattern: [
             "server/projects.js",
             "server/utils/runtime-paths.js",
-          ], // provider history loading still resolves session data through these legacy runtime files
+            // Agent runtime entry points (one per provider). Still top-level
+            // server files while providers migrate into server/modules; the
+            // provider text-generation service dispatches to them.
+            "server/claude-sdk.js",
+            "server/cursor-cli.js",
+            "server/openai-codex.js",
+            "server/opencode-cli.js",
+          ],
           mode: "file",
         },
         {
