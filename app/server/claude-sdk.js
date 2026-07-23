@@ -885,8 +885,26 @@ async function generateTextOnce(prompt, options = {}) {
   if (options.cwd) sdkOptions.cwd = options.cwd;
   if (options.signal) sdkOptions.abortController = { signal: options.signal };
 
+  // Without this, the SDK's stdout stream doesn't close after the response ends,
+  // so the query generator never completes and the call hangs until aborted (the
+  // "aborted by user" we saw was our own 60s timeout firing). queryClaudeSDK sets
+  // the same env; the Query constructor reads it synchronously, so set it around
+  // construction and restore immediately after.
+  const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
+  process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
+  let queryInstance;
+  try {
+    queryInstance = query({ prompt, options: sdkOptions });
+  } finally {
+    if (prevStreamTimeout !== undefined) {
+      process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = prevStreamTimeout;
+    } else {
+      delete process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
+    }
+  }
+
   let text = '';
-  for await (const message of query({ prompt, options: sdkOptions })) {
+  for await (const message of queryInstance) {
     // The terminal `result` message carries the full text on success; prefer it.
     if (message.type === 'result' && message.subtype === 'success' && typeof message.result === 'string') {
       text = message.result;

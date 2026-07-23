@@ -1199,9 +1199,11 @@ Generate the commit message:`;
       // stall on (unlike queryClaudeSDK). See generateTextOnce.
       responseText = await generateTextOnce(prompt, {
         cwd: projectPath,
-        // No model override — inherit the container's configured default, which
-        // is the `us.` inference profile that's actually authorized here. Passing
-        // 'sonnet' resolves to a bare ARN in the wrong region and 403s.
+        // No model override: inherit whatever the user's chat is set to (claude's
+        // settings.json `model`, changed via /model or Settings). One source of
+        // truth the user actually sees — commit messages follow the chat model.
+        // Never pass an alias like 'sonnet': it resolves to a bare ARN in the
+        // wrong region and 403s.
         signal: abort.signal,
       });
     } else {
