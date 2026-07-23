@@ -74,7 +74,6 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   // TaskMaster's own model (one active tag), which lets set-status target the
   // right tag without any cross-tag juggling. null = let the server pick a
   // sensible default (first non-empty set). availableTags is the full list.
-  const [currentTag, setCurrentTag] = useState<string>('master');
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
@@ -300,7 +299,6 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
       const data = (await response.json()) as {
         tasks?: TaskMasterTask[];
-        currentTag?: string;
         selectedTags?: string[];
         availableTags?: string[];
       };
@@ -308,12 +306,11 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
       setTasks(loadedTasks);
       setNextTask(getNextTask(loadedTasks));
-      if (data.currentTag) setCurrentTag(data.currentTag);
       setAvailableTags(Array.isArray(data.availableTags) ? data.availableTags : []);
       // Adopt the server-resolved selection. The server is authoritative: for an
       // empty request it picks a sensible non-empty default (avoids landing on an
       // empty master and blanking the board), so sync selectedTag to what it chose.
-      const resolved = data.selectedTags?.[0] ?? data.currentTag;
+      const resolved = data.selectedTags?.[0];
       if (resolved && resolved !== selectedTag) {
         setSelectedTag(resolved);
       }
@@ -402,7 +399,6 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       mcpServerStatus,
       tasks,
       nextTask,
-      currentTag,
       availableTags,
       selectedTag,
       selectTag,
@@ -420,7 +416,6 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       availableTags,
       clearError,
       currentProject,
-      currentTag,
       selectedTag,
       error,
       isLoading,

@@ -276,14 +276,10 @@ router.get('/tasks/:projectId', async (req, res) => {
                 subtasks: task.subtasks || []
             }));
 
-            // currentTag kept for single-select callers (first selected).
-            const currentTag = selectedTags[0] || 'master';
-
             res.json({
                 projectId,
                 projectPath,
                 tasks: transformedTasks,
-                currentTag,
                 selectedTags,
                 availableTags,
                 totalTasks: transformedTasks.length,

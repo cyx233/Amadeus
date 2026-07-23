@@ -104,7 +104,6 @@ export type TaskMasterContextValue = {
   mcpServerStatus: TaskMasterMcpStatus;
   tasks: TaskMasterTask[];
   nextTask: TaskMasterTask | null;
-  currentTag: string;
   availableTags: string[];
   selectedTag: string | null;
   selectTag: (tag: string) => void;
