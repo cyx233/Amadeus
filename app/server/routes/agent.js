@@ -12,6 +12,7 @@ import { queryCodex } from '../openai-codex.js';
 import { spawnOpenCode } from '../opencode-cli.js';
 import { Octokit } from '@octokit/rest';
 import { providerModelsService } from '../modules/providers/services/provider-models.service.js';
+import { resolveModel, CHAT_PROVIDERS } from '../modules/providers/services/model-preference.service.js';
 import { IS_PLATFORM } from '../constants/config.js';
 import { normalizeProjectPath } from '../shared/utils.js';
 
@@ -949,8 +950,14 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       });
     }
 
-    const codexModels = (await providerModelsService.getProviderModels('codex')).models;
-    const opencodeModels = (await providerModelsService.getProviderModels('opencode')).models;
+    // When the request doesn't pin a model, use the user's Model Preference for
+    // this provider (its default model → null). null means "let the provider use
+    // its own default", so each branch keeps its existing fallback for that case.
+    // A resuming session's own model still wins downstream (resolveResumeModel).
+    let resolvedModel = model || undefined;
+    if (!resolvedModel && CHAT_PROVIDERS.includes(provider)) {
+      resolvedModel = (await resolveModel(req.user.id, 'chat', { provider })).model || undefined;
+    }
 
     // Start the appropriate session
     if (provider === 'claude') {
@@ -960,7 +967,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
         sessionId: sessionId || null,
-        model: model,
+        model: resolvedModel,
         effort,
         permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
       }, writer);
@@ -972,7 +979,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
         sessionId: sessionId || null,
-        model: model || undefined,
+        model: resolvedModel,
         skipPermissions: true // Bypass permissions for Cursor
       }, writer);
     } else if (provider === 'codex') {
@@ -982,7 +989,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
         sessionId: sessionId || null,
-        model: model || codexModels.DEFAULT,
+        model: resolvedModel || codexModels.DEFAULT,
         effort,
         permissionMode: 'bypassPermissions'
       }, writer);
@@ -993,7 +1000,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
         projectPath: finalProjectPath,
         cwd: finalProjectPath,
         sessionId: sessionId || null,
-        model: model || opencodeModels.DEFAULT,
+        model: resolvedModel || opencodeModels.DEFAULT,
         effort,
         permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
       }, writer);
