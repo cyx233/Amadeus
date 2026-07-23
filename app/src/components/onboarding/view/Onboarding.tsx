@@ -1,23 +1,33 @@
 import { Check, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LLMProvider } from '../../../types/app';
-import { authenticatedFetch } from '../../../utils/api';
+import { api, authenticatedFetch } from '../../../utils/api';
 import { useProviderAuthStatus } from '../../provider-auth/hooks/useProviderAuthStatus';
 import ProviderLoginModal from '../../provider-auth/view/ProviderLoginModal';
 import AgentConnectionsStep from './subcomponents/AgentConnectionsStep';
 import GitConfigurationStep from './subcomponents/GitConfigurationStep';
 import OnboardingStepProgress from './subcomponents/OnboardingStepProgress';
+import SetPasswordStep from './subcomponents/SetPasswordStep';
 import {
   gitEmailPattern,
   readErrorMessageFromResponse,
 } from './utils';
+
+// Steps: 0 Set Password, 1 Git Configuration, 2 Connect Agents.
+const STEP_PASSWORD = 0;
+const STEP_GIT = 1;
+const STEP_AGENTS = 2;
+const MIN_PASSWORD_LENGTH = 6;
 
 type OnboardingProps = {
   onComplete?: () => void | Promise<void>;
 };
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState(STEP_PASSWORD);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [gitName, setGitName] = useState('');
   const [gitEmail, setGitEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,40 +92,67 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const handleNextStep = async () => {
     setErrorMessage('');
 
-    if (currentStep !== 0) {
-      setCurrentStep((previous) => previous + 1);
-      return;
-    }
-
-    if (!gitName.trim() || !gitEmail.trim()) {
-      setErrorMessage('Both git name and email are required.');
-      return;
-    }
-
-    if (!gitEmailPattern.test(gitEmail)) {
-      setErrorMessage('Please enter a valid email address.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const response = await authenticatedFetch('/api/user/git-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gitName, gitEmail }),
-      });
-
-      if (!response.ok) {
-        const message = await readErrorMessageFromResponse(response, 'Failed to save git configuration');
-        throw new Error(message);
+    // Step 0 — set a new password (the admin-set initial password shouldn't stick).
+    if (currentStep === STEP_PASSWORD) {
+      if (newPassword.length < MIN_PASSWORD_LENGTH) {
+        setErrorMessage(`New password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setErrorMessage('Passwords do not match.');
+        return;
       }
 
-      setCurrentStep((previous) => previous + 1);
-    } catch (caughtError) {
-      setErrorMessage(caughtError instanceof Error ? caughtError.message : 'Failed to save git configuration');
-    } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(true);
+      try {
+        const response = await api.user.changePassword(currentPassword, newPassword);
+        if (!response.ok) {
+          const message = await readErrorMessageFromResponse(response, 'Failed to update password');
+          throw new Error(message);
+        }
+        setCurrentStep((previous) => previous + 1);
+      } catch (caughtError) {
+        setErrorMessage(caughtError instanceof Error ? caughtError.message : 'Failed to update password');
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
     }
+
+    // Step 1 — git identity.
+    if (currentStep === STEP_GIT) {
+      if (!gitName.trim() || !gitEmail.trim()) {
+        setErrorMessage('Both git name and email are required.');
+        return;
+      }
+      if (!gitEmailPattern.test(gitEmail)) {
+        setErrorMessage('Please enter a valid email address.');
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        const response = await authenticatedFetch('/api/user/git-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ gitName, gitEmail }),
+        });
+
+        if (!response.ok) {
+          const message = await readErrorMessageFromResponse(response, 'Failed to save git configuration');
+          throw new Error(message);
+        }
+
+        setCurrentStep((previous) => previous + 1);
+      } catch (caughtError) {
+        setErrorMessage(caughtError instanceof Error ? caughtError.message : 'Failed to save git configuration');
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    setCurrentStep((previous) => previous + 1);
   };
 
   const handlePreviousStep = () => {
@@ -142,9 +179,11 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     }
   };
 
-  const isCurrentStepValid = currentStep === 0
-    ? Boolean(gitName.trim() && gitEmail.trim() && gitEmailPattern.test(gitEmail))
-    : true;
+  const isCurrentStepValid = currentStep === STEP_PASSWORD
+    ? newPassword.length >= MIN_PASSWORD_LENGTH && newPassword === confirmPassword && currentPassword.length > 0
+    : currentStep === STEP_GIT
+      ? Boolean(gitName.trim() && gitEmail.trim() && gitEmailPattern.test(gitEmail))
+      : true;
 
   return (
     <>
@@ -160,7 +199,17 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           <OnboardingStepProgress currentStep={currentStep} />
 
           <div className="rounded-2xl border border-border/70 bg-card/90 p-6 shadow-[0_24px_60px_-20px_hsl(var(--foreground)/0.18)] ring-1 ring-foreground/5 backdrop-blur-xl">
-            {currentStep === 0 ? (
+            {currentStep === STEP_PASSWORD ? (
+              <SetPasswordStep
+                currentPassword={currentPassword}
+                newPassword={newPassword}
+                confirmPassword={confirmPassword}
+                isSubmitting={isSubmitting}
+                onCurrentPasswordChange={setCurrentPassword}
+                onNewPasswordChange={setNewPassword}
+                onConfirmPasswordChange={setConfirmPassword}
+              />
+            ) : currentStep === STEP_GIT ? (
               <GitConfigurationStep
                 gitName={gitName}
                 gitEmail={gitEmail}
@@ -195,7 +244,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               </button>
 
               <div className="flex items-center gap-3">
-                {currentStep < 1 ? (
+                {currentStep < STEP_AGENTS ? (
                   <button
                     onClick={handleNextStep}
                     disabled={!isCurrentStepValid || isSubmitting}

@@ -1,10 +1,11 @@
-import { Check, GitBranch, LogIn } from 'lucide-react';
+import { Check, GitBranch, KeyRound, LogIn } from 'lucide-react';
 
 type OnboardingStepProgressProps = {
   currentStep: number;
 };
 
 const onboardingSteps = [
+  { title: 'Set Password', icon: KeyRound, required: true },
   { title: 'Git Configuration', icon: GitBranch, required: true },
   { title: 'Connect Agents', icon: LogIn, required: false },
 ];

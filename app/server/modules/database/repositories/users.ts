@@ -66,6 +66,15 @@ export const userDb = {
       .get(username) as UserRow | undefined;
   },
 
+  /** Replaces a user's password hash. Returns true if a row was updated. */
+  updatePassword(userId: number, passwordHash: string): boolean {
+    const db = getConnection();
+    const result = db
+      .prepare('UPDATE users SET password_hash = ? WHERE id = ? AND is_active = 1')
+      .run(passwordHash, userId);
+    return result.changes > 0;
+  },
+
   /** Updates the last_login timestamp. Non-fatal — logs but does not throw. */
   updateLastLogin(userId: number): void {
     try {

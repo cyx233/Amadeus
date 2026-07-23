@@ -268,6 +268,11 @@ export const api = {
       authenticatedFetch('/api/user/complete-onboarding', {
         method: 'POST',
       }),
+    changePassword: (currentPassword, newPassword) =>
+      authenticatedFetch('/api/user/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      }),
   },
 
   // Generic GET method for any endpoint
