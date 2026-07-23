@@ -375,8 +375,8 @@ export function handleChatConnection(
   request: AuthenticatedWebSocketRequest,
   dependencies: ChatWebSocketDependencies
 ): void {
-  console.log('[INFO] Chat WebSocket connected');
   connectedClients.add(ws);
+  console.log(`[INFO] Chat WebSocket connected (total clients: ${connectedClients.size})`);
 
   const userId = readRequestUserId(request);
 
@@ -427,8 +427,8 @@ export function handleChatConnection(
     // Log close code/reason to diagnose tool-time disconnects: 1006 = abnormal
     // (proxy/network cut), 1009 = message too big, 1001 = going away.
     const reasonText = reason?.toString?.() || '';
-    console.log(`[INFO] Chat client disconnected (code=${code}${reasonText ? ` reason="${reasonText}"` : ''})`);
     connectedClients.delete(ws);
+    console.log(`[INFO] Chat client disconnected (code=${code}${reasonText ? ` reason="${reasonText}"` : ''}, remaining: ${connectedClients.size})`);
   });
 
   ws.on('error', (error) => {

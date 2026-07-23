@@ -208,8 +208,14 @@ export function useChatRealtimeHandlers({
       }
 
       // --- All other messages: route to store ---
+      // Only persist real chat messages that carry an id. Transport/control
+      // frames (heartbeat `pong`, and lifecycle kinds handled above) have no id;
+      // appending them poisons the realtime list, where later id.startsWith(...)
+      // checks throw and break the whole message pipeline.
       const shouldPersist =
-        msg.kind !== 'complete'
+        typeof (msg as { id?: unknown }).id === 'string'
+        && msg.kind !== 'pong'
+        && msg.kind !== 'complete'
         && msg.kind !== 'status'
         && msg.kind !== 'permission_request'
         && msg.kind !== 'permission_cancelled';
