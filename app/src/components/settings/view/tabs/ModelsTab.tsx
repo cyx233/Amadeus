@@ -18,7 +18,7 @@ const selectClass =
  */
 export default function ModelsTab() {
   const {
-    data, loading, error,
+    data, loading, error, refreshing, refresh,
     providerModels, resolveFeature,
     setGlobalProvider, setProviderModel, setFeatureProvider, setFeatureModel,
   } = useModelPreferences();
@@ -30,9 +30,21 @@ export default function ModelsTab() {
     <div className="space-y-10">
       {/* --- Section 1: defaults --- */}
       <section className="space-y-6">
-        <div>
-          <h2 className="text-base font-semibold text-foreground">Model Preference</h2>
-          <p className="text-xs text-muted-foreground">The provider and model used by default.</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Model Preference</h2>
+            <p className="text-xs text-muted-foreground">The provider and model used by default.</p>
+          </div>
+          {/* Model lists are cached; refresh after logging into a provider so its
+              newly-available models appear. */}
+          <button
+            type="button"
+            onClick={() => { void refresh(); }}
+            disabled={refreshing}
+            className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-xs text-foreground hover:bg-muted disabled:opacity-50"
+          >
+            {refreshing ? 'Refreshing…' : 'Refresh models'}
+          </button>
         </div>
 
         <div className="space-y-2">

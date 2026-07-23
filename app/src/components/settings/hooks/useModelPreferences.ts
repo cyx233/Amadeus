@@ -35,19 +35,27 @@ export function useModelPreferences() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async (refresh = false) => {
+    if (refresh) setRefreshing(true);
     try {
-      const res = await api.user.getModels();
+      const res = await api.user.getModels(refresh);
       if (!res.ok) throw new Error('Failed to load model preferences');
       setData((await res.json()) as ModelsResponse);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load model preferences');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  // Bypass the model-catalog cache — e.g. after logging into a provider so its
+  // newly-available models appear instead of the stale cached list.
+  const refresh = useCallback(() => load(true), [load]);
 
   const providerModels = useCallback(
     (provider: string): ProviderModels | undefined => data?.providers.find((p) => p.provider === provider),
@@ -109,6 +117,8 @@ export function useModelPreferences() {
     data,
     loading,
     error,
+    refreshing,
+    refresh,
     providerModels,
     resolveFeature,
     setGlobalProvider,
