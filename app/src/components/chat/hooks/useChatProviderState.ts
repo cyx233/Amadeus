@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { authenticatedFetch } from '../../../utils/api';
+import { api, authenticatedFetch } from '../../../utils/api';
 import type { PendingPermissionRequest, PermissionMode } from '../types/types';
 import type {
   ProjectSession,
@@ -91,24 +91,20 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('default');
   const [pendingPermissionRequests, setPendingPermissionRequests] = useState<PendingPermissionRequest[]>([]);
   const [provider, setProvider] = useState<LLMProvider>(readStoredProvider);
-  const [cursorModel, setCursorModel] = useState<string>(() => {
-    return localStorage.getItem('cursor-model') || FALLBACK_DEFAULT_MODEL.cursor;
-  });
-  const [claudeModel, setClaudeModel] = useState<string>(() => {
-    return localStorage.getItem('claude-model') || FALLBACK_DEFAULT_MODEL.claude;
-  });
-  const [codexModel, setCodexModel] = useState<string>(() => {
-    return localStorage.getItem('codex-model') || FALLBACK_DEFAULT_MODEL.codex;
-  });
+  // Models start from the static fallback and are immediately replaced by the DB
+  // Model Preference (seed effect) / the session's own model (session switch).
+  // No localStorage: a per-provider default belongs in the DB, not a sticky
+  // browser-global that survives project/session switches.
+  const [cursorModel, setCursorModel] = useState<string>(FALLBACK_DEFAULT_MODEL.cursor);
+  const [claudeModel, setClaudeModel] = useState<string>(FALLBACK_DEFAULT_MODEL.claude);
+  const [codexModel, setCodexModel] = useState<string>(FALLBACK_DEFAULT_MODEL.codex);
   const [providerEfforts, setProviderEfforts] = useState<Partial<Record<LLMProvider, string>>>(() => {
     return PROVIDERS.reduce<Partial<Record<LLMProvider, string>>>((acc, targetProvider) => {
       acc[targetProvider] = localStorage.getItem(`${targetProvider}-effort`) || DEFAULT_EFFORT_VALUE;
       return acc;
     }, {});
   });
-  const [opencodeModel, setOpenCodeModel] = useState<string>(() => {
-    return localStorage.getItem('opencode-model') || FALLBACK_DEFAULT_MODEL.opencode;
-  });
+  const [opencodeModel, setOpenCodeModel] = useState<string>(FALLBACK_DEFAULT_MODEL.opencode);
 
   /**
    * Backend-owned capability matrix keyed by provider. Drives the permission
@@ -132,98 +128,55 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
 
   const providerModelsRequestIdRef = useRef(0);
 
+  // Set the in-memory model for a provider. No localStorage: the per-provider
+  // default is the DB Model Preference (seeded on mount); a per-session model is
+  // persisted server-side (active-model). Keeping a global localStorage copy is
+  // what made a one-off switch stick across projects/sessions.
   const setStoredProviderModel = useCallback((targetProvider: LLMProvider, model: string) => {
-    if (targetProvider === 'claude') {
-      setClaudeModel(model);
-      localStorage.setItem('claude-model', model);
-      return;
-    }
-
-    if (targetProvider === 'cursor') {
-      setCursorModel(model);
-      localStorage.setItem('cursor-model', model);
-      return;
-    }
-
-    if (targetProvider === 'codex') {
-      setCodexModel(model);
-      localStorage.setItem('codex-model', model);
-      return;
-    }
-
-    setOpenCodeModel(model);
-    localStorage.setItem('opencode-model', model);
+    if (targetProvider === 'claude') return setClaudeModel(model);
+    if (targetProvider === 'cursor') return setCursorModel(model);
+    if (targetProvider === 'codex') return setCodexModel(model);
+    return setOpenCodeModel(model);
   }, []);
 
-  // Model Preference (DB) is the authoritative default model per provider. On
-  // mount we adopt it — overwriting the localStorage cache — so a new chat starts
-  // from the user's Settings choice (e.g. opencode → deepseek). Switching model
-  // inside a chat is a per-session override (routed through the backend
-  // active-model API in selectProviderModel), not a change to this default.
+  // Resolve which provider+model the picker should show via the single backend
+  // resolver (/api/user/effective-model), mirroring the server's resolveModel:
+  //   - a brand-new chat (no session) → the global default provider + its model
+  //     (Settings → Model Preference), so a fresh chat/project starts there.
+  //   - an existing session → that session's own provider + model.
+  // No localStorage: the default lives in the DB, the per-session model on the
+  // server, so nothing sticks across projects/sessions.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      try {
-        const res = await authenticatedFetch('/api/user/models');
-        if (!res.ok) return;
-        const data = (await res.json()) as {
-          globalProvider?: LLMProvider;
-          providers?: { provider: LLMProvider; current: string }[];
-        };
-        if (cancelled) return;
-        const setters: Record<string, (m: string) => void> = {
-          claude: setClaudeModel, cursor: setCursorModel, codex: setCodexModel, opencode: setOpenCodeModel,
-        };
-        for (const { provider: p, current } of (data.providers ?? [])) {
-          // 'default' is claude's sentinel ("use the tool's own default") — leave
-          // localStorage/state as-is for it; for concrete ids, DB wins.
-          if (current && current !== 'default' && setters[p]) {
-            localStorage.setItem(`${p}-model`, current);
-            setters[p](current);
-          }
-        }
-        // Adopt the global default provider too — but only for a fresh chat with
-        // no session. An existing session keeps its own provider (synced from
-        // selectedSession.__provider elsewhere).
-        if (!selectedSession?.id && data.globalProvider && setters[data.globalProvider]) {
-          setProvider(data.globalProvider);
-          localStorage.setItem('selected-provider', data.globalProvider);
-        }
-      } catch {
-        // Preference is a nicety; fall back to FALLBACK_DEFAULT_MODEL silently.
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [selectedSession?.id]);
-
-  // Each session remembers its own model (backend: session transcript + stored
-  // override). When you switch to an existing session, adopt ITS model so the
-  // picker reflects what that conversation is using — not the global default.
-  // A brand-new chat (no session id) keeps the DB-preference default above.
-  useEffect(() => {
     const sessionId = selectedSession?.id;
-    const sessionProvider = (selectedSession?.__provider as LLMProvider | undefined) ?? provider;
-    if (!sessionId) return;
-    let cancelled = false;
+    const sessionProvider = selectedSession?.__provider as LLMProvider | undefined;
     (async () => {
       try {
-        const res = await authenticatedFetch(
-          `/api/providers/${sessionProvider}/sessions/${encodeURIComponent(sessionId)}/active-model`,
-        );
+        const res = await api.user.effectiveModel({
+          feature: 'chat',
+          provider: sessionProvider, // pin to the session's provider when known
+          sessionId: sessionId ?? undefined,
+        });
         if (!res.ok) return;
-        const body = (await res.json()) as { data?: { model?: string | null } };
-        const model = body.data?.model;
-        if (cancelled || !model) return;
+        const data = (await res.json()) as { provider?: LLMProvider; model?: string | null };
+        if (cancelled || !data.provider) return;
         const setters: Record<string, (m: string) => void> = {
           claude: setClaudeModel, cursor: setCursorModel, codex: setCodexModel, opencode: setOpenCodeModel,
         };
-        setters[sessionProvider]?.(model);
+        // For a fresh chat, also adopt the resolved (global default) provider.
+        // An existing session keeps its provider (synced from __provider elsewhere).
+        if (!sessionId) {
+          setProvider(data.provider);
+          localStorage.setItem('selected-provider', data.provider);
+        }
+        // model may be null ("use provider's own default") → leave picker as-is.
+        if (data.model) setters[data.provider]?.(data.model);
       } catch {
-        // Non-fatal: fall back to whatever the picker already shows.
+        // Best-effort: fall back to FALLBACK_DEFAULT_MODEL already in state.
       }
     })();
     return () => { cancelled = true; };
-  }, [selectedSession?.id, selectedSession?.__provider, provider]);
+  }, [selectedSession?.id, selectedSession?.__provider]);
 
   const setStoredProviderEffort = useCallback((targetProvider: LLMProvider, effort: string) => {
     setProviderEfforts((previous) => (
@@ -349,15 +302,16 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     return Boolean(FALLBACK_PROVIDER_EFFORT_VALUES[targetProvider]?.length);
   }, [providerCapabilities]);
 
-  const pickStoredOrCurrent = (
-    storageKey: string,
+  // Validate the current model against the freshly-loaded catalog: keep it if
+  // it's a real option, else fall back to the catalog default. NOTE: no
+  // localStorage — the per-provider default lives in the DB (Model Preference)
+  // and is seeded into state on mount; the per-session model comes from the
+  // backend on session switch. A global localStorage default here used to stick
+  // forever (a manual switch never reset across projects).
+  const reconcileModel = (
     current: string,
     def: ProviderModelsDefinition,
   ): string => {
-    const stored = localStorage.getItem(storageKey);
-    if (stored && def.OPTIONS.some((o) => o.value === stored)) {
-      return stored;
-    }
     if (current && def.OPTIONS.some((o) => o.value === current)) {
       return current;
     }
@@ -430,52 +384,32 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
   useEffect(() => {
     const claude = providerModelCatalog.claude;
     if (claude) {
-      const next = pickStoredOrCurrent('claude-model', claudeModel, claude);
-      if (next !== claudeModel) {
-        setClaudeModel(next);
-      }
-      if (localStorage.getItem('claude-model') !== next) {
-        localStorage.setItem('claude-model', next);
-      }
+      const next = reconcileModel(claudeModel, claude);
+      if (next !== claudeModel) setClaudeModel(next);
     }
   }, [providerModelCatalog.claude, claudeModel]);
 
   useEffect(() => {
     const cursor = providerModelCatalog.cursor;
     if (cursor) {
-      const next = pickStoredOrCurrent('cursor-model', cursorModel, cursor);
-      if (next !== cursorModel) {
-        setCursorModel(next);
-      }
-      if (localStorage.getItem('cursor-model') !== next) {
-        localStorage.setItem('cursor-model', next);
-      }
+      const next = reconcileModel(cursorModel, cursor);
+      if (next !== cursorModel) setCursorModel(next);
     }
   }, [providerModelCatalog.cursor, cursorModel]);
 
   useEffect(() => {
     const codex = providerModelCatalog.codex;
     if (codex) {
-      const next = pickStoredOrCurrent('codex-model', codexModel, codex);
-      if (next !== codexModel) {
-        setCodexModel(next);
-      }
-      if (localStorage.getItem('codex-model') !== next) {
-        localStorage.setItem('codex-model', next);
-      }
+      const next = reconcileModel(codexModel, codex);
+      if (next !== codexModel) setCodexModel(next);
     }
   }, [providerModelCatalog.codex, codexModel]);
 
   useEffect(() => {
     const opencode = providerModelCatalog.opencode;
     if (opencode) {
-      const next = pickStoredOrCurrent('opencode-model', opencodeModel, opencode);
-      if (next !== opencodeModel) {
-        setOpenCodeModel(next);
-      }
-      if (localStorage.getItem('opencode-model') !== next) {
-        localStorage.setItem('opencode-model', next);
-      }
+      const next = reconcileModel(opencodeModel, opencode);
+      if (next !== opencodeModel) setOpenCodeModel(next);
     }
   }, [providerModelCatalog.opencode, opencodeModel]);
 
@@ -546,14 +480,16 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
         }
 
         const modelId = data.config.model.modelId as string;
-        if (!localStorage.getItem('cursor-model')) {
+        // Only fill from cursor's own config while the model is still the static
+        // fallback (DB preference / session model take precedence once set).
+        if (cursorModel === FALLBACK_DEFAULT_MODEL.cursor) {
           setCursorModel(modelId);
         }
       })
       .catch((error) => {
         console.error('Error loading Cursor config:', error);
       });
-  }, [provider]);
+  }, [provider, cursorModel]);
 
   const cyclePermissionMode = useCallback(() => {
     const modes = getPermissionModesForProvider(provider);
