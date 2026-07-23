@@ -24,20 +24,24 @@ import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
     queryClaudeSDK,
     abortClaudeSDKSession,
+    isClaudeSDKSessionActive,
     resolveToolApproval,
     getPendingApprovalsForSession,
 } from './claude-sdk.js';
 import {
     spawnCursor,
     abortCursorSession,
+    isCursorSessionActive,
 } from './cursor-cli.js';
 import {
     queryCodex,
     abortCodexSession,
+    isCodexSessionActive,
 } from './openai-codex.js';
 import {
     spawnOpenCode,
     abortOpenCodeSession,
+    isOpenCodeSessionActive,
 } from './opencode-cli.js';
 import {
     stripAnsiSequences,
@@ -122,6 +126,15 @@ const wss = createWebSocketServer(server, {
             cursor: abortCursorSession,
             codex: abortCodexSession,
             opencode: abortOpenCodeSession,
+        },
+        // Runtime liveness by provider — lets chat.subscribe verify whether a run
+        // marked `running` is truly alive, so a run whose process died without a
+        // terminal `complete` is reported idle instead of spinning forever.
+        isActiveFns: {
+            claude: isClaudeSDKSessionActive,
+            cursor: isCursorSessionActive,
+            codex: isCodexSessionActive,
+            opencode: isOpenCodeSessionActive,
         },
         resolveToolApproval,
         getPendingApprovalsForSession,

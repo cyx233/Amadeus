@@ -108,6 +108,9 @@ export function useChatSessionState({
   sessionStore,
 }: UseChatSessionStateArgs) {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(selectedSession?.id || null);
+  // Tracks the project the chat view last rendered, so the "keep a mid-run view"
+  // guard can tell a same-project session race from an actual project switch.
+  const prevProjectIdRef = useRef<string | null>(selectedProject?.projectId ?? null);
   const [isLoadingSessionMessages, setIsLoadingSessionMessages] = useState(false);
   const [isLoadingMoreMessages, setIsLoadingMoreMessages] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
@@ -261,6 +264,44 @@ export function useChatSessionState({
   }, [activeSessionId, pendingUserMessage, sessionStore]);
 
   const storeMessages = activeSessionId ? sessionStore.getMessages(activeSessionId) : [];
+
+  // Stalled-run watchdog. While the viewed session shows as processing, poll for
+  // activity; if no new event arrives within a window, re-send `chat.subscribe`.
+  // The backend reconciles the run against its runtime's real liveness on
+  // subscribe, so a run whose process died without a terminal `complete` (kill/
+  // OOM/crash) gets a synthetic `complete` and the spinner clears — no manual
+  // refresh. A genuinely working run (even one thinking for minutes) is still in
+  // the runtime's active map, so it stays processing untouched.
+  const watchdogMsgCountRef = useRef(0);
+  const watchdogQuietTicksRef = useRef(0);
+  useEffect(() => {
+    if (!isProcessing || !activeSessionId || !ws) {
+      watchdogQuietTicksRef.current = 0;
+      return;
+    }
+    watchdogMsgCountRef.current = storeMessages.length;
+    const CHECK_INTERVAL_MS = 20_000;
+    const QUIET_TICKS_BEFORE_RECHECK = 1; // ~20s of silence before re-verifying
+    const timer = window.setInterval(() => {
+      if (storeMessages.length !== watchdogMsgCountRef.current) {
+        // New events arrived — the run is alive; reset the quiet counter.
+        watchdogMsgCountRef.current = storeMessages.length;
+        watchdogQuietTicksRef.current = 0;
+        return;
+      }
+      watchdogQuietTicksRef.current += 1;
+      if (watchdogQuietTicksRef.current < QUIET_TICKS_BEFORE_RECHECK) {
+        return;
+      }
+      watchdogQuietTicksRef.current = 0;
+      statusCheckSentAtRef.current.set(activeSessionId, Date.now());
+      sendMessage({
+        type: 'chat.subscribe',
+        sessions: [{ sessionId: activeSessionId, lastSeq: lastSeqRef.current.get(activeSessionId) ?? 0 }],
+      });
+    }, CHECK_INTERVAL_MS);
+    return () => window.clearInterval(timer);
+  }, [isProcessing, activeSessionId, ws, storeMessages.length, sendMessage, statusCheckSentAtRef, lastSeqRef]);
 
   // Reset viewHiddenCount when store messages change
   const prevStoreLenRef = useRef(0);
@@ -477,11 +518,17 @@ export function useChatSessionState({
 
   // Main session loading effect — store-based
   useEffect(() => {
+    const nextProjectId = selectedProject?.projectId ?? null;
+    const projectChanged = nextProjectId !== prevProjectIdRef.current;
+    prevProjectIdRef.current = nextProjectId;
+
     if (!selectedSession || !selectedProject) {
       // A freshly created session can be mid-run before the router has a
-      // canonical selectedSession (the URL effect synthesizes one on the
-      // next render). Keep the active view intact instead of wiping it.
-      if (currentSessionId && processingSessionsRef.current?.has(currentSessionId)) {
+      // canonical selectedSession (the URL effect synthesizes one on the next
+      // render). Keep the active view intact instead of wiping it — but ONLY
+      // within the same project. On an actual project switch we must clear, or
+      // the new project's chat panel keeps showing the previous session.
+      if (!projectChanged && currentSessionId && processingSessionsRef.current?.has(currentSessionId)) {
         return;
       }
 

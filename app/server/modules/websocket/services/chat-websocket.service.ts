@@ -64,6 +64,13 @@ type ChatWebSocketDependencies = {
    * The Claude abort is async; the rest are sync — both shapes are accepted.
    */
   abortFns: Record<LLMProvider, (providerSessionId: string) => boolean | Promise<boolean>>;
+  /**
+   * Runtime liveness by provider, addressed with the provider-native session id.
+   * `chat.subscribe` consults this to confirm a run marked `running` still has a
+   * live process; a run whose runtime vanished (SIGKILL/OOM/crash before its
+   * catch) is reported idle so the client stops spinning without a manual refresh.
+   */
+  isActiveFns: Record<LLMProvider, (providerSessionId: string) => boolean>;
   resolveToolApproval: (
     requestId: string,
     payload: {
@@ -286,7 +293,12 @@ function handleChatSubscribe(
       : 0;
 
     const run = chatRunRegistry.getRun(sessionId);
-    const isProcessing = chatRunRegistry.isProcessing(sessionId);
+    // Authoritative: a run marked `running` whose runtime has died is reconciled
+    // to idle here (and a synthetic `complete` is emitted), so the client never
+    // spins on a zombie run. A live/thinking run stays processing.
+    const isProcessing = run
+      ? chatRunRegistry.reconcileLiveness(sessionId, dependencies.isActiveFns[run.provider])
+      : chatRunRegistry.isProcessing(sessionId);
 
     // Future live events for this run should land on the socket that asked —
     // this is what makes mid-stream page refreshes work for all providers.
