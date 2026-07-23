@@ -315,6 +315,24 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     filePath: activeModelChangesPath,
   });
 
+  // The model a session is on, for DISPLAY: an explicit in-session switch (the
+  // change-override file) wins, then the model the transcript last actually ran.
+  // The UI resolver (/api/user/effective-model) uses this so the picker reflects
+  // reality. (resolveResumeModel below is the RUNTIME path: it stops at the
+  // override and lets the resuming CLI own its transcript, so it deliberately
+  // does NOT read the transcript here.)
+  const resolveSessionModel = async (
+    provider: LLMProvider,
+    sessionId: string,
+  ): Promise<string | undefined> => {
+    const changedModel = await getChangedActiveModel(provider, sessionId);
+    if (changedModel.supported && changedModel.changed && changedModel.model?.trim()) {
+      return changedModel.model.trim();
+    }
+    const active = await getCurrentActiveModel(provider, sessionId);
+    return active?.model?.trim() || undefined;
+  };
+
   const resolveResumeModel = async (
     provider: LLMProvider,
     sessionId: string | undefined,
@@ -345,6 +363,7 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     getCurrentActiveModel,
     getChangedActiveModel,
     changeActiveModel,
+    resolveSessionModel,
     resolveResumeModel,
     clearCache,
   };
