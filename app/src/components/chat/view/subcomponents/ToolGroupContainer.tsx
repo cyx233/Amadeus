@@ -46,7 +46,23 @@ function getToolInputPreview(message: ChatMessage): string {
   const title = typeof config.title === 'function' ? config.title(parsedInput) : config.title;
   const value = config.getValue?.(parsedInput);
 
-  return String(value || title || message.displayText || message.content || '').trim();
+  let preview = String(value || title || message.displayText || message.content || '').trim();
+
+  // Append the line range for Read so repeated reads of one file are
+  // distinguishable in the grouped preview (foo.go:120-170) instead of looking
+  // like the same call. Kept here, not in the tool config's getValue, because
+  // that value doubles as the path handed to the open-file action.
+  if (message.toolName === 'Read' && preview && parsedInput && typeof parsedInput === 'object') {
+    const input = parsedInput as { offset?: unknown; limit?: unknown };
+    const offset = Number(input.offset);
+    if (Number.isFinite(offset) && offset > 0) {
+      const limit = Number(input.limit);
+      const end = Number.isFinite(limit) && limit > 0 ? offset + limit - 1 : null;
+      preview += end ? `:${offset}-${end}` : `:${offset}`;
+    }
+  }
+
+  return preview;
 }
 
 function getToolGroupIcon(icon: string | undefined, toolName: string): string {
@@ -78,10 +94,10 @@ export default function ToolGroupContainer({
   const icon = getToolGroupIcon(config.icon, group.toolName);
 
   const preview = useMemo(() => {
-    // Dedupe previews before truncating: 5 Reads of the same file previously
-    // rendered "eventcontroller.go, eventcontroller.go, +3 more" — repeating the
-    // identical target reads as noise. Collapse to distinct targets so the
-    // summary is "eventcontroller.go" (the x5 badge already conveys the count).
+    // Dedupe identical previews before truncating, but keep genuinely different
+    // ones: Read includes its line range in the preview (foo.go:1-50), so five
+    // reads of one file at different ranges stay distinct and informative rather
+    // than collapsing or repeating the bare filename.
     const distinctPreviews: string[] = [];
     for (const message of group.messages) {
       const previewValue = getToolInputPreview(message);
