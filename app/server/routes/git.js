@@ -1159,6 +1159,10 @@ router.post('/generate-commit-message', async (req, res) => {
  * @param {string} projectPath - Project directory path
  * @returns {Promise<string>} Generated commit message
  */
+// A commit message is a quick one-shot generation; if the agent hasn't produced
+// one in this long it's stalled, so time out and fall back rather than hang.
+const COMMIT_MESSAGE_TIMEOUT_MS = 60_000;
+
 async function generateCommitMessageWithAI(files, diffContext, provider, projectPath) {
   // Create the prompt
   const prompt = `Generate a conventional commit message for these changes.
@@ -1225,18 +1229,24 @@ Generate the commit message:`;
     console.log('🚀 Calling AI agent with provider:', provider);
     console.log('📝 Prompt length:', prompt.length);
 
-    // Call the appropriate agent
-    if (provider === 'claude') {
-      await queryClaudeSDK(prompt, {
-        cwd: projectPath,
-        permissionMode: 'bypassPermissions',
-        model: 'sonnet'
-      }, writer);
-    } else if (provider === 'cursor') {
-      await spawnCursor(prompt, {
-        cwd: projectPath,
-        skipPermissions: true
-      }, writer);
+    // Call the appropriate agent, bounded by a timeout. queryClaudeSDK spins up a
+    // full agent session (all tools + MCP servers) and only resolves when its
+    // message stream ends — if the model/tool/MCP startup stalls, it never
+    // resolves and the HTTP request hangs forever (the UI spinner never stops).
+    // A one-shot commit message doesn't justify that risk: cap it and let the
+    // catch below fall back to a generated default.
+    const agentCall = provider === 'claude'
+      ? queryClaudeSDK(prompt, { cwd: projectPath, permissionMode: 'bypassPermissions', model: 'sonnet' }, writer)
+      : spawnCursor(prompt, { cwd: projectPath, skipPermissions: true }, writer);
+
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error('commit-message generation timed out')), COMMIT_MESSAGE_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([agentCall, timeout]);
+    } finally {
+      clearTimeout(timer);
     }
 
     console.log('📊 Total response text collected:', responseText.length, 'characters');
