@@ -128,7 +128,9 @@
     "generateTasks": "Generate tasks from this PRD",
     "openEditor": "Open PRD",
     "delete": "Delete PRD and its tasks",
-    "confirmDelete": "Delete \"{{name}}\" and its tasks?"
+    "confirmDelete": "Delete \"{{name}}\" and its tasks?",
+    "starting": "Starting…",
+    "generating": "Generating…"
   },
   "prd": {
     "modified": "Modified: {{date}}"

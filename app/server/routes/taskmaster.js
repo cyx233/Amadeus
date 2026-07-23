@@ -1002,6 +1002,110 @@ router.post('/parse-prd/:projectId', async (req, res) => {
 });
 
 /**
+ * GET /api/taskmaster/parse-prd-progress/:projectId
+ * Streaming variant of parse-prd. Generating tasks from a PRD takes tens of
+ * seconds to minutes (each task is an AI call), so instead of a single request
+ * that appears to hang, this streams task-master's stdout line-by-line over SSE
+ * so the UI can show live progress. Params come via query (EventSource can't
+ * send a POST body); auth token via ?token= (EventSource can't set headers).
+ */
+router.get('/parse-prd-progress/:projectId', async (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const sendEvent = (type, data) => {
+        if (!res.writableEnded) {
+            res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+        }
+    };
+
+    let child = null;
+    req.on('close', () => { child?.kill(); });
+
+    try {
+        const { projectId } = req.params;
+        const fileName = typeof req.query.fileName === 'string' ? req.query.fileName : 'prd.txt';
+        const tag = typeof req.query.tag === 'string' ? req.query.tag : '';
+        // Bound generation: without a limit task-master generates open-endedly and
+        // can run for many minutes. Default to 10; honor an explicit numTasks.
+        const numTasks = Number.parseInt(String(req.query.numTasks ?? ''), 10);
+        const append = req.query.append === 'true';
+        // parse-prd's ONLY interactive prompt is the "overwrite existing tasks?"
+        // confirmation. With stdin closed (below) that prompt would hang forever,
+        // so we must pass a non-interactive intent: append (add to the set) or
+        // force (replace it). Default to force so a fresh generate never stalls;
+        // the UI decides append vs overwrite for a tag that already has tasks.
+        const force = req.query.force === 'true';
+
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
+            sendEvent('error', { message: `Project "${projectId}" does not exist` });
+            return res.end();
+        }
+
+        const prdPath = path.join(projectPath, '.taskmaster', 'docs', fileName);
+        try {
+            await fsPromises.access(prdPath, fs.constants.F_OK);
+        } catch {
+            sendEvent('error', { message: `File "${fileName}" does not exist in .taskmaster/docs/` });
+            return res.end();
+        }
+
+        const args = ['task-master', 'parse-prd', prdPath,
+            '--num-tasks', String(Number.isFinite(numTasks) && numTasks > 0 ? numTasks : 10)];
+        if (tag) args.push('--tag', String(tag));
+        // Non-interactive intent (see above). append wins if both set; otherwise
+        // force to skip the overwrite confirmation. `stdio: ['ignore', ...]` keeps
+        // stdin closed so a stray prompt fails fast instead of hanging.
+        if (append) args.push('--append');
+        else args.push('--force');
+        void force; // force is the default path; kept as an explicit query knob
+
+        sendEvent('progress', { message: `Generating tasks from ${fileName}...` });
+
+        child = spawn('npx', args, { cwd: projectPath, stdio: ['ignore', 'pipe', 'pipe'] });
+        let tail = '';
+
+        const streamLines = (buf) => {
+            const text = buf.toString();
+            tail += text;
+            // Emit on newlines; strip ANSI so the UI shows clean lines.
+            let idx;
+            while ((idx = tail.indexOf('\n')) !== -1) {
+                const line = tail.slice(0, idx).replace(/\x1b\[[0-9;]*m/g, '').trim();
+                tail = tail.slice(idx + 1);
+                if (line) sendEvent('progress', { message: line });
+            }
+        };
+        child.stdout.on('data', streamLines);
+        child.stderr.on('data', streamLines);
+
+        child.on('close', (code) => {
+            if (code === 0) {
+                if (req.app.locals.wss) {
+                    broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
+                }
+                sendEvent('complete', { message: 'Tasks generated successfully', tag });
+            } else {
+                sendEvent('error', { message: `parse-prd exited with code ${code}` });
+            }
+            res.end();
+        });
+
+        child.on('error', (err) => {
+            sendEvent('error', { message: err.message });
+            res.end();
+        });
+    } catch (error) {
+        console.error('Parse PRD (SSE) error:', error);
+        sendEvent('error', { message: error instanceof Error ? error.message : 'Failed to parse PRD' });
+        res.end();
+    }
+});
+
+/**
  * GET /api/taskmaster/prd-templates
  * Get available PRD templates
  */

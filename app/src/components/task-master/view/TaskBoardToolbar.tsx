@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Check,
   ChevronDown,
@@ -89,6 +90,12 @@ export default function TaskBoardToolbar({
   const [isPrdDropdownOpen, setIsPrdDropdownOpen] = useState(false);
   const [generatingTag, setGeneratingTag] = useState<string | null>(null);
   const [deletingPrd, setDeletingPrd] = useState<string | null>(null);
+  // Live parse-prd progress: null when idle, otherwise the modal state.
+  const [generateProgress, setGenerateProgress] = useState<{
+    prdName: string;
+    lines: string[];
+    status: 'running' | 'done' | 'error';
+  } | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   // A tag only appears in availableTags once it has tasks in tasks.json, so this
@@ -99,22 +106,44 @@ export default function TaskBoardToolbar({
   const prdTagSet = new Set(existingPrds.map((prd) => prdNameToTag(prd.name)));
   const orphanTags = availableTags.filter((tagName) => !prdTagSet.has(tagName));
 
-  const handleGenerateTasks = async (prd: PrdFile) => {
-    if (!currentProject?.projectId) return;
+  const handleGenerateTasks = (prd: PrdFile) => {
+    if (!currentProject?.projectId || generatingTag) return;
     const slug = prdNameToTag(prd.name);
-    try {
-      setGeneratingTag(slug);
-      await api.taskmaster.parsePRD(currentProject.projectId, {
-        fileName: prd.name,
-        tag: slug,
-        numTasks: undefined,
-        append: undefined,
-      });
-      selectTag(slug); // jump the board to the freshly-generated set
-      await refreshTasks();
-    } finally {
+    setGeneratingTag(slug);
+    setIsPrdDropdownOpen(false);
+    setGenerateProgress({ prdName: prd.name, lines: [], status: 'running' });
+
+    // Stream progress over SSE — generation is a long AI job, so show it live
+    // instead of a spinner that looks hung. force-writes only this PRD's tag.
+    const es = api.taskmaster.parsePRDProgress(currentProject.projectId, {
+      fileName: prd.name,
+      tag: slug,
+    });
+
+    es.onmessage = (event) => {
+      let payload: { type?: string; message?: string } = {};
+      try { payload = JSON.parse(event.data); } catch { return; }
+      if (payload.type === 'progress' && payload.message) {
+        setGenerateProgress((prev) =>
+          prev ? { ...prev, lines: [...prev.lines, payload.message as string] } : prev);
+      } else if (payload.type === 'complete') {
+        es.close();
+        setGeneratingTag(null);
+        setGenerateProgress((prev) => (prev ? { ...prev, status: 'done' } : prev));
+        selectTag(slug); // jump the board to the freshly-generated set
+        void refreshTasks();
+      } else if (payload.type === 'error') {
+        es.close();
+        setGeneratingTag(null);
+        setGenerateProgress((prev) =>
+          prev ? { ...prev, status: 'error', lines: [...prev.lines, payload.message || 'Failed'] } : prev);
+      }
+    };
+    es.onerror = () => {
+      es.close();
       setGeneratingTag(null);
-    }
+      setGenerateProgress((prev) => (prev ? { ...prev, status: 'error' } : prev));
+    };
   };
 
   const handleDeletePrd = async (prd: PrdFile) => {
@@ -465,6 +494,41 @@ export default function TaskBoardToolbar({
       />
 
       <TaskQuickSortBar sortField={sortField} sortOrder={sortOrder} onSortChange={onSortChange} />
+
+      {generateProgress && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-800">
+            <div className="flex items-center gap-2 border-b border-gray-200 p-4 dark:border-gray-700">
+              {generateProgress.status === 'running'
+                ? <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
+                : generateProgress.status === 'done'
+                  ? <Check className="h-4 w-4 text-green-600" />
+                  : <Trash2 className="h-4 w-4 text-red-600" />}
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                {t('tags.generateTasks', 'Generate tasks from this PRD')} — {generateProgress.prdName}
+              </h3>
+            </div>
+            {/* Live task-master output; auto-scrolls to the newest line. */}
+            <div className="max-h-72 overflow-y-auto bg-gray-50 p-3 font-mono text-xs text-gray-700 dark:bg-gray-900 dark:text-gray-300">
+              {generateProgress.lines.length === 0
+                ? <div className="text-gray-400">{t('tags.starting', 'Starting…')}</div>
+                : generateProgress.lines.map((line, i) => (
+                    <div key={i} className="whitespace-pre-wrap break-words">{line}</div>
+                  ))}
+            </div>
+            <div className="flex justify-end border-t border-gray-200 p-3 dark:border-gray-700">
+              <button
+                onClick={() => setGenerateProgress(null)}
+                disabled={generateProgress.status === 'running'}
+                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
+              >
+                {generateProgress.status === 'running' ? t('tags.generating', 'Generating…') : t('actions.close', 'Close')}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </>
   );
 }

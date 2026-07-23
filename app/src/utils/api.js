@@ -225,6 +225,25 @@ export const api = {
         body: JSON.stringify({ fileName, numTasks, append, tag }),
       }),
 
+    // Stream parse-prd progress over SSE. Generating tasks takes tens of seconds
+    // to minutes (one AI call per task), so the UI shows live progress instead
+    // of a single request that appears to hang. Returns an EventSource; caller
+    // handles onProgress/onComplete/onError. token in query (EventSource can't
+    // set headers). `append` adds to the tag; otherwise the server force-writes
+    // (skips the interactive overwrite prompt) — scoped to this tag only.
+    parsePRDProgress: (projectId, { fileName, numTasks, tag, append } = {}) => {
+      const token = localStorage.getItem('auth-token');
+      const params = new URLSearchParams();
+      if (fileName) params.set('fileName', fileName);
+      if (tag) params.set('tag', tag);
+      if (numTasks) params.set('numTasks', String(numTasks));
+      if (append) params.set('append', 'true');
+      if (token) params.set('token', token);
+      return new EventSource(
+        `/api/taskmaster/parse-prd-progress/${encodeURIComponent(projectId)}?${params.toString()}`,
+      );
+    },
+
     // Delete a PRD file and drop its generated task set (`tag`). master is never
     // removed server-side even if passed.
     deletePRD: (projectId, fileName, tag) => {
