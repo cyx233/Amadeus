@@ -163,6 +163,11 @@ export default tseslint.config(
             "server/shared/claude-cli-path.ts",
             "server/shared/image-attachments.ts",
             "server/shared/secret-crypto.ts",
+            // Shared runtime helpers used by the legacy agent runtimes (e.g.
+            // claude-sdk.js) — not tied to any one provider module.
+            "server/services/notification-orchestrator.js",
+            "server/utils/todo-mcp.js",
+            "server/utils/todo-store.js",
           ], // classify shared utility files so modules can depend on them explicitly
           mode: "file",
         },
@@ -234,13 +239,15 @@ export default tseslint.config(
                 "Backend modules may only use `import type` when importing from server/shared/types.ts or server/shared/interfaces.ts.",
             },
             {
+              from: { type: "backend-module" }, // enforce the barrel contract only BETWEEN modules
               to: { type: "backend-module" }, // when importing anything that belongs to another backend module
               disallow: { to: { internalPath: "**" } }, // block all direct/deep imports into module internals by default
               message:
                 "Cross-module imports must go through that module's barrel file (server/modules/<module>/index.ts or index.js).", // explicit error message for architecture violations
             },
             {
-              to: { type: "backend-module" }, // same target scope as the disallow rule above
+              from: { type: "backend-module" }, // same scope as the disallow rule above
+              to: { type: "backend-module" },
               allow: {
                 to: {
                   internalPath: [
