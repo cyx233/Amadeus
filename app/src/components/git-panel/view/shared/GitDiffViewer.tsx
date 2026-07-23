@@ -1,37 +1,40 @@
 import { useMemo } from 'react';
+import { parseDiff, Diff, Hunk, type FileData } from 'react-diff-view';
+
+import 'react-diff-view/style/index.css';
+import './git-diff-view.css';
 
 type GitDiffViewerProps = {
   diff: string | null;
-  isMobile: boolean;
+  /** Retained for call-site compatibility; the unified view already adapts. */
+  isMobile?: boolean;
   wrapText: boolean;
 };
 
-const PREVIEW_CHARACTER_LIMIT = 200_000;
-const PREVIEW_LINE_LIMIT = 1_500;
+// Guard against pathological diffs freezing the render thread. parseDiff walks
+// the whole string, so cap what we hand it; a truncated tail still parses (the
+// last hunk may be dropped) and we surface a notice.
+const PREVIEW_CHARACTER_LIMIT = 400_000;
 
-type DiffPreview = {
-  lines: string[];
-  isCharacterTruncated: boolean;
-  isLineTruncated: boolean;
-};
-
-function buildDiffPreview(diff: string): DiffPreview {
-  const isCharacterTruncated = diff.length > PREVIEW_CHARACTER_LIMIT;
-  const previewText = isCharacterTruncated ? diff.slice(0, PREVIEW_CHARACTER_LIMIT) : diff;
-  const previewLines = previewText.split('\n');
-  const isLineTruncated = previewLines.length > PREVIEW_LINE_LIMIT;
-
-  return {
-    lines: isLineTruncated ? previewLines.slice(0, PREVIEW_LINE_LIMIT) : previewLines,
-    isCharacterTruncated,
-    isLineTruncated,
-  };
-}
-
-export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewerProps) {
-  // Render a bounded preview to keep huge commit diffs from freezing the UI thread.
-  const preview = useMemo(() => buildDiffPreview(diff || ''), [diff]);
-  const isPreviewTruncated = preview.isCharacterTruncated || preview.isLineTruncated;
+export default function GitDiffViewer({ diff, wrapText }: GitDiffViewerProps) {
+  const { files, isTruncated, parseError } = useMemo(() => {
+    if (!diff) {
+      return { files: [] as FileData[], isTruncated: false, parseError: false };
+    }
+    const truncated = diff.length > PREVIEW_CHARACTER_LIMIT;
+    const text = truncated ? diff.slice(0, PREVIEW_CHARACTER_LIMIT) : diff;
+    try {
+      // react-diff-view wants an actual unified diff; the git endpoint returns
+      // one starting with `diff --git`. If the header is missing (some diffs are
+      // emitted body-only), synthesize a minimal one so parseDiff still hunks it.
+      const normalized = text.startsWith('diff ') || text.startsWith('--- ')
+        ? text
+        : `--- a\n+++ b\n${text}`;
+      return { files: parseDiff(normalized), isTruncated: truncated, parseError: false };
+    } catch {
+      return { files: [] as FileData[], isTruncated: truncated, parseError: true };
+    }
+  }, [diff]);
 
   if (!diff) {
     return (
@@ -41,34 +44,33 @@ export default function GitDiffViewer({ diff, isMobile, wrapText }: GitDiffViewe
     );
   }
 
-  const renderDiffLine = (line: string, index: number) => {
-    const isAddition = line.startsWith('+') && !line.startsWith('+++');
-    const isDeletion = line.startsWith('-') && !line.startsWith('---');
-    const isHeader = line.startsWith('@@');
-
+  // parseError or an empty parse (e.g. binary/rename-only) → fall back to the
+  // raw text so the user still sees something rather than a blank panel.
+  if (parseError || files.length === 0 || files.every((file) => file.hunks.length === 0)) {
     return (
-      <div
-        key={index}
-        className={`px-3 py-0.5 font-mono text-xs ${isMobile && wrapText ? 'whitespace-pre-wrap break-all' : 'overflow-x-auto whitespace-pre'
-          } ${isAddition ? 'bg-green-50 text-green-700 dark:bg-green-950/50 dark:text-green-300' :
-            isDeletion ? 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300' :
-              isHeader ? 'bg-primary/5 text-primary' :
-                'text-muted-foreground/70'
-          }`}
-      >
-        {line}
-      </div>
+      <pre className="overflow-x-auto whitespace-pre px-3 py-2 font-mono text-xs text-muted-foreground/80">
+        {diff}
+      </pre>
     );
-  };
+  }
 
   return (
-    <div className="diff-viewer">
-      {isPreviewTruncated && (
+    <div className={`git-diff-view ${wrapText ? 'git-diff-view--wrap' : ''}`}>
+      {isTruncated && (
         <div className="mb-2 rounded-md border border-border bg-card px-3 py-2 text-xs text-muted-foreground">
           Large diff preview: rendering is limited to keep the tab responsive.
         </div>
       )}
-      {preview.lines.map((line, index) => renderDiffLine(line, index))}
+      {files.map((file, index) => (
+        <Diff
+          key={`${file.oldRevision}-${file.newRevision}-${index}`}
+          viewType="unified"
+          diffType={file.type}
+          hunks={file.hunks}
+        >
+          {(hunks) => hunks.map((hunk) => <Hunk key={hunk.content} hunk={hunk} />)}
+        </Diff>
+      ))}
     </div>
   );
 }

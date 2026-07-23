@@ -183,35 +183,6 @@ export async function discoverGitRepos(projectPath) {
   return repos;
 }
 
-// Helper function to strip git diff headers
-function stripDiffHeaders(diff) {
-  if (!diff) return '';
-
-  const lines = diff.split('\n');
-  const filteredLines = [];
-  let startIncluding = false;
-
-  for (const line of lines) {
-    // Skip all header lines including diff --git, index, file mode, and --- / +++ file paths
-    if (line.startsWith('diff --git') ||
-        line.startsWith('index ') ||
-        line.startsWith('new file mode') ||
-        line.startsWith('deleted file mode') ||
-        line.startsWith('---') ||
-        line.startsWith('+++')) {
-      continue;
-    }
-
-    // Start including lines from @@ hunk headers onwards
-    if (line.startsWith('@@') || startIncluding) {
-      startIncluding = true;
-      filteredLines.push(line);
-    }
-  }
-
-  return filteredLines.join('\n');
-}
-
 // Helper function to validate git repository
 async function validateGitRepository(projectPath) {
   try {
@@ -568,8 +539,11 @@ router.get('/diff', async (req, res) => {
       );
 
       if (unstagedDiff) {
-        // Show unstaged changes if they exist
-        diff = stripDiffHeaders(unstagedDiff);
+        // Send the raw unified diff (full `diff --git`/`index`/`---`/`+++`/`@@`
+        // headers). The client parses it with a real diff library, which needs
+        // the file/hunk headers to align lines — stripping them made a tracked
+        // file's diff parse as one giant add/delete block (all red/green).
+        diff = unstagedDiff;
       } else {
         // If no unstaged changes, check for staged changes (index vs HEAD)
         const { stdout: stagedDiff } = await spawnAsync(
@@ -577,7 +551,7 @@ router.get('/diff', async (req, res) => {
           ['diff', '--cached', '--', repositoryRelativeFilePath],
           { cwd: repositoryRootPath },
         );
-        diff = stripDiffHeaders(stagedDiff) || '';
+        diff = stagedDiff || '';
       }
     }
 
