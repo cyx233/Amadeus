@@ -227,11 +227,12 @@ function mapCliOptionsToSDK(options = {}) {
 
   sdkOptions.settingSources = ['project', 'user', 'local'];
 
-  // Emit SDKPartialAssistantMessage ('stream_event') so assistant text streams
-  // token-by-token. Without this the SDK only delivers the full assistant block
-  // at turn end, so the UI shows nothing until the reply completes (and a mid-run
-  // stop flushes just the partial block) — looking like streaming is broken.
-  sdkOptions.includePartialMessages = true;
+  // Streaming (includePartialMessages) is intentionally OFF: partial token
+  // streaming amplified the "reply cut off half-way" symptom when the socket
+  // dropped mid-run — a half-delivered stream left a truncated bubble. Without
+  // it the SDK delivers each assistant block whole at turn end, so a reply is
+  // all-or-nothing and can't show a torn half. Re-enable once the socket churn
+  // is fully settled if token-by-token streaming is wanted back.
 
   if (sessionId) {
     sdkOptions.resume = sessionId;
