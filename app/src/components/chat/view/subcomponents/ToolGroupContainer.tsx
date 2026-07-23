@@ -78,16 +78,24 @@ export default function ToolGroupContainer({
   const icon = getToolGroupIcon(config.icon, group.toolName);
 
   const preview = useMemo(() => {
-    const visiblePreviews = group.messages
-      .slice(0, 2)
-      .map(getToolInputPreview)
-      .filter(Boolean);
+    // Dedupe previews before truncating: 5 Reads of the same file previously
+    // rendered "eventcontroller.go, eventcontroller.go, +3 more" — repeating the
+    // identical target reads as noise. Collapse to distinct targets so the
+    // summary is "eventcontroller.go" (the x5 badge already conveys the count).
+    const distinctPreviews: string[] = [];
+    for (const message of group.messages) {
+      const previewValue = getToolInputPreview(message);
+      if (previewValue && !distinctPreviews.includes(previewValue)) {
+        distinctPreviews.push(previewValue);
+      }
+    }
 
-    const extraCount = group.messages.length - visiblePreviews.length;
+    const visiblePreviews = distinctPreviews.slice(0, 2);
+    const extraCount = distinctPreviews.length - visiblePreviews.length;
     const previewText = visiblePreviews.join(', ');
 
     if (!previewText) {
-      return extraCount > 0 ? `+${extraCount} more` : '';
+      return '';
     }
 
     return extraCount > 0 ? `${previewText}, +${extraCount} more` : previewText;
