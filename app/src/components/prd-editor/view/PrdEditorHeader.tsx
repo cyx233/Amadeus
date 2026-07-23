@@ -1,11 +1,13 @@
 import { useRef } from 'react';
 import type { ReactNode } from 'react';
 import {
+  Copy,
   Download,
   Eye,
   FileText,
   Maximize2,
   Minimize2,
+  Pencil,
   Save,
   Sparkles,
   X,
@@ -17,6 +19,7 @@ type PrdEditorHeaderProps = {
   onFileNameChange: (nextFileName: string) => void;
   isNewFile: boolean;
   fileNameReadOnly: boolean;
+  onCopyToNew: () => void;
   previewMode: boolean;
   onTogglePreview: () => void;
   wordWrap: boolean;
@@ -45,7 +48,9 @@ function HeaderIconButton({ title, onClick, icon, active = false }: HeaderIconBu
       onClick={onClick}
       title={title}
       className={cn(
-        'p-2 rounded-md min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center transition-colors',
+        // Uniform height across the whole top bar (44px touch target on mobile,
+        // 36px on desktop) so icon buttons and the text buttons line up.
+        'h-11 w-11 md:h-9 md:w-9 rounded-md flex items-center justify-center transition-colors',
         active
           ? 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/50'
           : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800',
@@ -61,6 +66,7 @@ export default function PrdEditorHeader({
   onFileNameChange,
   isNewFile,
   fileNameReadOnly,
+  onCopyToNew,
   previewMode,
   onTogglePreview,
   wordWrap,
@@ -107,20 +113,26 @@ export default function PrdEditorHeader({
                 </span>
               </div>
 
-              <button
-                onClick={() => fileNameInputRef.current?.focus()}
-                className="p-1 text-gray-400 transition-colors hover:text-purple-600 dark:hover:text-purple-400"
-                title="Focus filename input"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                  />
-                </svg>
-              </button>
+              {fileNameReadOnly ? (
+                // Existing PRDs have a fixed filename (rename isn't supported), so
+                // offer "save as a new PRD" instead of a no-op edit affordance.
+                <button
+                  onClick={onCopyToNew}
+                  className="flex flex-shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium text-purple-600 transition-colors hover:bg-purple-50 dark:text-purple-400 dark:hover:bg-purple-900/30"
+                  title="Save a copy under a new name"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Copy to new</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => fileNameInputRef.current?.focus()}
+                  className="p-1 text-gray-400 transition-colors hover:text-purple-600 dark:hover:text-purple-400"
+                  title="Focus filename input"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              )}
             </div>
 
             <div className="flex flex-shrink-0 items-center gap-2">
@@ -166,7 +178,7 @@ export default function PrdEditorHeader({
           onClick={onOpenGenerateTasks}
           disabled={!canGenerateTasks}
           className={cn(
-            'px-3 py-2 rounded-md disabled:opacity-50 flex items-center gap-2 transition-colors text-sm font-medium text-white min-h-[44px] md:min-h-0',
+            'h-11 md:h-9 px-3 rounded-md disabled:opacity-50 flex items-center gap-2 transition-colors text-sm font-medium text-white',
             'bg-purple-600 hover:bg-purple-700',
           )}
           title="Generate tasks from PRD content"
@@ -179,20 +191,20 @@ export default function PrdEditorHeader({
           onClick={onSave}
           disabled={saving}
           className={cn(
-            'px-3 py-2 text-white rounded-md disabled:opacity-50 flex items-center gap-2 transition-colors min-h-[44px] md:min-h-0',
+            'h-11 md:h-9 px-3 text-white rounded-md disabled:opacity-50 flex items-center gap-2 transition-colors text-sm font-medium',
             saveSuccess ? 'bg-green-600 hover:bg-green-700' : 'bg-purple-600 hover:bg-purple-700',
           )}
         >
           {saveSuccess ? (
             <>
-              <svg className="h-5 w-5 md:h-4 md:w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
               <span className="hidden sm:inline">Saved!</span>
             </>
           ) : (
             <>
-              <Save className="h-5 w-5 md:h-4 md:w-4" />
+              <Save className="h-4 w-4" />
               <span className="hidden sm:inline">{saving ? 'Saving...' : 'Save PRD'}</span>
             </>
           )}
@@ -200,7 +212,7 @@ export default function PrdEditorHeader({
 
         <button
           onClick={onToggleFullscreen}
-          className="hidden items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white md:flex"
+          className="hidden h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white md:flex"
           title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         >
           {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}

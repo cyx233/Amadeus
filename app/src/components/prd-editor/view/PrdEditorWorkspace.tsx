@@ -15,6 +15,7 @@ type PrdEditorWorkspaceProps = {
   fileName: string;
   onFileNameChange: (nextFileName: string) => void;
   isNewFile: boolean;
+  onCopyToNew: () => void;
   saving: boolean;
   saveSuccess: boolean;
   onSave: () => void;
@@ -29,6 +30,7 @@ export default function PrdEditorWorkspace({
   fileName,
   onFileNameChange,
   isNewFile,
+  onCopyToNew,
   saving,
   saveSuccess,
   onSave,
@@ -80,6 +82,7 @@ export default function PrdEditorWorkspace({
           onFileNameChange={onFileNameChange}
           isNewFile={isNewFile}
           fileNameReadOnly={!isNewFile}
+          onCopyToNew={onCopyToNew}
           previewMode={previewMode}
           onTogglePreview={() => setPreviewMode((current) => !current)}
           wordWrap={wordWrap}

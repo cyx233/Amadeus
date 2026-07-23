@@ -5,7 +5,7 @@ import { usePrdKeyboardShortcuts } from './hooks/usePrdKeyboardShortcuts';
 import { usePrdRegistry } from './hooks/usePrdRegistry';
 import { usePrdSave } from './hooks/usePrdSave';
 import type { PrdFile } from './types';
-import { ensurePrdExtension } from './utils/fileName';
+import { ensurePrdExtension, stripPrdExtension } from './utils/fileName';
 import OverwriteConfirmModal from './view/OverwriteConfirmModal';
 import PrdEditorLoadingState from './view/PrdEditorLoadingState';
 import PrdEditorWorkspace from './view/PrdEditorWorkspace';
@@ -97,6 +97,31 @@ export default function PRDEditor({
     await handleSave(true);
   }, [handleSave]);
 
+  // Existing PRDs can't be renamed in place (would orphan the task-set tag), so
+  // "Copy to new" saves the current content under a fresh name instead.
+  const handleCopyToNew = useCallback(async () => {
+    const suggested = stripPrdExtension(fileName || 'prd');
+    const input = window.prompt('Save a copy as a new PRD. New name:', `${suggested}-copy`);
+    const newName = input?.trim();
+    if (!newName) {
+      return;
+    }
+    // savePrd skips its overwrite check when editing an existing PRD, so guard
+    // collisions here to avoid silently clobbering another PRD.
+    const finalName = ensurePrdExtension(newName);
+    if (existingPrds.some((prd) => prd.name === finalName)) {
+      alert(`A PRD named "${finalName}" already exists. Choose a different name.`);
+      return;
+    }
+    const result = await savePrd({ content, fileName: newName });
+    if (result.status === 'failed') {
+      alert(result.message);
+      return;
+    }
+    // Switch the editor to the freshly-created copy.
+    setFileName(newName);
+  }, [content, fileName, savePrd, setFileName]);
+
   usePrdKeyboardShortcuts({
     onSave: () => {
       void handleSave();
@@ -116,6 +141,9 @@ export default function PRDEditor({
         fileName={fileName}
         onFileNameChange={setFileName}
         isNewFile={isNewFile}
+        onCopyToNew={() => {
+          void handleCopyToNew();
+        }}
         saving={saving}
         saveSuccess={saveSuccess}
         onSave={() => {
