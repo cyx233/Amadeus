@@ -866,7 +866,6 @@ async function generateTextOnce(prompt, options = {}) {
   const sdkOptions = {
     env: { ...process.env },
     pathToClaudeCodeExecutable: resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH),
-    model: options.model || CLAUDE_FALLBACK_MODELS.DEFAULT,
     // One question, one answer: no agent loop, no tools, no MCP, no side effects.
     maxTurns: 1,
     permissionMode: 'bypassPermissions',
@@ -877,6 +876,12 @@ async function generateTextOnce(prompt, options = {}) {
     // session record in ~/.claude/projects (which would clutter the history UI).
     sessionStore: new InMemorySessionStore(),
   };
+  // Only pin a model when the caller explicitly asks. Otherwise inherit whatever
+  // the container's claude is configured to use — an alias like 'sonnet' resolves
+  // to a bare model ARN in the wrong region and 403s on Bedrock accounts that are
+  // only authorized for a specific `us.` inference profile (which is the default
+  // the entrypoint already configured and knows works).
+  if (options.model) sdkOptions.model = options.model;
   if (options.cwd) sdkOptions.cwd = options.cwd;
   if (options.signal) sdkOptions.abortController = { signal: options.signal };
 

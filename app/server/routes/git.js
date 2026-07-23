@@ -1199,7 +1199,9 @@ Generate the commit message:`;
       // stall on (unlike queryClaudeSDK). See generateTextOnce.
       responseText = await generateTextOnce(prompt, {
         cwd: projectPath,
-        model: 'sonnet',
+        // No model override — inherit the container's configured default, which
+        // is the `us.` inference profile that's actually authorized here. Passing
+        // 'sonnet' resolves to a bare ARN in the wrong region and 403s.
         signal: abort.signal,
       });
     } else {
