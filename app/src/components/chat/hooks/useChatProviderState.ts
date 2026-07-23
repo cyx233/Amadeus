@@ -155,10 +155,11 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     localStorage.setItem('opencode-model', model);
   }, []);
 
-  // Seed each provider's chat model from the user's Model Preference (DB) when
-  // there's no explicit localStorage choice yet — so Settings → Model Preference
-  // acts as the default. An in-chat model switch (which writes localStorage)
-  // still wins as a per-session override. Runs once on mount.
+  // Model Preference (DB) is the authoritative default model per provider. On
+  // mount we adopt it — overwriting the localStorage cache — so a new chat starts
+  // from the user's Settings choice (e.g. opencode → deepseek). Switching model
+  // inside a chat is a per-session override (routed through the backend
+  // active-model API in selectProviderModel), not a change to this default.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -171,9 +172,10 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
           claude: setClaudeModel, cursor: setCursorModel, codex: setCodexModel, opencode: setOpenCodeModel,
         };
         for (const { provider: p, current } of data.providers) {
-          // Only fill the gap FALLBACK_DEFAULT_MODEL used to fill; never override
-          // an explicit localStorage choice. Skip the 'default' sentinel.
-          if (current && current !== 'default' && !localStorage.getItem(`${p}-model`) && setters[p]) {
+          // 'default' is claude's sentinel ("use the tool's own default") — leave
+          // localStorage/state as-is for it; for concrete ids, DB wins.
+          if (current && current !== 'default' && setters[p]) {
+            localStorage.setItem(`${p}-model`, current);
             setters[p](current);
           }
         }
