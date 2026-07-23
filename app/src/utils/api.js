@@ -298,7 +298,7 @@ export const api = {
       }),
     // Model Preference (two axes: provider + model, each with global fallback +
     // per-feature override). Keeps features model-id agnostic.
-    getModels: () => authenticatedFetch('/api/user/models'),
+    getModels: (refresh = false) => authenticatedFetch(`/api/user/models${refresh ? '?refresh=1' : ''}`),
     // body is one of: {globalProvider} | {provider, model} | {feature, provider}
     // | {feature, provider, model}
     updateModel: (body) =>

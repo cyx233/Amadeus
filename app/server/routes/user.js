@@ -127,8 +127,8 @@ router.get('/onboarding-status', authenticateToken, async (req, res) => {
 // fallback and optional per-feature override — the single source of truth that
 // keeps features model-id agnostic. Keys are owned by the model-preference
 // service (prefKeys); catalogs come from providerModelsService.
-async function providerCatalog(provider) {
-  const catalog = (await providerModelsService.getProviderModels(provider)).models;
+async function providerCatalog(provider, bypassCache = false) {
+  const catalog = (await providerModelsService.getProviderModels(provider, { bypassCache })).models;
   return {
     provider,
     defaultModel: catalog.DEFAULT,
@@ -140,12 +140,15 @@ async function providerCatalog(provider) {
 // GET /api/user/models — current selections + catalogs for each provider.
 // Shape: { globalProvider, providers: [{provider, current, defaultModel, options}] }.
 // `current` is the provider's default model (provider:<p>:model or catalog default).
+// ?refresh=1 bypasses the model-catalog cache (e.g. after logging into a provider
+// so its newly-available models show up instead of the stale cached list).
 router.get('/models', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
+    const bypassCache = req.query.refresh === '1' || req.query.refresh === 'true';
     const prefs = modelPreferencesDb.getAll(userId);
     const providers = await Promise.all(CHAT_PROVIDERS.map(async (provider) => {
-      const cat = await providerCatalog(provider);
+      const cat = await providerCatalog(provider, bypassCache);
       return {
         provider,
         current: prefs[prefKeys.providerModel(provider)] || cat.defaultModel,

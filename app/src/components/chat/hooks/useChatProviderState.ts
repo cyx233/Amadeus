@@ -155,6 +155,35 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     localStorage.setItem('opencode-model', model);
   }, []);
 
+  // Seed each provider's chat model from the user's Model Preference (DB) when
+  // there's no explicit localStorage choice yet — so Settings → Model Preference
+  // acts as the default. An in-chat model switch (which writes localStorage)
+  // still wins as a per-session override. Runs once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authenticatedFetch('/api/user/models');
+        if (!res.ok) return;
+        const data = (await res.json()) as { providers?: { provider: LLMProvider; current: string }[] };
+        if (cancelled || !Array.isArray(data.providers)) return;
+        const setters: Record<string, (m: string) => void> = {
+          claude: setClaudeModel, cursor: setCursorModel, codex: setCodexModel, opencode: setOpenCodeModel,
+        };
+        for (const { provider: p, current } of data.providers) {
+          // Only fill the gap FALLBACK_DEFAULT_MODEL used to fill; never override
+          // an explicit localStorage choice. Skip the 'default' sentinel.
+          if (current && current !== 'default' && !localStorage.getItem(`${p}-model`) && setters[p]) {
+            setters[p](current);
+          }
+        }
+      } catch {
+        // Preference is a nicety; fall back to FALLBACK_DEFAULT_MODEL silently.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const setStoredProviderEffort = useCallback((targetProvider: LLMProvider, effort: string) => {
     setProviderEfforts((previous) => (
       previous[targetProvider] === effort
