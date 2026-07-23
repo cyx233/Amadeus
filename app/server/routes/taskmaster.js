@@ -276,6 +276,21 @@ router.get('/tasks/:projectId', async (req, res) => {
                 subtasks: task.subtasks || []
             }));
 
+            // Sync the container's active tag to what the UI is viewing. Our own
+            // routes always pass tag explicitly and don't need this, but the
+            // coding agent in the container is a SEPARATE MCP client — its
+            // next_task/get_tasks read the active tag from state.json, which would
+            // otherwise sit on an empty master while the user works in a PRD tag.
+            // Only for a concrete single-select view; skip merged/empty selections.
+            // Best-effort: a sync failure must not break the task read.
+            if (selectedTags.length === 1) {
+                try {
+                    await mcpCallTool('use_tag', { name: selectedTags[0], projectRoot: projectPath });
+                } catch (syncError) {
+                    console.error('Failed to sync active tag for agent:', syncError.message);
+                }
+            }
+
             res.json({
                 projectId,
                 projectPath,
