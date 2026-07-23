@@ -11,8 +11,16 @@ RUN npm install -g \
     @anthropic-ai/claude-code@latest \
     @openai/codex@latest \
     opencode-ai@latest \
-    task-master-ai \
+    task-master-ai@0.43.1 \
     && npm cache clean --force
+
+# task-master 0.43.1's generateObject path drops the token limit under AI SDK 5
+# (sends `maxTokens` where the SDK wants `maxOutputTokens`), truncating parse-prd
+# / add-task output at ~4096. Provider-agnostic bug, so patch it in every image.
+# Pinned above because the patch anchors on this version's minified output; the
+# script fails the build loudly if the anchor ever moves. See the script header.
+COPY scripts/patch-taskmaster.sh /opt/patch-taskmaster.sh
+RUN chmod +x /opt/patch-taskmaster.sh && /opt/patch-taskmaster.sh
 
 # Cursor Agent (Anysphere) — not on npm; its official installer downloads a
 # prebuilt binary from downloads.cursor.com into $HOME/.local. Point HOME at
