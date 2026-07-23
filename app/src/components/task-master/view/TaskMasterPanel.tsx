@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import PRDEditor from '../../prd-editor';
+import { api } from '../../../utils/api';
 import { useTaskMaster } from '../context/TaskMasterContext';
 import { useProjectPrdFiles } from '../hooks/useProjectPrdFiles';
-import type { PrdFile, TaskMasterTask, TaskSelection } from '../types';
+import type { PrdFile, TaskId, TaskMasterTask, TaskSelection } from '../types';
 import TaskBoard from './TaskBoard';
 import TaskDetailModal from './TaskDetailModal';
 
@@ -17,6 +18,20 @@ export default function TaskMasterPanel({ isVisible }: TaskMasterPanelProps) {
 
   const [selectedTask, setSelectedTask] = useState<TaskMasterTask | null>(null);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
+
+  // Keep the open modal's task in sync with the refreshed list: a status change
+  // calls refreshTasks(), which replaces `tasks`, but `selectedTask` is a
+  // separate snapshot. Re-derive it (matched by id + sourceTag, since ids repeat
+  // across tags) so the modal shows the new status instead of the stale one.
+  useEffect(() => {
+    if (!selectedTask) return;
+    const fresh = tasks.find(
+      (task) => String(task.id) === String(selectedTask.id) && task.sourceTag === selectedTask.sourceTag,
+    );
+    if (fresh && fresh !== selectedTask) {
+      setSelectedTask(fresh);
+    }
+  }, [tasks, selectedTask]);
 
   const [isPrdEditorOpen, setIsPrdEditorOpen] = useState(false);
   const [selectedPrd, setSelectedPrd] = useState<PrdFile | null>(null);
@@ -76,6 +91,30 @@ export default function TaskMasterPanel({ isVisible }: TaskMasterPanelProps) {
     [tasks],
   );
 
+  // Drag-and-drop status change: dropping a card on a column sets that status.
+  // Same path as the modal dropdown (set_task_status via the update-task route),
+  // then refresh so the board reflects it. sourceTag keeps the write on the right
+  // per-PRD tag when several are merged into the view.
+  const handleTaskStatusChange = useCallback(
+    async (taskId: TaskId, status: string, sourceTag?: string) => {
+      if (!currentProject?.projectId) return;
+      try {
+        const payload: Record<string, unknown> = { status };
+        if (sourceTag) payload.tag = sourceTag;
+        const response = await api.taskmaster.updateTask(currentProject.projectId, taskId, payload);
+        if (!response.ok) {
+          const errorPayload = (await response.json()) as { message?: string };
+          throw new Error(errorPayload.message ?? 'Failed to update task status');
+        }
+        await refreshTasks();
+      } catch (error) {
+        console.error('Failed to update task status:', error);
+        alert(error instanceof Error ? error.message : 'Failed to update task status');
+      }
+    },
+    [currentProject?.projectId, refreshTasks],
+  );
+
   return (
     <>
       <div className={`h-full ${isVisible ? 'block' : 'hidden'}`}>
@@ -83,6 +122,7 @@ export default function TaskMasterPanel({ isVisible }: TaskMasterPanelProps) {
           <TaskBoard
             tasks={tasks}
             onTaskClick={handleTaskClick}
+            onTaskStatusChange={handleTaskStatusChange}
             showParentTasks
             className="flex-1 overflow-y-auto p-4"
             currentProject={currentProject}

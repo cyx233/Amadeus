@@ -3,7 +3,7 @@ import { cn } from '../../../lib/utils';
 import { api } from '../../../utils/api';
 import { useTaskMaster } from '../context/TaskMasterContext';
 import { useTaskBoardState } from '../hooks/useTaskBoardState';
-import type { PrdFile, TaskBoardView, TaskMasterProject, TaskMasterTask, TaskSelection } from '../types';
+import type { PrdFile, TaskBoardView, TaskId, TaskMasterProject, TaskMasterTask, TaskSelection } from '../types';
 import TaskBoardContent from './TaskBoardContent';
 import TaskBoardToolbar from './TaskBoardToolbar';
 import TaskEmptyState from './TaskEmptyState';
@@ -14,6 +14,7 @@ import TaskMasterSetupModal from './modals/TaskMasterSetupModal';
 type TaskBoardProps = {
   tasks?: TaskMasterTask[];
   onTaskClick?: ((task: TaskSelection) => void) | null;
+  onTaskStatusChange?: ((taskId: TaskId, status: string, sourceTag?: string) => void) | null;
   className?: string;
   showParentTasks?: boolean;
   defaultView?: TaskBoardView;
@@ -27,6 +28,7 @@ type TaskBoardProps = {
 export default function TaskBoard({
   tasks = [],
   onTaskClick = null,
+  onTaskStatusChange = null,
   className = '',
   showParentTasks = false,
   defaultView = 'kanban',
@@ -178,6 +180,7 @@ export default function TaskBoard({
         filteredTasks={filteredTasks}
         showParentTasks={showParentTasks}
         onTaskClick={(task) => onTaskClick?.(task)}
+        onTaskStatusChange={onTaskStatusChange}
       />
 
       <CreateTaskModal
