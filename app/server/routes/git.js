@@ -1135,8 +1135,13 @@ router.post('/generate-commit-message', async (req, res) => {
       }
     }
 
-    // Generate commit message using the resolved provider + model.
-    const message = await generateCommitMessageWithAI(req.user.id, files, diffContext, projectPath);
+    // Generate commit message using the resolved provider + model. Run it from
+    // the PROJECT ROOT, not the picked repo subdir: the agent keys its session
+    // (and sidebar project) off cwd, so a subdir cwd would spawn a phantom
+    // project like "-...-EventOperator-src-EKSEventController". The diff is
+    // already in the prompt, so the agent doesn't need to sit in the repo.
+    const projectRootPath = await projectsDb.getProjectPathById(project);
+    const message = await generateCommitMessageWithAI(req.user.id, files, diffContext, projectRootPath || projectPath);
 
     res.json({ message });
   } catch (error) {
@@ -1150,7 +1155,9 @@ router.post('/generate-commit-message', async (req, res) => {
  * @param {number} userId
  * @param {Array<string>} files - List of changed files
  * @param {string} diffContext - Git diff content
- * @param {string} projectPath - Project directory path
+ * @param {string} projectPath - Project ROOT dir, used as the agent cwd (not the
+ *   git repo subdir) so the one-shot session lands under the existing project
+ *   instead of creating a phantom project keyed to a nested repo path.
  * @returns {Promise<string>} Generated commit message
  */
 async function generateCommitMessageWithAI(userId, files, diffContext, projectPath) {
