@@ -166,12 +166,15 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
       try {
         const res = await authenticatedFetch('/api/user/models');
         if (!res.ok) return;
-        const data = (await res.json()) as { providers?: { provider: LLMProvider; current: string }[] };
-        if (cancelled || !Array.isArray(data.providers)) return;
+        const data = (await res.json()) as {
+          globalProvider?: LLMProvider;
+          providers?: { provider: LLMProvider; current: string }[];
+        };
+        if (cancelled) return;
         const setters: Record<string, (m: string) => void> = {
           claude: setClaudeModel, cursor: setCursorModel, codex: setCodexModel, opencode: setOpenCodeModel,
         };
-        for (const { provider: p, current } of data.providers) {
+        for (const { provider: p, current } of (data.providers ?? [])) {
           // 'default' is claude's sentinel ("use the tool's own default") — leave
           // localStorage/state as-is for it; for concrete ids, DB wins.
           if (current && current !== 'default' && setters[p]) {
@@ -179,12 +182,19 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
             setters[p](current);
           }
         }
+        // Adopt the global default provider too — but only for a fresh chat with
+        // no session. An existing session keeps its own provider (synced from
+        // selectedSession.__provider elsewhere).
+        if (!selectedSession?.id && data.globalProvider && setters[data.globalProvider]) {
+          setProvider(data.globalProvider);
+          localStorage.setItem('selected-provider', data.globalProvider);
+        }
       } catch {
         // Preference is a nicety; fall back to FALLBACK_DEFAULT_MODEL silently.
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [selectedSession?.id]);
 
   // Each session remembers its own model (backend: session transcript + stored
   // override). When you switch to an existing session, adopt ITS model so the
