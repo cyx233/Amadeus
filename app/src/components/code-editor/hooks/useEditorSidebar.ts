@@ -43,6 +43,13 @@ export const useEditorSidebar = ({
     setEditorExpanded(false);
   }, []);
 
+  // Switching project must close whatever file was open — it belongs to the old
+  // project (old path/projectId); leaving it up shows stale content.
+  useEffect(() => {
+    setEditingFile(null);
+    setEditorExpanded(false);
+  }, [selectedProject?.projectId]);
+
   const handleToggleEditorExpand = useCallback(() => {
     setEditorExpanded((previous) => !previous);
   }, []);
