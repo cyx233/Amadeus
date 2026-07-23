@@ -4,7 +4,7 @@ import spawn from 'cross-spawn';
 import path from 'path';
 import { promises as fs } from 'fs';
 import { projectsDb } from '../modules/database/index.js';
-import { queryClaudeSDK } from '../claude-sdk.js';
+import { generateTextOnce } from '../claude-sdk.js';
 import { spawnCursor } from '../cursor-cli.js';
 
 const router = express.Router();
@@ -1184,83 +1184,55 @@ ${diffContext.substring(0, 4000)}
 
 Generate the commit message:`;
 
+  // Bound the whole thing with a timeout: on expiry we abort the underlying call
+  // (so no orphaned subprocess) and fall back to a generated default, so the
+  // request can never hang the UI spinner.
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), COMMIT_MESSAGE_TIMEOUT_MS);
+
   try {
-    // Create a simple writer that collects the response
+    console.log('🚀 Generating commit message with provider:', provider, '| prompt length:', prompt.length);
+
     let responseText = '';
-    const writer = {
-      send: (data) => {
-        try {
-          const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-          console.log('🔍 Writer received message type:', parsed.type);
-
-          // Handle different message formats from Claude SDK and Cursor CLI
-          // Claude SDK sends: {type: 'claude-response', data: {message: {content: [...]}}}
-          if (parsed.type === 'claude-response' && parsed.data) {
-            const message = parsed.data.message || parsed.data;
-            console.log('📦 Claude response message:', JSON.stringify(message, null, 2).substring(0, 500));
-            if (message.content && Array.isArray(message.content)) {
-              // Extract text from content array
-              for (const item of message.content) {
-                if (item.type === 'text' && item.text) {
-                  console.log('✅ Extracted text chunk:', item.text.substring(0, 100));
-                  responseText += item.text;
-                }
-              }
-            }
+    if (provider === 'claude') {
+      // One-shot text generation — no agent session, tools, or MCP servers to
+      // stall on (unlike queryClaudeSDK). See generateTextOnce.
+      responseText = await generateTextOnce(prompt, {
+        cwd: projectPath,
+        model: 'sonnet',
+        signal: abort.signal,
+      });
+    } else {
+      // Cursor has no one-shot helper yet; keep the streaming writer path, still
+      // bounded by the abort/timeout below.
+      const writer = {
+        send: (data) => {
+          try {
+            const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+            if (parsed.type === 'cursor-output' && parsed.output) responseText += parsed.output;
+            else if (parsed.type === 'text' && parsed.text) responseText += parsed.text;
+          } catch (e) {
+            console.error('Error parsing writer data:', e);
           }
-          // Cursor CLI sends: {type: 'cursor-output', output: '...'}
-          else if (parsed.type === 'cursor-output' && parsed.output) {
-            console.log('✅ Cursor output:', parsed.output.substring(0, 100));
-            responseText += parsed.output;
-          }
-          // Also handle direct text messages
-          else if (parsed.type === 'text' && parsed.text) {
-            console.log('✅ Direct text:', parsed.text.substring(0, 100));
-            responseText += parsed.text;
-          }
-        } catch (e) {
-          // Ignore parse errors
-          console.error('Error parsing writer data:', e);
-        }
-      },
-      setSessionId: () => {}, // No-op for this use case
-    };
-
-    console.log('🚀 Calling AI agent with provider:', provider);
-    console.log('📝 Prompt length:', prompt.length);
-
-    // Call the appropriate agent, bounded by a timeout. queryClaudeSDK spins up a
-    // full agent session (all tools + MCP servers) and only resolves when its
-    // message stream ends — if the model/tool/MCP startup stalls, it never
-    // resolves and the HTTP request hangs forever (the UI spinner never stops).
-    // A one-shot commit message doesn't justify that risk: cap it and let the
-    // catch below fall back to a generated default.
-    const agentCall = provider === 'claude'
-      ? queryClaudeSDK(prompt, { cwd: projectPath, permissionMode: 'bypassPermissions', model: 'sonnet' }, writer)
-      : spawnCursor(prompt, { cwd: projectPath, skipPermissions: true }, writer);
-
-    let timer;
-    const timeout = new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error('commit-message generation timed out')), COMMIT_MESSAGE_TIMEOUT_MS);
-    });
-    try {
-      await Promise.race([agentCall, timeout]);
-    } finally {
-      clearTimeout(timer);
+        },
+        setSessionId: () => {},
+      };
+      const cursorCall = spawnCursor(prompt, { cwd: projectPath, skipPermissions: true }, writer);
+      const timeout = new Promise((_, reject) => {
+        abort.signal.addEventListener('abort', () => reject(new Error('commit-message generation timed out')));
+      });
+      await Promise.race([cursorCall, timeout]);
     }
 
-    console.log('📊 Total response text collected:', responseText.length, 'characters');
-    console.log('📄 Response preview:', responseText.substring(0, 200));
-
-    // Clean up the response
     const cleanedMessage = cleanCommitMessage(responseText);
     console.log('🧹 Cleaned message:', cleanedMessage.substring(0, 200));
-
     return cleanedMessage || 'chore: update files';
   } catch (error) {
     console.error('Error generating commit message with AI:', error);
-    // Fallback to simple message
+    // Fallback to a simple message (also covers the timeout/abort path).
     return `chore: update ${files.length} file${files.length !== 1 ? 's' : ''}`;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

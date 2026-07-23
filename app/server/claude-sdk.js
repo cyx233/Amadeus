@@ -17,7 +17,7 @@ import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { query } from '@anthropic-ai/claude-agent-sdk';
+import { query, InMemorySessionStore } from '@anthropic-ai/claude-agent-sdk';
 
 import { buildClaudeUserContent, normalizeImageDescriptors } from './shared/image-attachments.js';
 import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
@@ -850,9 +850,57 @@ function reconnectSessionWriter(sessionId, newRawWs) {
   return true;
 }
 
+/**
+ * One-shot text generation via the Claude Agent SDK — a stripped-down sibling of
+ * queryClaudeSDK for prompt-in/text-out tasks (e.g. commit messages) that don't
+ * want the full agent session. No MCP servers, no tools, no hooks, no session
+ * tracking, capped at a single turn — so there's nothing to stall on. Reuses the
+ * same SDK/executable/env as queryClaudeSDK, so auth (Bedrock creds, etc.) is
+ * identical. Returns the final result text.
+ *
+ * @param {string} prompt
+ * @param {{ cwd?: string, model?: string, signal?: AbortSignal }} [options]
+ * @returns {Promise<string>}
+ */
+async function generateTextOnce(prompt, options = {}) {
+  const sdkOptions = {
+    env: { ...process.env },
+    pathToClaudeCodeExecutable: resolveClaudeCodeExecutablePath(process.env.CLAUDE_CLI_PATH),
+    model: options.model || CLAUDE_FALLBACK_MODELS.DEFAULT,
+    // One question, one answer: no agent loop, no tools, no MCP, no side effects.
+    maxTurns: 1,
+    permissionMode: 'bypassPermissions',
+    allowedTools: [],
+    disallowedTools: [],
+    mcpServers: {},
+    // Keep the transcript in memory so this throwaway call doesn't leave a
+    // session record in ~/.claude/projects (which would clutter the history UI).
+    sessionStore: new InMemorySessionStore(),
+  };
+  if (options.cwd) sdkOptions.cwd = options.cwd;
+  if (options.signal) sdkOptions.abortController = { signal: options.signal };
+
+  let text = '';
+  for await (const message of query({ prompt, options: sdkOptions })) {
+    // The terminal `result` message carries the full text on success; prefer it.
+    if (message.type === 'result' && message.subtype === 'success' && typeof message.result === 'string') {
+      text = message.result;
+      break;
+    }
+    // Fallback: accumulate assistant text blocks in case the result subtype differs.
+    if (message.type === 'assistant' && Array.isArray(message.message?.content)) {
+      for (const block of message.message.content) {
+        if (block.type === 'text' && block.text) text += block.text;
+      }
+    }
+  }
+  return text;
+}
+
 // Export public API
 export {
   queryClaudeSDK,
+  generateTextOnce,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,
   getActiveClaudeSDKSessions,
