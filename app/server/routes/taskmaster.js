@@ -509,6 +509,74 @@ router.get('/prd/:projectId/:fileName', async (req, res) => {
 });
 
 /**
+ * DELETE /api/taskmaster/prd/:projectId/:fileName
+ * Removes a PRD file and (per the caller's `tag` query) drops the task set it
+ * generated, so no orphan tag is left behind. `master` is never removed — it's
+ * the reserved default tag.
+ */
+router.delete('/prd/:projectId/:fileName', async (req, res) => {
+    try {
+        const { projectId, fileName } = req.params;
+        const tag = typeof req.query.tag === 'string' ? req.query.tag.trim() : '';
+
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
+            return res.status(404).json({
+                error: 'Project not found',
+                message: `Project "${projectId}" does not exist`
+            });
+        }
+
+        // path.basename strips any traversal in the filename param before we join.
+        const safeName = path.basename(fileName);
+        const filePath = path.join(projectPath, '.taskmaster', 'docs', safeName);
+
+        try {
+            await fsPromises.unlink(filePath);
+        } catch (unlinkError) {
+            if (unlinkError.code !== 'ENOENT') {
+                throw unlinkError;
+            }
+            // File already gone — fall through so we still clean up the tag.
+        }
+
+        // Drop the generated task set (tag) unless it's the reserved default.
+        let removedTag = false;
+        if (tag && tag !== 'master') {
+            const tasksFilePath = path.join(projectPath, '.taskmaster', 'tasks', 'tasks.json');
+            try {
+                const raw = await fsPromises.readFile(tasksFilePath, 'utf8');
+                const data = JSON.parse(raw);
+                if (Object.prototype.hasOwnProperty.call(data, tag)) {
+                    delete data[tag];
+                    await fsPromises.writeFile(tasksFilePath, JSON.stringify(data, null, 2), 'utf8');
+                    removedTag = true;
+                }
+            } catch (tagError) {
+                if (tagError.code !== 'ENOENT') {
+                    console.error('Failed to remove tag from tasks.json:', tagError);
+                }
+            }
+        }
+
+        broadcastTaskMasterTasksUpdate(projectId);
+        res.json({
+            projectId,
+            fileName: safeName,
+            removedTag,
+            message: 'PRD file deleted successfully',
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('PRD delete error:', error);
+        res.status(500).json({
+            error: 'Failed to delete PRD file',
+            message: error.message
+        });
+    }
+});
+
+/**
  * POST /api/taskmaster/init/:projectId
  * Initialize TaskMaster in a project
  */

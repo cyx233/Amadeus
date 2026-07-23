@@ -225,6 +225,16 @@ export const api = {
         body: JSON.stringify({ fileName, numTasks, append, tag }),
       }),
 
+    // Delete a PRD file and drop its generated task set (`tag`). master is never
+    // removed server-side even if passed.
+    deletePRD: (projectId, fileName, tag) => {
+      const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
+      return authenticatedFetch(
+        `/api/taskmaster/prd/${encodeURIComponent(projectId)}/${encodeURIComponent(fileName)}${qs}`,
+        { method: 'DELETE' },
+      );
+    },
+
     // Get available PRD templates
     getTemplates: () =>
       authenticatedFetch('/api/taskmaster/prd-templates'),

@@ -121,10 +121,14 @@
   },
   "tags": {
     "default": "Default",
+    "selectAll": "Select all",
     "switch": "Switch task set (PRD)",
     "toggle": "Show alongside others",
+    "noTasksYet": "Generate tasks first",
     "generateTasks": "Generate tasks from this PRD",
-    "openEditor": "Open PRD"
+    "openEditor": "Open PRD",
+    "delete": "Delete PRD and its tasks",
+    "confirmDelete": "Delete \"{{name}}\" and its tasks?"
   },
   "prd": {
     "modified": "Modified: {{date}}"

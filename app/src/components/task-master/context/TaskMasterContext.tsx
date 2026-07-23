@@ -309,9 +309,9 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setNextTask(getNextTask(loadedTasks));
       if (data.currentTag) setCurrentTag(data.currentTag);
       setAvailableTags(Array.isArray(data.availableTags) ? data.availableTags : []);
-      // Sync back the server-resolved selection (drops invalid/nonexistent tags),
-      // but only when we actually asked for specific tags — an empty request
-      // means "default", and we keep selectedTags empty so it stays default.
+      // Sync back the server-resolved selection (drops invalid/nonexistent tags).
+      // Only when we asked for specific tags — an empty first request is seeded by
+      // the effect below once availableTags is known.
       if (selectedTags.length && Array.isArray(data.selectedTags)) {
         const resolved = data.selectedTags;
         if (resolved.length && resolved.join(',') !== selectedTags.join(',')) {
@@ -332,14 +332,27 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     setSelectedTags([tag]);
   }, []);
 
-  // Multi-select: add/remove a task set from the merged view (checkbox). Never
-  // leaves an empty selection — unchecking the last one falls back to default
-  // (empty = server's default/master).
+  // Bulk setter for the "Select all" control.
+  const selectTags = useCallback((tags: string[]) => {
+    setSelectedTags(tags);
+  }, []);
+
+  // Multi-select: add/remove a task set from the merged view (checkbox). The
+  // selection is explicit (no "empty means master" special case), so any set —
+  // including the default/master — can be unchecked while others stay checked.
   const toggleTag = useCallback((tag: string) => {
     setSelectedTags((current) => (
       current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag]
     ));
   }, []);
+
+  // Seed the selection once the tag list is known, and never leave it stranded
+  // empty (which would blank the board): fall back to master, else the first tag.
+  useEffect(() => {
+    if (selectedTags.length === 0 && availableTags.length > 0) {
+      setSelectedTags(availableTags.includes('master') ? ['master'] : [availableTags[0]]);
+    }
+  }, [availableTags, selectedTags.length]);
 
   const refreshMCPStatus = useCallback(async () => {
     if (!user || (!token && !IS_PLATFORM)) {
@@ -416,6 +429,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       availableTags,
       selectedTags,
       selectTag,
+      selectTags,
       toggleTag,
       isLoading,
       isLoadingTasks,
@@ -446,6 +460,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       refreshProjects,
       refreshTasks,
       selectTag,
+      selectTags,
       setCurrentProject,
       tasks,
     ],

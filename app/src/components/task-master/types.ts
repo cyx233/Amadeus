@@ -108,6 +108,7 @@ export type TaskMasterContextValue = {
   availableTags: string[];
   selectedTags: string[];
   selectTag: (tag: string) => void;
+  selectTags: (tags: string[]) => void;
   toggleTag: (tag: string) => void;
   isLoading: boolean;
   isLoadingTasks: boolean;
