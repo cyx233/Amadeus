@@ -225,17 +225,24 @@ function ChatInterface({
   // `chat_subscribed` ack restores or clears the activity indicator, replays
   // missed live events, and re-attaches a still-running stream to this socket.
   const handleWebSocketReconnect = useCallback(async () => {
-    if (!selectedProject || !selectedSession) return;
-    await sessionStore.refreshFromServer(selectedSession.id);
-    statusCheckSentAtRef.current.set(selectedSession.id, Date.now());
+    // Use the effective session id, not just `selectedSession`: a fresh chat
+    // that's mid-run is tracked by `currentSessionId` before the router has a
+    // canonical `selectedSession`. Requiring the latter meant a reconnect during
+    // that window skipped re-subscribe, so the run's writer kept pointing at the
+    // dropped socket and live stream events were silently dropped — the reply
+    // only appeared after a manual refresh (which re-fetches over REST).
+    const sessionId = selectedSession?.id || currentSessionId;
+    if (!selectedProject || !sessionId) return;
+    await sessionStore.refreshFromServer(sessionId);
+    statusCheckSentAtRef.current.set(sessionId, Date.now());
     sendMessage({
       type: 'chat.subscribe',
       sessions: [{
-        sessionId: selectedSession.id,
-        lastSeq: lastSeqRef.current.get(selectedSession.id) ?? 0,
+        sessionId,
+        lastSeq: lastSeqRef.current.get(sessionId) ?? 0,
       }],
     });
-  }, [selectedProject, selectedSession, sendMessage, sessionStore]);
+  }, [selectedProject, selectedSession, currentSessionId, sendMessage, sessionStore]);
 
   useChatRealtimeHandlers({
     subscribe,

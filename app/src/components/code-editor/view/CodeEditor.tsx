@@ -156,6 +156,11 @@ export default function CodeEditor({
           highlightChanges: true,
           syntaxHighlightDeletions: false,
           gutter: true,
+          // Raise the diff scan budget: the merge view defaults scanLimit to 500,
+          // so a changed region larger than that falls back to a coarse diff that
+          // fuses a big real change into one solid red/green block. A higher limit
+          // (with a time budget) keeps large hunks precise, matching git.
+          diffConfig: { scanLimit: 50_000, timeout: 5_000 },
           // Collapse unchanged stretches so the result reads as separate hunks
           // with a few lines of context, matching the git panel's @@ blocks.
           collapseUnchanged: { margin: 3, minSize: 4 },
