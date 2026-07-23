@@ -186,6 +186,35 @@ export function useChatProviderState({ selectedSession, selectedProject: _select
     return () => { cancelled = true; };
   }, []);
 
+  // Each session remembers its own model (backend: session transcript + stored
+  // override). When you switch to an existing session, adopt ITS model so the
+  // picker reflects what that conversation is using — not the global default.
+  // A brand-new chat (no session id) keeps the DB-preference default above.
+  useEffect(() => {
+    const sessionId = selectedSession?.id;
+    const sessionProvider = (selectedSession?.__provider as LLMProvider | undefined) ?? provider;
+    if (!sessionId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await authenticatedFetch(
+          `/api/providers/${sessionProvider}/sessions/${encodeURIComponent(sessionId)}/active-model`,
+        );
+        if (!res.ok) return;
+        const body = (await res.json()) as { data?: { model?: string | null } };
+        const model = body.data?.model;
+        if (cancelled || !model) return;
+        const setters: Record<string, (m: string) => void> = {
+          claude: setClaudeModel, cursor: setCursorModel, codex: setCodexModel, opencode: setOpenCodeModel,
+        };
+        setters[sessionProvider]?.(model);
+      } catch {
+        // Non-fatal: fall back to whatever the picker already shows.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [selectedSession?.id, selectedSession?.__provider, provider]);
+
   const setStoredProviderEffort = useCallback((targetProvider: LLMProvider, effort: string) => {
     setProviderEfforts((previous) => (
       previous[targetProvider] === effort
