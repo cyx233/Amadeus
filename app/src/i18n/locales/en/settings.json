@@ -107,9 +107,7 @@
     "appearance": "Appearance",
     "git": "Git",
     "apiTokens": "API & Tokens",
-    "voice": "Voice",
-    "tasks": "Tasks",
-    "browser": "Browser",
+    "features": "Features",
     "notifications": "Notifications",
     "account": "Account",
     "about": "About"
