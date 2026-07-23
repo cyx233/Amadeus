@@ -4,7 +4,7 @@ Browser-based coding-agent platform (Claude Code, Codex, Cursor, OpenCode) with 
 
 ## Quick Start
 
-Amadeus is multi-user. A single URL (port 3001) serves a login page; after
+Amadeus is multi-user. A single URL (host port 8888) serves a login page; after
 login the nginx gateway routes each user to their own isolated container.
 
 ```bash
@@ -21,7 +21,7 @@ docker compose up -d
 # 3. Bring up the per-user backends
 docker compose -f docker-compose.yml -f docker-compose.multi.yml up -d
 
-open http://localhost:3001            # log in as alice
+open http://localhost:8888            # log in as alice
 ```
 
 How it fits together:
@@ -43,7 +43,7 @@ it can point at any backend (e.g. DeepSeek) you configure.
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  Browser (localhost:3001)                        │
+│  Browser (localhost:8888)                        │
 │  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
 │  │ Chat/WS  │ │File Tree │ │ CodeMirror     │  │
 │  └────┬─────┘ └────┬─────┘ └───────┬────────┘  │

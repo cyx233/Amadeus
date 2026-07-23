@@ -1,5 +1,7 @@
 services:
-  # Amadeus multi-user deployment (single URL on :3001):
+  # Amadeus multi-user deployment. One entry point on host port 8888 (fronted by
+  # a Cloudflare Tunnel in the reference deploy; nginx listens on 3001 inside the
+  # container network). Services:
   #   gateway (nginx)  — routes by identity; unauthenticated -> login page
   #   auth-gateway     — a CloudCLI instance in auth mode: serves the login UI,
   #                      owns the shared user database, issues the auth cookie,
