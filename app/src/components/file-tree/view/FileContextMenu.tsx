@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Copy, Download, FileText, FolderPlus, Pencil, RefreshCw, Search, Trash2, type LucideIcon } from 'lucide-react';
 import { cn } from '../../../lib/utils';
@@ -266,11 +267,14 @@ export default function FileContextMenu({
         {children}
       </div>
 
-      {isMenuOpen && (
+      {isMenuOpen && createPortal(
         <div
           ref={menuRef}
           role="menu"
           aria-label={t('fileTree.context.menuLabel', 'File context menu')}
+          // Portaled to body: the sidebar's backdrop-blur creates a stacking
+          // context that would otherwise trap this behind the editor overlay,
+          // regardless of z-index. `fixed` positions against the viewport.
           style={{ position: 'fixed', left: menuPosition.x, top: menuPosition.y, zIndex: 10000 }}
           className={cn(
             'min-w-[180px] py-1 px-1',
@@ -311,7 +315,8 @@ export default function FileContextMenu({
               </Fragment>
             ))
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
