@@ -256,6 +256,46 @@ export const chatRunRegistry = {
     return runs.get(appSessionId)?.status === 'running';
   },
 
+  /**
+   * Verifies a `running` run against the runtime's own liveness and, if the
+   * process is gone (SIGKILL/OOM/crash before its catch could send a terminal
+   * `complete`), finishes the zombie: a synthetic `complete` flows through the
+   * writer, flipping the run to `completed` and notifying every attached socket
+   * so no client keeps spinning. Returns the authoritative processing state.
+   *
+   * `isAlive` is addressed with the provider-native session id (how runtimes key
+   * their process maps). A run with no provider id yet is too young to judge —
+   * treated as alive. No timers, no heartbeat: liveness is the source of truth,
+   * so a run that is merely thinking for minutes (still in the runtime's active
+   * map) is correctly reported as processing.
+   */
+  reconcileLiveness(
+    appSessionId: string,
+    isAlive: (providerSessionId: string) => boolean,
+  ): boolean {
+    const run = runs.get(appSessionId);
+    if (!run || run.status !== 'running') {
+      return false;
+    }
+    if (!run.providerSessionId) {
+      return true;
+    }
+    if (isAlive(run.providerSessionId)) {
+      return true;
+    }
+    console.warn(
+      `[chat-run-registry] Run ${appSessionId} (${run.provider}) is marked running but its runtime is gone; finishing the zombie run.`,
+    );
+    try {
+      run.writer.sendComplete({ exitCode: 1 });
+    } catch (error) {
+      console.error('[chat-run-registry] Failed to finish zombie run:', error);
+      run.status = 'completed';
+      run.completedAt = Date.now();
+    }
+    return false;
+  },
+
   listRunningRuns(): Array<{
     sessionId: string;
     provider: LLMProvider;
