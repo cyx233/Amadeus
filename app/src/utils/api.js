@@ -129,6 +129,15 @@ export const api = {
       method: 'DELETE',
     });
   },
+  // Browser-navigable download URL (token in query, since <a>/window.open can't
+  // set an auth header) — used to export a project as .tar.gz before deleting.
+  downloadProjectUrl: (projectId) => {
+    const token = localStorage.getItem('auth-token');
+    const params = new URLSearchParams();
+    if (token) params.set('token', token);
+    const qs = params.toString();
+    return `/api/projects/${encodeURIComponent(projectId)}/download${qs ? `?${qs}` : ''}`;
+  },
   searchConversationsUrl: (query, limit = 50) => {
     const token = localStorage.getItem('auth-token');
     const params = new URLSearchParams({ q: query, limit: String(limit) });

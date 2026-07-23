@@ -147,7 +147,10 @@
     "sessionCount_one": "This project contains {{count}} conversation.",
     "sessionCount_other": "This project contains {{count}} conversations.",
     "removeFromSidebar": "Remove from sidebar only",
+    "archiveProject": "Archive project",
     "deleteAllData": "Delete all data permanently",
+    "downloadBeforeDelete": "Download a copy first",
+    "typeToConfirm": "To permanently delete, type the project name:",
     "allConversationsDeleted": "The project will be removed from the sidebar. Your files, memories, and session data will be preserved.",
     "cannotUndo": "You can re-add the project later."
   },

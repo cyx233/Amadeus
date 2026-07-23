@@ -1,8 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { AlertTriangle, EyeOff, Trash2 } from 'lucide-react';
+import { AlertTriangle, Download, EyeOff, Trash2 } from 'lucide-react';
 import type { TFunction } from 'i18next';
-import { Button } from '../../../../shared/view/ui';
+
+import { Button, Input } from '../../../../shared/view/ui';
+import { api } from '../../../../utils/api';
 import Settings from '../../../settings/view/Settings';
 import VersionUpgradeModal from '../../../version-upgrade/view';
 import type { Project } from '../../../../types/app';
@@ -46,6 +48,101 @@ const SettingsComponent = Settings as (props: TypedSettingsProps) => JSX.Element
 
 function TypedSettings(props: TypedSettingsProps) {
   return <SettingsComponent {...props} />;
+}
+
+// Own component so the "type the name to confirm" input resets on each open
+// (state is scoped to the mount, which is gated by `deleteConfirmation`).
+function DeleteProjectModal({
+  confirmation,
+  onCancel,
+  onConfirm,
+  t,
+}: {
+  confirmation: DeleteProjectConfirmation;
+  onCancel: () => void;
+  onConfirm: (deleteData?: boolean) => void;
+  t: TFunction;
+}) {
+  const [typedName, setTypedName] = useState('');
+  const projectName = confirmation.project.displayName || confirmation.project.projectId;
+  // AWS-style guard: hard delete is irreversible and frees disk, so require an
+  // exact name match before enabling it. Archiving stays one click.
+  const canHardDelete = typedName.trim() === projectName;
+
+  const handleDownload = () => {
+    // Browser navigation to the token-carrying URL triggers the .tar.gz download.
+    window.location.href = api.downloadProjectUrl(confirmation.project.projectId);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+        <div className="p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30">
+              <AlertTriangle className="h-6 w-6 text-orange-600 dark:text-orange-400" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="mb-2 text-lg font-semibold text-foreground">
+                {t('deleteConfirmation.deleteProject')}
+              </h3>
+              <p className="mb-1 text-sm text-muted-foreground">
+                {t('deleteConfirmation.confirmDelete')}{' '}
+                <span className="font-medium text-foreground">{projectName}</span>?
+              </p>
+              {confirmation.sessionCount > 0 && (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {t('deleteConfirmation.sessionCount', { count: confirmation.sessionCount })}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={handleDownload}
+                className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
+              >
+                <Download className="h-4 w-4" />
+                {t('deleteConfirmation.downloadBeforeDelete', 'Download a copy first')}
+              </button>
+
+              <div className="mt-4">
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  {t('deleteConfirmation.typeToConfirm', 'To permanently delete, type the project name:')}{' '}
+                  <span className="font-mono font-medium text-foreground">{projectName}</span>
+                </label>
+                <Input
+                  type="text"
+                  value={typedName}
+                  onChange={(event) => setTypedName(event.target.value)}
+                  placeholder={projectName}
+                  className="w-full"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2 border-t border-border bg-muted/30 p-4">
+          <Button variant="outline" className="w-full justify-start" onClick={() => onConfirm(false)}>
+            <EyeOff className="mr-2 h-4 w-4" />
+            {t('deleteConfirmation.archiveProject', 'Archive project')}
+          </Button>
+          <Button
+            variant="destructive"
+            className="w-full justify-start bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canHardDelete}
+            onClick={() => onConfirm(true)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            {t('deleteConfirmation.deleteAllData')}
+          </Button>
+          <Button variant="ghost" className="w-full" onClick={onCancel}>
+            {t('actions.cancel')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function SidebarModals({
@@ -100,55 +197,12 @@ export default function SidebarModals({
 
       {deleteConfirmation &&
         ReactDOM.createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-              <div className="p-6">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/30">
-                    <AlertTriangle className="h-6 w-6 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <h3 className="mb-2 text-lg font-semibold text-foreground">
-                      {t('deleteConfirmation.deleteProject')}
-                    </h3>
-                    <p className="mb-1 text-sm text-muted-foreground">
-                      {t('deleteConfirmation.confirmDelete')}{' '}
-                      <span className="font-medium text-foreground">
-                        {deleteConfirmation.project.displayName || deleteConfirmation.project.projectId}
-                      </span>
-                      ?
-                    </p>
-                    {deleteConfirmation.sessionCount > 0 && (
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {t('deleteConfirmation.sessionCount', { count: deleteConfirmation.sessionCount })}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col gap-2 border-t border-border bg-muted/30 p-4">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={() => onConfirmDeleteProject(false)}
-                >
-                  <EyeOff className="mr-2 h-4 w-4" />
-                  {t('deleteConfirmation.archiveProject', 'Archive project')}
-                </Button>
-                <Button
-                  variant="destructive"
-                  className="w-full justify-start bg-red-600 text-white hover:bg-red-700"
-                  onClick={() => onConfirmDeleteProject(true)}
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  {t('deleteConfirmation.deleteAllData')}
-                </Button>
-                <Button variant="ghost" className="w-full" onClick={onCancelDeleteProject}>
-                  {t('actions.cancel')}
-                </Button>
-              </div>
-            </div>
-          </div>,
+          <DeleteProjectModal
+            confirmation={deleteConfirmation}
+            onCancel={onCancelDeleteProject}
+            onConfirm={onConfirmDeleteProject}
+            t={t}
+          />,
           document.body,
         )}
 
