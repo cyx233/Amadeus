@@ -2,12 +2,6 @@ export type WizardStep = 1 | 2;
 
 export type TokenMode = 'stored' | 'new' | 'none';
 
-export type FolderSuggestion = {
-  name: string;
-  path: string;
-  type?: string;
-};
-
 export type GithubTokenCredential = {
   id: number;
   credential_name: string;
@@ -19,21 +13,9 @@ export type CredentialsResponse = {
   error?: string;
 };
 
-export type BrowseFilesystemResponse = {
-  path?: string;
-  suggestions?: FolderSuggestion[];
-  error?: string;
-};
-
-export type CreateFolderResponse = {
-  success?: boolean;
-  path?: string;
-  error?: string;
-  details?: string;
-};
-
 export type CreateProjectPayload = {
-  path: string;
+  // Bare project name; resolved to WORKSPACES_ROOT/<name> server-side.
+  name: string;
   customName?: string;
 };
 

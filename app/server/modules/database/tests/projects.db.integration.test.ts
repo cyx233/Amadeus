@@ -7,6 +7,7 @@ import test from 'node:test';
 import { closeConnection } from '@/modules/database/connection.js';
 import { initializeDatabase } from '@/modules/database/init-db.js';
 import { projectsDb } from '@/modules/database/repositories/projects.db.js';
+import { WORKSPACES_ROOT } from '@/shared/utils.js';
 
 async function withIsolatedDatabase(runTest: () => void | Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
@@ -69,4 +70,12 @@ test('projectsDb.createProjectPath returns active_conflict for active duplicates
     assert.equal(conflict.project?.project_id, initial.project?.project_id);
     assert.equal(conflict.project?.isArchived, 0);
   });
+});
+
+test('projectsDb.createProjectPath refuses to register WORKSPACES_ROOT itself', () => {
+  // The guard throws before opening any DB connection, so no isolated database
+  // is needed here. The container of all projects must never become a project.
+  assert.throws(() => projectsDb.createProjectPath(WORKSPACES_ROOT), /Refusing to register WORKSPACES_ROOT/);
+  // Trailing slash normalizes to the same path, so it must be rejected too.
+  assert.throws(() => projectsDb.createProjectPath(`${WORKSPACES_ROOT}/`), /Refusing to register WORKSPACES_ROOT/);
 });

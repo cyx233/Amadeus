@@ -32,6 +32,7 @@ test('createProject throws when path validation fails', async () => {
         {
           validatePath: async () => ({ valid: false, error: 'blocked path' }),
           ensureWorkspaceDirectory: async () => undefined,
+          initGitRepo: async () => undefined,
           persistProjectPath: () => ({ outcome: 'created', project: projectRow }),
           getProjectByPath: () => projectRow,
         },
@@ -54,6 +55,7 @@ test('createProject throws conflict when active project path already exists', as
         {
           validatePath: async () => ({ valid: true, resolvedPath: '/workspace/my-project' }),
           ensureWorkspaceDirectory: async () => undefined,
+          initGitRepo: async () => undefined,
           persistProjectPath: () => ({ outcome: 'active_conflict', project: projectRow }),
           getProjectByPath: () => projectRow,
         },
@@ -76,6 +78,7 @@ test('createProject falls back to directory name when custom name is not provide
     {
       validatePath: async () => ({ valid: true, resolvedPath: '/workspace/my-project' }),
       ensureWorkspaceDirectory: async () => undefined,
+      initGitRepo: async () => undefined,
       persistProjectPath: (_projectPath, customName) => {
         capturedCustomName = customName;
         return {
@@ -101,6 +104,7 @@ test('createProject returns archived reuse outcome when archived row is reused',
     {
       validatePath: async () => ({ valid: true, resolvedPath: '/workspace/my-project' }),
       ensureWorkspaceDirectory: async () => undefined,
+      initGitRepo: async () => undefined,
       persistProjectPath: () => ({
         outcome: 'reactivated_archived',
         project: {
@@ -114,4 +118,21 @@ test('createProject returns archived reuse outcome when archived row is reused',
 
   assert.equal(result.outcome, 'reactivated_archived');
   assert.equal(result.project.isArchived, true);
+});
+
+test('createProject only runs git init when initGit is set', async () => {
+  let initCalls = 0;
+  const deps = {
+    validatePath: async () => ({ valid: true as const, resolvedPath: '/workspace/my-project' }),
+    ensureWorkspaceDirectory: async () => undefined,
+    initGitRepo: async () => { initCalls += 1; },
+    persistProjectPath: () => ({ outcome: 'created' as const, project: projectRow }),
+    getProjectByPath: () => projectRow,
+  };
+
+  await createProject({ projectPath: '/workspace/my-project' }, deps);
+  assert.equal(initCalls, 0, 'auto-discovery/clone path must not touch git');
+
+  await createProject({ projectPath: '/workspace/my-project', initGit: true }, deps);
+  assert.equal(initCalls, 1, 'interactive create must init a repo');
 });

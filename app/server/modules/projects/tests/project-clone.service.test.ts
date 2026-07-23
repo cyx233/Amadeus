@@ -158,6 +158,10 @@ test('startCloneProject completes and emits complete payload when git exits succ
       },
     },
     buildDependencies({
+      // The route resolves the target folder name against WORKSPACES_ROOT, so the
+      // validated path IS the clone destination — the service clones straight into
+      // it without appending the repo name (the double-nesting fix).
+      validatePath: async () => ({ valid: true, resolvedPath: '/workspace/root/repo' }),
       spawnGitClone: () => gitProcess as any,
       registerProject: async (projectPath, customName) => {
         capturedProjectPath = projectPath;

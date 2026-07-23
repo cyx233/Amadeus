@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+
 import { isSshGitUrl } from '../utils/pathUtils';
 import type { WizardFormState } from '../types';
 
@@ -43,9 +44,9 @@ export default function StepReview({
 
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600 dark:text-gray-400">{t('projectWizard.step3.path')}</span>
+            <span className="text-gray-600 dark:text-gray-400">{t('projectWizard.step3.name')}</span>
             <span className="break-all font-mono text-xs text-gray-900 dark:text-white">
-              {formState.workspacePath}
+              {formState.workspacePath.trim() || t('projectWizard.step3.repoDefaultName')}
             </span>
           </div>
 

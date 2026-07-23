@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { getConnection } from '@/modules/database/connection.js';
 import type { CreateProjectPathResult, ProjectRepositoryRow } from '@/shared/types.js';
-import { normalizeProjectPath } from '@/shared/utils.js';
+import { normalizeProjectPath, WORKSPACES_ROOT } from '@/shared/utils.js';
 
 function normalizeProjectDisplayName(projectPath: string, customProjectName: string | null): string {
     const trimmedCustomName = typeof customProjectName === 'string' ? customProjectName.trim() : '';
@@ -17,8 +17,18 @@ function normalizeProjectDisplayName(projectPath: string, customProjectName: str
 
 export const projectsDb = {
     createProjectPath(projectPath: string, customProjectName: string | null = null): CreateProjectPathResult {
-        const db = getConnection();
         const normalizedProjectPath = normalizeProjectPath(projectPath);
+
+        // WORKSPACES_ROOT is the container for all projects, not a project. Registering
+        // it turns "28 projects" into "one project nesting 28" — the exact mess behind
+        // the phantom `workplace`/duplicate-Amadeus rows. Refuse it at the one choke
+        // point every registration path (auto-discovery, clone, session cwd) funnels
+        // through, before we even open a connection.
+        if (normalizedProjectPath === normalizeProjectPath(WORKSPACES_ROOT)) {
+            throw new Error(`Refusing to register WORKSPACES_ROOT as a project: ${normalizedProjectPath}`);
+        }
+
+        const db = getConnection();
         const normalizedProjectName = normalizeProjectDisplayName(normalizedProjectPath, customProjectName);
         const attemptedId = randomUUID();
         const row = db.prepare(`

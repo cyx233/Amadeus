@@ -185,7 +185,10 @@ export async function startCloneProject(
   }
 
   const absolutePath = pathValidation.resolvedPath;
-  await dependencies.ensureDirectory(absolutePath);
+  // Ensure the PARENT exists (WORKSPACES_ROOT), but let `git clone` create the
+  // target folder itself — git refuses to clone into a pre-existing non-empty dir,
+  // and the pathExists check below guards against clobbering an existing project.
+  await dependencies.ensureDirectory(path.dirname(absolutePath));
 
   let githubToken: string | null = null;
   if (typeof input.githubTokenId === 'number') {
@@ -211,13 +214,18 @@ export async function startCloneProject(
     githubToken = input.newGithubToken.trim();
   }
 
+  // The validated path IS the clone target — WORKSPACES_ROOT/<folder>, resolved
+  // from the folder name the user gave (or a repo-derived default filled in by the
+  // UI). We do NOT append the repo name to it: doing so was the source of the
+  // `Amadeus/Amadeus` double-nesting when the folder name already matched the repo.
   const sanitizedGithubUrl = normalizedGithubUrl.replace(/\/+$/, '').replace(/\.git$/, '');
   const repoName = sanitizedGithubUrl.split('/').pop() || 'repository';
-  const clonePath = path.join(absolutePath, repoName);
+  const clonePath = absolutePath;
+  const cloneFolderName = path.basename(clonePath) || repoName;
 
   if (await dependencies.pathExists(clonePath)) {
     throw new AppError(
-      `Directory "${repoName}" already exists. Please choose a different location or remove the existing directory.`,
+      `Directory "${cloneFolderName}" already exists. Please choose a different location or remove the existing directory.`,
       {
         code: 'CLONE_TARGET_ALREADY_EXISTS',
         statusCode: 409,

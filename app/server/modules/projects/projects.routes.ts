@@ -105,7 +105,10 @@ router.post(
   '/create-project',
   asyncHandler(async (req, res) => {
     const requestBody = req.body as Record<string, unknown>;
-    const projectPath = typeof requestBody.path === 'string' ? requestBody.path : '';
+    // Preferred input is a bare project name — resolved against WORKSPACES_ROOT
+    // server-side (validateWorkspacePath). `path` stays accepted for back-compat.
+    const projectName = typeof requestBody.name === 'string' ? requestBody.name.trim() : '';
+    const projectPath = projectName || (typeof requestBody.path === 'string' ? requestBody.path : '');
     const customName = typeof requestBody.customName === 'string' ? requestBody.customName : null;
 
     if (requestBody.workspaceType !== undefined) {
@@ -126,6 +129,7 @@ router.post(
     const projectCreationResult = await createProject({
       projectPath,
       customName,
+      initGit: true,
     });
 
     res.json({
@@ -175,8 +179,14 @@ router.get('/clone-progress', async (req, res) => {
 
   try {
     const queryParams = req.query as Record<string, unknown>;
-    const workspacePath = readQueryStringValue(queryParams.path);
     const githubUrl = readQueryStringValue(queryParams.githubUrl);
+    // `path` now carries the target FOLDER NAME (resolved to WORKSPACES_ROOT/<name>
+    // server-side). Blank → default to the repo name derived from the URL, so the
+    // clone lands in WORKSPACES_ROOT/<repo> — never nested under a typed parent.
+    const folderName = readQueryStringValue(queryParams.path).trim();
+    const repoDefaultName =
+      githubUrl.trim().replace(/\/+$/, '').replace(/\.git$/, '').split('/').pop() || 'repository';
+    const workspacePath = folderName || repoDefaultName;
     const githubTokenId = readOptionalNumericQueryValue(queryParams.githubTokenId);
     const newGithubToken = readQueryStringValue(queryParams.newGithubToken) || null;
 

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { FolderPlus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import ErrorBanner from './components/ErrorBanner';
 import StepConfiguration from './components/StepConfiguration';
 import StepReview from './components/StepReview';
@@ -67,13 +68,16 @@ export default function ProjectCreationWizard({
     setError(null);
 
     if (step === 1) {
-      if (!formState.workspacePath.trim()) {
-        setError(t('projectWizard.errors.providePath'));
+      // A name is required for an empty project; for a clone it is optional (the
+      // server falls back to the repo name), so only the URL matters there.
+      const cloning = isCloneWorkflow(formState.githubUrl);
+      if (!cloning && !formState.workspacePath.trim()) {
+        setError(t('projectWizard.errors.provideName'));
         return;
       }
       setStep(2);
     }
-  }, [formState.workspacePath, step, t]);
+  }, [formState.githubUrl, formState.workspacePath, step, t]);
 
   const handleBack = useCallback(() => {
     setError(null);
@@ -108,7 +112,7 @@ export default function ProjectCreationWizard({
       }
 
       const project = await createProjectRequest({
-        path: formState.workspacePath.trim(),
+        name: formState.workspacePath.trim(),
       });
 
       onProjectCreated?.(project);

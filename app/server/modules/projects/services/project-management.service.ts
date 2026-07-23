@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+import spawn from 'cross-spawn';
+
 import { projectsDb } from '@/modules/database/index.js';
 import type {
   CreateProjectPathResult,
@@ -12,11 +14,15 @@ import { AppError, normalizeProjectPath, validateWorkspacePath } from '@/shared/
 type CreateProjectInput = {
   projectPath: string;
   customName?: string | null;
+  // Only the interactive "new empty project" flow sets this. Auto-discovery and
+  // clone registration leave it false so existing/cloned folders are untouched.
+  initGit?: boolean;
 };
 
 type CreateProjectDependencies = {
   validatePath: (projectPath: string) => Promise<WorkspacePathValidationResult>;
   ensureWorkspaceDirectory: (projectPath: string) => Promise<void>;
+  initGitRepo: (projectPath: string) => Promise<void>;
   persistProjectPath: (projectPath: string, customName: string | null) => CreateProjectPathResult;
   getProjectByPath: (projectPath: string) => ProjectRepositoryRow | null;
 };
@@ -52,6 +58,17 @@ const defaultDependencies: CreateProjectDependencies = {
         statusCode: 400,
       });
     }
+  },
+  // Fresh project folders get a git repo so source-control features work
+  // immediately. Idempotent (`git init` is a no-op on an existing repo, e.g. a
+  // just-cloned folder) and best-effort — a missing git binary must not fail
+  // project creation.
+  initGitRepo: async (projectPath: string): Promise<void> => {
+    await new Promise<void>((resolve) => {
+      const child = spawn('git', ['init'], { cwd: projectPath, stdio: 'ignore' });
+      child.on('error', () => resolve());
+      child.on('close', () => resolve());
+    });
   },
   persistProjectPath: (projectPath: string, customName: string | null): CreateProjectPathResult =>
     projectsDb.createProjectPath(projectPath, customName),
@@ -108,6 +125,9 @@ export async function createProject(
 
   const resolvedProjectPath = normalizeProjectPath(pathValidation.resolvedPath);
   await dependencies.ensureWorkspaceDirectory(resolvedProjectPath);
+  if (input.initGit) {
+    await dependencies.initGitRepo(resolvedProjectPath);
+  }
 
   const normalizedCustomName = resolveDisplayName(input.customName ?? null, resolvedProjectPath);
   const persistedProject = dependencies.persistProjectPath(resolvedProjectPath, normalizedCustomName);
