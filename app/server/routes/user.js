@@ -1,9 +1,11 @@
 import express from 'express';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import spawn from 'cross-spawn';
-import { userDb } from '../modules/database/index.js';
+import { userDb, modelPreferencesDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
+import { providerModelsService } from '../modules/providers/services/provider-models.service.js';
+import { CHAT_PROVIDERS, prefKeys } from '../modules/providers/services/model-preference.service.js';
 
 const router = express.Router();
 
@@ -118,6 +120,97 @@ router.get('/onboarding-status', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error checking onboarding status:', error);
     res.status(500).json({ error: 'Failed to check onboarding status' });
+  }
+});
+
+// Model Preference: two orthogonal axes (provider + model), each with a global
+// fallback and optional per-feature override — the single source of truth that
+// keeps features model-id agnostic. Keys are owned by the model-preference
+// service (prefKeys); catalogs come from providerModelsService.
+const catalogProviderFor = (provider) => (provider === 'taskmaster' ? 'claude' : provider);
+
+async function providerCatalog(provider) {
+  const catalog = (await providerModelsService.getProviderModels(catalogProviderFor(provider))).models;
+  return {
+    provider,
+    defaultModel: catalog.DEFAULT,
+    options: catalog.OPTIONS.map((o) => ({ value: o.value, label: o.label, description: o.description })),
+    allowed: new Set(catalog.OPTIONS.map((o) => o.value)),
+  };
+}
+
+// GET /api/user/models — current selections + catalogs for each provider.
+// Shape: { globalProvider, providers: [{provider, current, defaultModel, options}] }.
+// `current` is the provider's default model (provider:<p>:model or catalog default).
+router.get('/models', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const prefs = modelPreferencesDb.getAll(userId);
+    const providerNames = [...CHAT_PROVIDERS, 'taskmaster'];
+    const providers = await Promise.all(providerNames.map(async (provider) => {
+      const cat = await providerCatalog(provider);
+      return {
+        provider,
+        current: prefs[prefKeys.providerModel(provider)] || cat.defaultModel,
+        defaultModel: cat.defaultModel,
+        options: cat.options,
+      };
+    }));
+    res.json({
+      globalProvider: prefs[prefKeys.globalProvider()] || CHAT_PROVIDERS[0],
+      chatProviders: CHAT_PROVIDERS,
+      providers,
+    });
+  } catch (error) {
+    console.error('Error reading model preferences:', error);
+    res.status(500).json({ error: 'Failed to read model preferences' });
+  }
+});
+
+// PUT /api/user/models — set one preference key. Body is one of:
+//   { globalProvider }                          -> global default provider
+//   { provider, model }                         -> that provider's default model
+//   { feature, provider }                       -> a feature's provider override
+//   { feature, model, provider }                -> a feature's model override (provider names the catalog to validate against)
+router.put('/models', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { globalProvider, provider, model, feature } = req.body;
+
+    if (typeof globalProvider === 'string') {
+      if (!CHAT_PROVIDERS.includes(globalProvider)) {
+        return res.status(400).json({ error: `Unknown provider: ${globalProvider}` });
+      }
+      modelPreferencesDb.set(userId, prefKeys.globalProvider(), globalProvider);
+      return res.json({ success: true });
+    }
+
+    // Provider must be a known catalog for anything model-related below.
+    if (typeof provider !== 'string' || (![...CHAT_PROVIDERS, 'taskmaster'].includes(provider))) {
+      return res.status(400).json({ error: `Unknown provider: ${provider}` });
+    }
+
+    if (typeof model === 'string' && model.trim()) {
+      const cat = await providerCatalog(provider);
+      if (!cat.allowed.has(model)) {
+        return res.status(400).json({ error: `Unknown model for ${provider}: ${model}` });
+      }
+      // feature present → per-feature model override; else provider default.
+      const key = feature ? prefKeys.featureModel(feature) : prefKeys.providerModel(provider);
+      modelPreferencesDb.set(userId, key, model);
+      return res.json({ success: true });
+    }
+
+    // feature + provider (no model) → per-feature provider override.
+    if (feature) {
+      modelPreferencesDb.set(userId, prefKeys.featureProvider(feature), provider);
+      return res.json({ success: true });
+    }
+
+    return res.status(400).json({ error: 'Nothing to update' });
+  } catch (error) {
+    console.error('Error saving model preference:', error);
+    res.status(500).json({ error: 'Failed to save model preference' });
   }
 });
 

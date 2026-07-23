@@ -49,6 +49,26 @@ CREATE TABLE IF NOT EXISTS user_notification_preferences (
 );
 `;
 
+// Generic per-user key/value store for model preferences. Two orthogonal axes,
+// each with a global fallback and optional per-feature override:
+//   global:provider                 -> default provider for every feature
+//   provider:<name>:model           -> default model for that provider
+//   feature:<name>:provider         -> a feature's provider override
+//   feature:<name>:model            -> a feature's model override
+// Resolution for a feature: provider = feature-override ?? global; model =
+// feature-override ?? provider-default ?? the provider catalog's own DEFAULT.
+// A KV shape (not fixed columns) keeps all three levels in one table.
+export const MODEL_PREFERENCES_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS model_preferences (
+    user_id INTEGER NOT NULL,
+    pref_key TEXT NOT NULL,
+    pref_value TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, pref_key),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+`;
+
 export const VAPID_KEYS_TABLE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS vapid_keys (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -173,6 +193,8 @@ CREATE INDEX IF NOT EXISTS idx_user_credentials_active ON user_credentials(is_ac
 
 ${USER_NOTIFICATION_PREFERENCES_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_user_notification_preferences_user_id ON user_notification_preferences(user_id);
+
+${MODEL_PREFERENCES_TABLE_SCHEMA_SQL}
 
 ${VAPID_KEYS_TABLE_SCHEMA_SQL}
 
