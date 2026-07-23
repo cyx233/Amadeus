@@ -7,11 +7,9 @@ import SettingsSidebar from '../view/SettingsSidebar';
 import AgentsSettingsTab from '../view/tabs/agents-settings/AgentsSettingsTab';
 import AppearanceSettingsTab from '../view/tabs/AppearanceSettingsTab';
 import CredentialsSettingsTab from '../view/tabs/api-settings/CredentialsSettingsTab';
-import VoiceSettingsTab from '../view/tabs/VoiceSettingsTab';
 import GitSettingsTab from '../view/tabs/git-settings/GitSettingsTab';
-import BrowserUseSettingsTab from '../view/tabs/browser-use-settings/BrowserUseSettingsTab';
 import NotificationsSettingsTab from '../view/tabs/NotificationsSettingsTab';
-import TasksSettingsTab from '../view/tabs/tasks-settings/TasksSettingsTab';
+import FeaturesSettingsTab from '../view/tabs/FeaturesSettingsTab';
 import AccountSettingsTab from '../view/tabs/AccountSettingsTab';
 import AboutTab from '../view/tabs/AboutTab';
 import { useSettingsController } from '../hooks/useSettingsController';
@@ -135,9 +133,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                 />
               )}
 
-              {activeTab === 'tasks' && <TasksSettingsTab />}
-
-              {activeTab === 'browser' && <BrowserUseSettingsTab />}
+              {activeTab === 'features' && <FeaturesSettingsTab />}
 
               {activeTab === 'notifications' && (
                 <NotificationsSettingsTab
@@ -152,8 +148,6 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
               )}
 
               {activeTab === 'api' && <CredentialsSettingsTab />}
-
-              {activeTab === 'voice' && <VoiceSettingsTab />}
 
               {activeTab === 'account' && <AccountSettingsTab />}
 

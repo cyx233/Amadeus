@@ -5,9 +5,9 @@ import {
   GitBranch,
   Info,
   KeyRound,
-  ListChecks,
-  MonitorPlay,
   Palette,
+  SlidersHorizontal,
+  UserCog,
 } from 'lucide-react';
 
 import type {
@@ -31,9 +31,10 @@ export const SETTINGS_MAIN_TABS: SettingsMainTabMeta[] = [
   { id: 'appearance', label: 'Appearance', keywords: 'appearance theme dark light language', icon: Palette },
   { id: 'git', label: 'Git', keywords: 'git github commits', icon: GitBranch },
   { id: 'api', label: 'API Tokens', keywords: 'api tokens auth keys', icon: KeyRound },
-  { id: 'tasks', label: 'Tasks', keywords: 'tasks taskmaster', icon: ListChecks },
-  { id: 'browser', label: 'Browser', keywords: 'browser playwright chromium automation', icon: MonitorPlay },
+  // Voice, Tasks/TaskMaster, and Browser automation merged into one Features tab.
+  { id: 'features', label: 'Features', keywords: 'features voice tasks taskmaster browser playwright chromium automation', icon: SlidersHorizontal },
   { id: 'notifications', label: 'Notifications', keywords: 'notifications alerts push', icon: Bell },
+  { id: 'account', label: 'Account', keywords: 'account password security', icon: UserCog },
   { id: 'about', label: 'About', keywords: 'about version info', icon: Info },
 ];
 
