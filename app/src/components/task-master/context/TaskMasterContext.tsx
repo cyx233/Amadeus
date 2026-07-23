@@ -70,10 +70,12 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   const [tasks, setTasks] = useState<TaskMasterTask[]>([]);
   const [nextTask, setNextTask] = useState<TaskMasterTask | null>(null);
   // Per-PRD task sets: each PRD parses into its own TaskMaster tag. currentTag
-  // is the selected set; availableTags is the list to switch between.
+  // is the first selected set; availableTags is the full list. selectedTags is
+  // the set being viewed — usually one (single-select), but the checkbox UI can
+  // pick several for a merged cross-PRD view.
   const [currentTag, setCurrentTag] = useState<string>('master');
   const [availableTags, setAvailableTags] = useState<string[]>([]);
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
@@ -286,7 +288,9 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setIsLoadingTasks(true);
       clearError();
 
-      const tagQuery = selectedTag ? `?tag=${encodeURIComponent(selectedTag)}` : '';
+      const tagQuery = selectedTags.length
+        ? `?tags=${encodeURIComponent(selectedTags.join(','))}`
+        : '';
       const response = await api.get(`/taskmaster/tasks/${encodeURIComponent(projectId)}${tagQuery}`);
       if (!response.ok) {
         const errorPayload = (await response.json()) as { message?: string };
@@ -296,6 +300,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       const data = (await response.json()) as {
         tasks?: TaskMasterTask[];
         currentTag?: string;
+        selectedTags?: string[];
         availableTags?: string[];
       };
       const loadedTasks = Array.isArray(data.tasks) ? data.tasks : [];
@@ -304,6 +309,15 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setNextTask(getNextTask(loadedTasks));
       if (data.currentTag) setCurrentTag(data.currentTag);
       setAvailableTags(Array.isArray(data.availableTags) ? data.availableTags : []);
+      // Sync back the server-resolved selection (drops invalid/nonexistent tags),
+      // but only when we actually asked for specific tags — an empty request
+      // means "default", and we keep selectedTags empty so it stays default.
+      if (selectedTags.length && Array.isArray(data.selectedTags)) {
+        const resolved = data.selectedTags;
+        if (resolved.length && resolved.join(',') !== selectedTags.join(',')) {
+          setSelectedTags(resolved);
+        }
+      }
     } catch (caughtError) {
       handleError('load tasks', caughtError);
       setTasks([]);
@@ -311,12 +325,20 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     } finally {
       setIsLoadingTasks(false);
     }
-  }, [clearError, currentProject?.projectId, handleError, token, user, selectedTag]);
+  }, [clearError, currentProject?.projectId, handleError, token, user, selectedTags]);
 
-  // Switch the visible task set (PRD). Triggers a refetch via the effect that
-  // depends on refreshTasks.
+  // Single-select: view exactly one task set (PRD). Common case.
   const selectTag = useCallback((tag: string) => {
-    setSelectedTag(tag);
+    setSelectedTags([tag]);
+  }, []);
+
+  // Multi-select: add/remove a task set from the merged view (checkbox). Never
+  // leaves an empty selection — unchecking the last one falls back to default
+  // (empty = server's default/master).
+  const toggleTag = useCallback((tag: string) => {
+    setSelectedTags((current) => (
+      current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag]
+    ));
   }, []);
 
   const refreshMCPStatus = useCallback(async () => {
@@ -392,7 +414,9 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       nextTask,
       currentTag,
       availableTags,
+      selectedTags,
       selectTag,
+      toggleTag,
       isLoading,
       isLoadingTasks,
       isLoadingMCP,
@@ -408,6 +432,8 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       clearError,
       currentProject,
       currentTag,
+      selectedTags,
+      toggleTag,
       error,
       isLoading,
       isLoadingMCP,

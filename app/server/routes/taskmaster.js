@@ -8,13 +8,14 @@
  * - TaskMaster state and metadata management
  */
 
-import express from 'express';
-import fs from 'fs';
+import fs, { promises as fsPromises } from 'fs';
 import path from 'path';
-import { promises as fsPromises } from 'fs';
+
+import express from 'express';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution — required
 // here since task-master/npx are .cmd shims on Windows.
 import spawn from 'cross-spawn';
+
 import { projectsDb } from '../modules/database/index.js';
 import { detectTaskMasterMCPServer } from '../utils/mcp-detector.js';
 import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from '../utils/taskmaster-websocket.js';
@@ -187,41 +188,56 @@ router.get('/tasks/:projectId', async (req, res) => {
             const tasksContent = await fsPromises.readFile(tasksFilePath, 'utf8');
             const tasksData = JSON.parse(tasksContent);
             
-            let tasks = [];
-            let currentTag = 'master';
-            let availableTags = [];
-
-            // Optional ?tag= selects which task set (PRD) to read. Each PRD is
-            // parsed into its own tag, so a project can hold multiple separate
-            // backlogs instead of one merged list.
+            // Each PRD parses into its own tag, so a project holds multiple
+            // separate backlogs. Selection:
+            //   ?tags=a,b,c  -> merged view of several sets (checkbox multi-select)
+            //   ?tag=a       -> single set (kept for back-compat / single-select)
+            // A task's id is only unique within its tag, so on a merged view we
+            // stamp `sourceTag` on each task; the client keys by sourceTag+id and
+            // interprets dependencies within the same sourceTag.
             const requestedTag = typeof req.query.tag === 'string' ? req.query.tag : null;
+            const requestedTags = typeof req.query.tags === 'string'
+                ? req.query.tags.split(',').map(s => s.trim()).filter(Boolean)
+                : (requestedTag ? [requestedTag] : []);
+
+            let availableTags = [];
+            let selectedTags = [];
+            // Collected as {task, sourceTag} so we can stamp the source on merge.
+            let sourceTasks = [];
 
             // Handle both tagged and legacy formats
             if (Array.isArray(tasksData)) {
                 // Legacy format
-                tasks = tasksData;
+                selectedTags = ['master'];
+                sourceTasks = tasksData.map(task => ({ task, sourceTag: 'master' }));
             } else if (tasksData.tasks) {
                 // Simple format with tasks array
-                tasks = tasksData.tasks;
+                selectedTags = ['master'];
+                sourceTasks = tasksData.tasks.map(task => ({ task, sourceTag: 'master' }));
             } else {
                 // Tagged format: { <tag>: { tasks: [...] }, ... }
                 availableTags = Object.keys(tasksData).filter(key =>
                     tasksData[key] && Array.isArray(tasksData[key].tasks)
                 );
 
-                // Pick the tag: requested (if it exists) → master → first available.
-                if (requestedTag && availableTags.includes(requestedTag)) {
-                    currentTag = requestedTag;
-                } else if (!availableTags.includes('master') && availableTags.length > 0) {
-                    currentTag = availableTags[0];
+                // Keep only requested tags that actually exist; if none valid,
+                // fall back to master (or the first available tag).
+                selectedTags = requestedTags.filter(tagName => availableTags.includes(tagName));
+                if (selectedTags.length === 0) {
+                    selectedTags = availableTags.includes('master')
+                        ? ['master']
+                        : availableTags.slice(0, 1);
                 }
 
-                tasks = tasksData[currentTag]?.tasks ?? [];
+                sourceTasks = selectedTags.flatMap(tagName =>
+                    (tasksData[tagName]?.tasks ?? []).map(task => ({ task, sourceTag: tagName }))
+                );
             }
 
-            // Transform tasks to ensure all have required fields
-            const transformedTasks = tasks.map(task => ({
+            // Transform tasks to ensure all have required fields (+ sourceTag).
+            const transformedTasks = sourceTasks.map(({ task, sourceTag }) => ({
                 id: task.id,
+                sourceTag,
                 title: task.title || 'Untitled Task',
                 description: task.description || '',
                 status: task.status || 'pending',
@@ -234,11 +250,15 @@ router.get('/tasks/:projectId', async (req, res) => {
                 subtasks: task.subtasks || []
             }));
 
+            // currentTag kept for single-select callers (first selected).
+            const currentTag = selectedTags[0] || 'master';
+
             res.json({
                 projectId,
                 projectPath,
                 tasks: transformedTasks,
                 currentTag,
+                selectedTags,
                 availableTags,
                 totalTasks: transformedTasks.length,
                 tasksByStatus: {

@@ -122,6 +122,7 @@
   "tags": {
     "default": "Default",
     "switch": "Switch task set (PRD)",
+    "toggle": "Show alongside others",
     "generateTasks": "Generate tasks from this PRD",
     "openEditor": "Open PRD"
   },

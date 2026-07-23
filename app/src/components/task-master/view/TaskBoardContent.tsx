@@ -1,7 +1,9 @@
 import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
 import { cn } from '../../../lib/utils';
 import type { TaskBoardView, TaskKanbanColumn, TaskMasterTask, TaskSelection } from '../types';
+
 import TaskCard from './TaskCard';
 
 type TaskBoardContentProps = {
@@ -67,7 +69,7 @@ function KanbanColumns({
             ) : (
               column.tasks.map((task) => (
                 <TaskCard
-                  key={String(task.id)}
+                  key={`${task.sourceTag ?? ''}-${task.id}`}
                   task={task}
                   onClick={() => onTaskClick(task)}
                   showParent={showParentTasks}
@@ -112,7 +114,7 @@ export default function TaskBoardContent({
     <div className={cn('gap-4', viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'space-y-4')}>
       {filteredTasks.map((task) => (
         <TaskCard
-          key={String(task.id)}
+          key={`${task.sourceTag ?? ''}-${task.id}`}
           task={task}
           onClick={() => onTaskClick(task)}
           showParent={showParentTasks}

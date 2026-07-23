@@ -82,7 +82,7 @@ export default function TaskBoardToolbar({
   onOpenCreateTask,
 }: TaskBoardToolbarProps) {
   const { t } = useTranslation('tasks');
-  const { currentTag, availableTags, selectTag, currentProject, refreshTasks } = useTaskMaster();
+  const { availableTags, selectedTags, selectTag, toggleTag, currentProject, refreshTasks } = useTaskMaster();
   const [isPrdDropdownOpen, setIsPrdDropdownOpen] = useState(false);
   const [generatingTag, setGeneratingTag] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -233,79 +233,106 @@ export default function TaskBoardToolbar({
 
                           <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
 
-                          {/* Default (master) task set — manual/unassigned tasks. */}
-                          <button
-                            onClick={() => { selectTag('master'); setIsPrdDropdownOpen(false); }}
-                            className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
-                          >
-                            {currentTag === 'master'
-                              ? <Check className="h-4 w-4 text-purple-600" />
-                              : <span className="h-4 w-4" />}
-                            <span className="truncate">{t('tags.default', 'Default')}</span>
-                          </button>
-
-                          {/* One row per PRD: click name to view its task set; the
-                              spark icon (re)generates tasks into that PRD's tag. */}
-                          {existingPrds.map((prd) => {
-                            const slug = prdNameToTag(prd.name);
-                            const isCurrent = currentTag === slug;
-                            const isGenerating = generatingTag === slug;
-                            return (
-                              <div
-                                key={prd.name}
+                          {/* Each row has a checkbox (toggle into the merged view)
+                              and a label (click = view just this one). The default
+                              empty selection resolves to master server-side, so
+                              treat empty as "master checked". */}
+                          {(() => {
+                            const isChecked = (tag: string) =>
+                              selectedTags.includes(tag) || (selectedTags.length === 0 && tag === 'master');
+                            const Checkbox = ({ tag }: { tag: string }) => (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); toggleTag(tag); }}
+                                title={t('tags.toggle', 'Show alongside others')}
                                 className={cn(
-                                  'group flex items-center gap-1 rounded',
-                                  isCurrent && 'bg-purple-50 dark:bg-purple-900/20'
+                                  'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
+                                  isChecked(tag)
+                                    ? 'border-purple-600 bg-purple-600 text-white'
+                                    : 'border-gray-300 dark:border-gray-500'
                                 )}
                               >
-                                <button
-                                  onClick={() => { selectTag(slug); setIsPrdDropdownOpen(false); }}
-                                  className="flex min-w-0 flex-1 items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
-                                >
-                                  {isCurrent
-                                    ? <Check className="h-4 w-4 flex-shrink-0 text-purple-600" />
-                                    : <FileText className="h-4 w-4 flex-shrink-0" />}
-                                  <span className="truncate">{prd.name}</span>
-                                </button>
-                                <button
-                                  onClick={() => { void handleGenerateTasks(prd); }}
-                                  disabled={isGenerating}
-                                  title={t('tags.generateTasks', 'Generate tasks from this PRD')}
-                                  className="mr-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:bg-purple-100 hover:text-purple-700 disabled:opacity-50 dark:hover:bg-purple-900/40"
-                                >
-                                  {isGenerating
-                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    : <Sparkles className="h-3.5 w-3.5" />}
-                                </button>
-                                <button
-                                  onClick={() => { onOpenPrd(prd); setIsPrdDropdownOpen(false); }}
-                                  title={t('tags.openEditor', 'Open PRD')}
-                                  className="mr-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded text-gray-500 opacity-0 hover:bg-gray-100 hover:text-gray-700 group-hover:opacity-100 dark:hover:bg-gray-700"
-                                >
-                                  <FileText className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
+                                {isChecked(tag) && <Check className="h-3 w-3" />}
+                              </button>
                             );
-                          })}
 
-                          {/* Orphan tags: task sets whose PRD file is gone. */}
-                          {orphanTags.length > 0 && (
-                            <>
-                              <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
-                              {orphanTags.map((tagName) => (
-                                <button
-                                  key={tagName}
-                                  onClick={() => { selectTag(tagName); setIsPrdDropdownOpen(false); }}
-                                  className="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                >
-                                  {currentTag === tagName
-                                    ? <Check className="h-4 w-4 text-purple-600" />
-                                    : <span className="h-4 w-4" />}
-                                  <span className="truncate italic">{tagName}</span>
-                                </button>
-                              ))}
-                            </>
-                          )}
+                            return (
+                              <>
+                                {/* Default (master) — manual/unassigned tasks. */}
+                                <div className="group flex items-center gap-2 rounded px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
+                                  <Checkbox tag="master" />
+                                  <button
+                                    onClick={() => { selectTag('master'); setIsPrdDropdownOpen(false); }}
+                                    className="min-w-0 flex-1 truncate text-left text-sm text-gray-700 dark:text-gray-300"
+                                  >
+                                    {t('tags.default', 'Default')}
+                                  </button>
+                                </div>
+
+                                {/* One row per PRD: checkbox = add to merged view;
+                                    label = view just this; ✨ = generate; 📄 = edit. */}
+                                {existingPrds.map((prd) => {
+                                  const slug = prdNameToTag(prd.name);
+                                  const isGenerating = generatingTag === slug;
+                                  return (
+                                    <div
+                                      key={prd.name}
+                                      className={cn(
+                                        'group flex items-center gap-2 rounded px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700',
+                                        isChecked(slug) && 'bg-purple-50 dark:bg-purple-900/20'
+                                      )}
+                                    >
+                                      <Checkbox tag={slug} />
+                                      <button
+                                        onClick={() => { selectTag(slug); setIsPrdDropdownOpen(false); }}
+                                        className="min-w-0 flex-1 truncate text-left text-sm text-gray-700 dark:text-gray-300"
+                                      >
+                                        {prd.name}
+                                      </button>
+                                      <button
+                                        onClick={() => { void handleGenerateTasks(prd); }}
+                                        disabled={isGenerating}
+                                        title={t('tags.generateTasks', 'Generate tasks from this PRD')}
+                                        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:bg-purple-100 hover:text-purple-700 disabled:opacity-50 dark:hover:bg-purple-900/40"
+                                      >
+                                        {isGenerating
+                                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                          : <Sparkles className="h-3.5 w-3.5" />}
+                                      </button>
+                                      <button
+                                        onClick={() => { onOpenPrd(prd); setIsPrdDropdownOpen(false); }}
+                                        title={t('tags.openEditor', 'Open PRD')}
+                                        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 opacity-0 hover:bg-gray-100 hover:text-gray-700 group-hover:opacity-100 dark:hover:bg-gray-700"
+                                      >
+                                        <FileText className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
+
+                                {/* Orphan tags: task sets whose PRD file is gone. */}
+                                {orphanTags.length > 0 && (
+                                  <>
+                                    <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
+                                    {orphanTags.map((tagName) => (
+                                      <div
+                                        key={tagName}
+                                        className="group flex items-center gap-2 rounded px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                      >
+                                        <Checkbox tag={tagName} />
+                                        <button
+                                          onClick={() => { selectTag(tagName); setIsPrdDropdownOpen(false); }}
+                                          className="min-w-0 flex-1 truncate text-left text-sm italic text-gray-500"
+                                        >
+                                          {tagName}
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     )}

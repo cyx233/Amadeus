@@ -27,6 +27,8 @@ export type TaskMasterTask = {
   subtasks?: TaskMasterTask[];
   createdAt?: string;
   updatedAt?: string;
+  /** Which PRD/tag this task came from (set on the merged multi-select view). */
+  sourceTag?: string;
   [key: string]: unknown;
 };
 
@@ -104,7 +106,9 @@ export type TaskMasterContextValue = {
   nextTask: TaskMasterTask | null;
   currentTag: string;
   availableTags: string[];
+  selectedTags: string[];
   selectTag: (tag: string) => void;
+  toggleTag: (tag: string) => void;
   isLoading: boolean;
   isLoadingTasks: boolean;
   isLoadingMCP: boolean;
