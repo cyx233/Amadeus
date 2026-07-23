@@ -20,11 +20,13 @@ export const CHAT_PROVIDERS = ['claude', 'cursor', 'codex', 'opencode'];
 const FALLBACK_PROVIDER = 'claude';
 
 // Features that resolve a model independently and can be overridden per-feature.
-// (chat isn't here: it's provider-pinned by the agent the user picks, not a
-// fixed feature.) `id` is the key namespace; `label` is for the UI.
+// (chat isn't here: it's provider-pinned by the agent the user picks. task-gen
+// isn't here either: TaskMaster is a self-contained tool with its own rich model
+// selector — `init` / `models --setup` with many providers + custom ids — so we
+// don't reconstruct or drive it; deep config stays in TaskMaster's own channel.)
+// `id` is the key namespace; `label` is for the UI.
 export const MODEL_FEATURES = [
   { id: 'commit-message', label: 'Commit message generation' },
-  { id: 'task-gen', label: 'Task generation (TaskMaster)' },
 ];
 
 // Key builders — the single place that knows the KV layout.
