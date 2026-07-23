@@ -11,9 +11,14 @@ type TaskMasterSetupModalProps = {
   project: TaskMasterProject | null;
   onClose: () => void;
   onAfterClose?: (() => void) | null;
+  // The task-master command to run in the modal's terminal. Defaults to `init`
+  // (first-time setup); the Config button passes `models --setup` to configure
+  // an already-initialized project (providers/models/custom) via TaskMaster's
+  // own interactive selector.
+  command?: string;
 };
 
-export default function TaskMasterSetupModal({ isOpen, project, onClose, onAfterClose = null }: TaskMasterSetupModalProps) {
+export default function TaskMasterSetupModal({ isOpen, project, onClose, onAfterClose = null, command = 'init' }: TaskMasterSetupModalProps) {
   const { t } = useTranslation('tasks');
   const [isTaskMasterComplete, setIsTaskMasterComplete] = useState(false);
 
@@ -60,7 +65,7 @@ export default function TaskMasterSetupModal({ isOpen, project, onClose, onAfter
             <Shell
               selectedProject={project}
               selectedSession={null}
-              initialCommand="npx task-master init"
+              initialCommand={`npx task-master ${command}`}
               isPlainShell
               isActive
               onProcessComplete={(exitCode) => {

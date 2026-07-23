@@ -194,11 +194,14 @@ export default function TaskBoard({
         onCreatePrd={() => onShowPRDEditor?.()}
       />
 
+      {/* On the populated board the project is already initialized, so Config
+          opens TaskMaster's interactive model/provider selector, not init. */}
       <TaskMasterSetupModal
         isOpen={showSetupModal}
         project={currentProject}
         onClose={() => setShowSetupModal(false)}
         onAfterClose={refreshAfterSetup}
+        command="models --setup"
       />
     </div>
   );
