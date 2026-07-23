@@ -5,7 +5,7 @@ import { userDb, modelPreferencesDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
 import { providerModelsService } from '../modules/providers/services/provider-models.service.js';
-import { CHAT_PROVIDERS, MODEL_FEATURES, prefKeys } from '../modules/providers/services/model-preference.service.js';
+import { CHAT_PROVIDERS, MODEL_FEATURES, prefKeys, resolveModel } from '../modules/providers/services/model-preference.service.js';
 
 const router = express.Router();
 
@@ -228,6 +228,37 @@ router.put('/models', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error saving model preference:', error);
     res.status(500).json({ error: 'Failed to save model preference' });
+  }
+});
+
+// GET /api/user/effective-model?feature=&provider=&sessionId= — the single
+// resolver the frontend/UI asks "what model should I show/use here?". Order:
+// a session's own model (per-session, from its transcript/override) wins; else
+// the preference resolution (feature override → global default → catalog).
+// Returns { provider, model } where model may be null ("use provider default").
+router.get('/effective-model', authenticateToken, async (req, res) => {
+  try {
+    const feature = typeof req.query.feature === 'string' ? req.query.feature : 'chat';
+    const providerPin = typeof req.query.provider === 'string' && req.query.provider ? req.query.provider : undefined;
+    const sessionId = typeof req.query.sessionId === 'string' && req.query.sessionId.trim() ? req.query.sessionId.trim() : null;
+
+    const resolved = await resolveModel(req.user.id, feature, { provider: providerPin });
+
+    // A concrete session overrides the preference default with its own model.
+    if (sessionId) {
+      try {
+        const active = await providerModelsService.getCurrentActiveModel(resolved.provider, sessionId);
+        if (active?.model) {
+          return res.json({ provider: resolved.provider, model: active.model });
+        }
+      } catch {
+        // Session lookup is best-effort; fall through to the preference model.
+      }
+    }
+    res.json(resolved);
+  } catch (error) {
+    console.error('Error resolving effective model:', error);
+    res.status(500).json({ error: 'Failed to resolve effective model' });
   }
 });
 

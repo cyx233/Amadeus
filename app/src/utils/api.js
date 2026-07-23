@@ -299,6 +299,15 @@ export const api = {
     // Model Preference (two axes: provider + model, each with global fallback +
     // per-feature override). Keeps features model-id agnostic.
     getModels: (refresh = false) => authenticatedFetch(`/api/user/models${refresh ? '?refresh=1' : ''}`),
+    // Single resolver: "what model should this feature/session use?" (session
+    // model wins → preference default). Mirrors the backend resolveModel.
+    /** @param {{ feature?: string, provider?: string, sessionId?: string }} [opts] */
+    effectiveModel: (opts = {}) => {
+      const qs = new URLSearchParams({ feature: opts.feature || 'chat' });
+      if (opts.provider) qs.set('provider', opts.provider);
+      if (opts.sessionId) qs.set('sessionId', opts.sessionId);
+      return authenticatedFetch(`/api/user/effective-model?${qs.toString()}`);
+    },
     // body is one of: {globalProvider} | {provider, model} | {feature, provider}
     // | {feature, provider, model}
     updateModel: (body) =>
