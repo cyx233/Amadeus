@@ -135,6 +135,23 @@ CREATE TABLE IF NOT EXISTS app_config (
 );
 `;
 
+// Per-turn trajectory memory. Cross-user isolation is structural: every user
+// runs in their own container against their own SQLite file, so there is no
+// user_id column and no shared table — a query can never reach another user's
+// rows. tools/files/scripts are JSON arrays serialized as TEXT (SQLite has no
+// array type); the repository (de)serializes them at the boundary.
+export const TRAJECTORY_TABLE_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS trajectory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    title TEXT,
+    tools TEXT,   -- JSON array of tool names
+    files TEXT,   -- JSON array of file paths
+    scripts TEXT, -- JSON array of commands
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`;
+
 export const INIT_SCHEMA_SQL = `
 -- Initialize authentication database
 PRAGMA foreign_keys = ON;
@@ -178,4 +195,8 @@ CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);
 ${LAST_SCANNED_AT_SQL}
 
 ${APP_CONFIG_TABLE_SCHEMA_SQL}
+
+${TRAJECTORY_TABLE_SCHEMA_SQL}
+CREATE INDEX IF NOT EXISTS idx_trajectory_created_at ON trajectory(created_at);
+CREATE INDEX IF NOT EXISTS idx_trajectory_session_id ON trajectory(session_id);
 `;

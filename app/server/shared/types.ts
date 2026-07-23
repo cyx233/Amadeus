@@ -531,6 +531,32 @@ export type CreateCredentialResult = {
 };
 
 // ---------------------------
+//----------------- TRAJECTORY MEMORY TYPES ------------
+/**
+ * One captured turn of "trajectory memory": a lightweight record of which
+ * tools ran, which files were touched, and which shell commands executed
+ * during a single agent turn. The pull-only recall tool uses these rows to
+ * surface related past work when the current task overlaps recent files.
+ *
+ * This is the parsed/domain shape. In SQLite `tools`, `files`, and `scripts`
+ * are stored as JSON-encoded TEXT (SQLite has no array type); the repository
+ * parses them into `string[]` at the read boundary. `created_at` is the raw
+ * SQLite `datetime('now')` string (UTC, `YYYY-MM-DD HH:MM:SS`).
+ *
+ * Per-user isolation is structural — each user's container has its own SQLite
+ * file — so there is deliberately no `user_id` field here.
+ */
+export type TrajectoryRow = {
+  id: number;
+  session_id: string;
+  title: string | null;
+  tools: string[];
+  files: string[];
+  scripts: string[];
+  created_at: string;
+};
+
+// ---------------------------
 //----------------- PROJECT PERSISTENCE TYPES ------------
 /**
  * Canonical project row shape returned by the projects repository.

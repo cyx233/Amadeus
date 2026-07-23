@@ -1,6 +1,11 @@
 # Amadeus
 
-Browser-based coding-agent platform (Claude Code, Codex, Cursor, OpenCode) with long-lived Docker sessions and self-recovery.
+Self-hosted, multi-user web platform for coding agents — Claude Code, Codex,
+Cursor, and OpenCode behind one login.
+
+Each user gets an isolated Docker container with an editor, an integrated
+terminal, git, and TaskMaster-driven task management. Sessions reconnect and
+resume across browser refreshes, agent crashes, and container restarts.
 
 ## Quick Start
 
@@ -9,8 +14,9 @@ login the nginx gateway routes each user to their own isolated container.
 
 ```bash
 cp .env.example .env
-# Set JWT_SECRET (openssl rand -hex 32) and ONE of:
-#   ANTHROPIC_API_KEY, CLAUDE_CODE_OAUTH_TOKEN, or AWS creds
+# Set JWT_SECRET and AMADEUS_ADMIN_TOKEN (each: openssl rand -hex 32).
+# LLM credentials are NOT set here — each user signs in to a provider from the
+# in-app settings after first launch (see below).
 
 # 1. Start the gateway + auth entrypoint
 docker compose up -d
@@ -42,35 +48,39 @@ it can point at any backend (e.g. DeepSeek) you configure.
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Browser (localhost:8888)                        │
-│  ┌──────────┐ ┌──────────┐ ┌────────────────┐  │
-│  │ Chat/WS  │ │File Tree │ │ CodeMirror     │  │
-│  └────┬─────┘ └────┬─────┘ └───────┬────────┘  │
-└───────┼─────────────┼───────────────┼───────────┘
-        │WebSocket    │REST           │REST
-┌───────▼─────────────▼───────────────▼───────────┐
-│  amadeus-<user> container                        │
-│  ┌────────────────────────────────────────────┐  │
-│  │ server (Express + WS)                       │  │
-│  │  chat.send → DB session.provider →          │  │
-│  │  spawnFns[provider] dispatch:               │  │
-│  │    claude   → claude-sdk.js                  │  │
-│  │    codex    → openai-codex.js                │  │
-│  │    cursor   → cursor-cli.js                  │  │
-│  │    opencode → opencode-cli.js                │  │
-│  │  (each provider also implements IProvider:   │  │
-│  │   auth/models/mcp/skills/sessions/sync)      │  │
-│  ├────────────────────────────────────────────┤  │
-│  │ watchdog.js (stall detection + abort)      │  │
-│  ├────────────────────────────────────────────┤  │
-│  │ /home/agent volume (per-user, isolated)     │  │
-│  │  ├─ .amadeus/   auth.db, assets, todo, ...   │  │
-│  │  │              (API keys hashed, tokens enc)│  │
-│  │  └─ .claude/ .codex/ .local/share/opencode/  │  │
-│  │                 (LLM creds, CLI-owned)        │  │
-│  └────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│ Browser (localhost:8888)                                 │
+│                                                          │
+│ Sidebar            │  Editor (CodeMirror) │ Chat / WS    │
+│  projects/sessions │ ─────────────────────┴──────────    │
+│  file tree         │  Terminal · Tasks (bottom panel)    │
+│  git panel         │                                     │
+│                    split panes, all resizable            │
+└──────────────────────────────────────────────────────────┘
+                   │
+  REST + WebSocket · /ws (chat) · /shell (terminal)
+                   ▼
+┌──────────────────────────────────────────────────────────┐
+│ amadeus-<user> container                                 │
+│                                                          │
+│ server (Express + WS)                                    │
+│   chat.send → DB session.provider →                      │
+│   spawnFns[provider] dispatch:                           │
+│     claude → claude-sdk.js   codex → openai-codex.js     │
+│     cursor → cursor-cli.js   opencode → opencode-cli.js  │
+│   (each also implements IProvider:                       │
+│    auth/models/mcp/skills/sessions/sync)                 │
+├──────────────────────────────────────────────────────────┤
+│ chat-run-registry                                        │
+│   seq-numbered event buffer + chat.subscribe replay      │
+│   → reconnect / resume                                   │
+├──────────────────────────────────────────────────────────┤
+│ /home/agent volume (per-user, isolated)                  │
+│   .amadeus/   auth.db, assets, todo …                    │
+│               (API keys hashed, tokens encrypted)        │
+│   .claude/ .codex/ .local/share/opencode/                │
+│               (LLM creds, CLI-owned)                     │
+└──────────────────────────────────────────────────────────┘
 ```
 
 **Provider adapters** — chat/session logic is provider-agnostic. Each provider
@@ -113,17 +123,31 @@ volumes) is a host-level concern and left to the operator.
 | Feature | How |
 |---------|-----|
 | Multiple agents | Claude Code, Codex, Cursor, OpenCode behind one `IProvider` adapter contract; chat dispatches by DB session provider |
-| Long-lived agent | Docker container with `restart: unless-stopped`, sessions persisted on volume |
-| Session recovery | SDK `resume` by session ID; watchdog aborts stalled sessions; frontend reconnects via writer-swap |
+| Multi-user | One login URL; nginx routes each user to their own isolated `amadeus-<user>` container (own volume, `restart: unless-stopped`, CPU/RAM caps) |
+| Session reconnect/resume | `chat-run-registry` buffers seq-numbered events; `chat.subscribe` replays what a reconnecting client missed — survives refreshes, crashes, and restarts |
 | File + code editing | File tree + content search (ripgrep) + CodeMirror editor, real-time sync with agent workspace |
-| Task management | TaskMaster as an MCP server any agent can drive |
+| Image attachments | Paste or drag images into the chat composer; uploaded and sent to the agent |
+| Integrated terminal | Full pty shell in the bottom panel over a `/shell` WebSocket, scoped to the project |
+| Git | Status/diff, stage, commit (with AI-generated messages), branch, fetch/pull/push from a sidebar panel |
+| Task management | TaskMaster as an MCP server any agent can drive, with a built-in PRD editor and task board |
+| Skills & MCP | Discover provider-native skills; read/write per-provider MCP server config from the UI |
+| Command palette | `⌘K` / `Ctrl-K` fuzzy launcher for actions, files, and sessions |
+| Voice | Optional push-to-talk STT + TTS proxied to any OpenAI-compatible audio backend |
+| Notifications | Web Push on run finish/failure, so you can leave a long run and get pinged |
+| Browser automation | Optional `browser-use` MCP sessions the agent can drive |
+| Mobile / PWA | Installable (`display: standalone`) with a responsive mobile layout |
 
 ## Session Recovery Flow
 
-1. **Browser disconnect** → WebSocket reconnects, `reconnectSessionWriter()` swaps the writer; session continues uninterrupted.
-2. **Agent process crash** → SDK iterator throws; the server can re-`query({ resume: sessionId })` from the same JSONL.
-3. **Container restart** → Docker restarts it; the per-user `/home/agent` volume preserves all session state; user clicks "resume" in the UI.
-4. **Hung session** → watchdog detects no messages for 5 min, aborts the session, frontend offers resume.
+A live run is tracked in the in-memory `chat-run-registry`: every outbound event
+gets a monotonically increasing `seq` and is buffered. On (re)connect a client
+sends `chat.subscribe` with its `lastSeq`, and the server re-attaches the stream
+and replays exactly the events it missed — so recovery is provider-independent.
+
+1. **Browser disconnect / refresh** → the new socket re-subscribes; the still-running stream re-attaches and buffered events replay from `lastSeq`.
+2. **Agent process crash** → the runtime throws; the run is closed with a terminal event, and the session can be re-run with `resume` from the provider's own transcript.
+3. **Container restart** → Docker restarts it; the per-user `/home/agent` volume preserves all session state; the user resumes from history in the UI.
+4. **Buffer overflow / long absence** → if a client's `lastSeq` predates the buffer (bounded per run), it falls back to an authoritative REST history refresh.
 
 ## Development
 
@@ -140,6 +164,16 @@ cd app && npm run server:dev
 See `.env.example`. Key knobs:
 
 - `JWT_SECRET` — signs login cookies and derives the credential-encryption key (required)
-- `WATCHDOG_STALL_MS` — how long before a silent session is considered stalled (default: 5 min)
+- `AMADEUS_ADMIN_TOKEN` — authorizes account creation via `scripts/user.sh` (required for multi-user)
 - `AMADEUS_DATA_DIR` — backend data dir (auth.db, assets, todo, …); defaults to `~/.amadeus`
 - `WORKSPACES_ROOT` — where per-user project workspaces live (default: `~/workspace`)
+- `CONTEXT_WINDOW` / `VITE_CONTEXT_WINDOW` — max tokens per session for the context meter (default: 160000)
+- `AMADEUS_SHELL_CMD` — command the integrated terminal launches (default: `exec bash`; dev can point it at the host)
+- `VOICE_API_BASE_URL` / `VOICE_API_KEY` / `VOICE_STT_MODEL` / `VOICE_TTS_MODEL` / `VOICE_TTS_VOICE` — optional voice backend defaults (also settable per-user in-app)
+- `CLOUDCLI_BROWSER_USE_*` — optional browser-automation limits (API URL, max sessions per owner, session TTL)
+
+## Roadmap
+
+- **Working memory** — a per-session `trajectory` table (tools, files, and
+  commands touched each turn) is scaffolded; wiring it into a cross-session
+  memory the agent can recall is in progress.
