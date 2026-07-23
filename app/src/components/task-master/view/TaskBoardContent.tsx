@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '../../../lib/utils';
-import type { TaskBoardView, TaskKanbanColumn, TaskMasterTask, TaskSelection } from '../types';
+import type { TaskBoardView, TaskId, TaskKanbanColumn, TaskMasterTask, TaskSelection } from '../types';
 
 import TaskCard from './TaskCard';
 
@@ -13,18 +14,26 @@ type TaskBoardContentProps = {
   filteredTasks: TaskMasterTask[];
   showParentTasks: boolean;
   onTaskClick: (task: TaskSelection) => void;
+  onTaskStatusChange?: ((taskId: TaskId, status: string, sourceTag?: string) => void) | null;
 };
 
 function KanbanColumns({
   columns,
   showParentTasks,
   onTaskClick,
+  onTaskStatusChange,
 }: {
   columns: TaskKanbanColumn[];
   showParentTasks: boolean;
   onTaskClick: (task: TaskSelection) => void;
+  onTaskStatusChange?: ((taskId: TaskId, status: string, sourceTag?: string) => void) | null;
 }) {
   const { t } = useTranslation('tasks');
+  // Native HTML5 drag-and-drop (no dep): track the dragged card + hovered column
+  // so we can highlight the drop target and only fire on a real status change.
+  const [dragged, setDragged] = useState<TaskMasterTask | null>(null);
+  const [dragOverStatus, setDragOverStatus] = useState<string | null>(null);
+  const dndEnabled = Boolean(onTaskStatusChange);
 
   return (
     <div
@@ -39,7 +48,33 @@ function KanbanColumns({
       )}
     >
       {columns.map((column) => (
-        <div key={column.id} className={cn('rounded-xl border shadow-sm transition-shadow hover:shadow-md', column.color)}>
+        <div
+          key={column.id}
+          className={cn(
+            'rounded-xl border shadow-sm transition-shadow hover:shadow-md',
+            column.color,
+            dndEnabled && dragOverStatus === column.status && dragged?.status !== column.status
+              && 'ring-2 ring-primary ring-offset-1',
+          )}
+          onDragOver={dndEnabled ? (event) => {
+            if (!dragged) return;
+            event.preventDefault(); // allow drop
+            if (dragOverStatus !== column.status) setDragOverStatus(column.status);
+          } : undefined}
+          onDragLeave={dndEnabled ? (event) => {
+            // Only clear when leaving the column, not when moving between its cards.
+            if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragOverStatus(null);
+          } : undefined}
+          onDrop={dndEnabled ? (event) => {
+            event.preventDefault();
+            const task = dragged;
+            setDragOverStatus(null);
+            setDragged(null);
+            if (task && task.status !== column.status) {
+              onTaskStatusChange?.(task.id, column.status, task.sourceTag);
+            }
+          } : undefined}
+        >
           <div className={cn('px-4 py-3 rounded-t-xl border-b', column.headerColor)}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">{column.title}</h3>
@@ -68,13 +103,23 @@ function KanbanColumns({
               </div>
             ) : (
               column.tasks.map((task) => (
-                <TaskCard
+                <div
                   key={`${task.sourceTag ?? ''}-${task.id}`}
-                  task={task}
-                  onClick={() => onTaskClick(task)}
-                  showParent={showParentTasks}
-                  className="w-full shadow-sm hover:shadow-md"
-                />
+                  draggable={dndEnabled}
+                  onDragStart={dndEnabled ? (event) => {
+                    setDragged(task);
+                    event.dataTransfer.effectAllowed = 'move';
+                  } : undefined}
+                  onDragEnd={dndEnabled ? () => { setDragged(null); setDragOverStatus(null); } : undefined}
+                  className={cn(dndEnabled && 'cursor-grab active:cursor-grabbing', dragged === task && 'opacity-50')}
+                >
+                  <TaskCard
+                    task={task}
+                    onClick={() => onTaskClick(task)}
+                    showParent={showParentTasks}
+                    className="w-full shadow-sm hover:shadow-md"
+                  />
+                </div>
               ))
             )}
           </div>
@@ -91,6 +136,7 @@ export default function TaskBoardContent({
   filteredTasks,
   showParentTasks,
   onTaskClick,
+  onTaskStatusChange,
 }: TaskBoardContentProps) {
   const { t } = useTranslation('tasks');
 
@@ -107,7 +153,14 @@ export default function TaskBoardContent({
   }
 
   if (viewMode === 'kanban') {
-    return <KanbanColumns columns={kanbanColumns} showParentTasks={showParentTasks} onTaskClick={onTaskClick} />;
+    return (
+      <KanbanColumns
+        columns={kanbanColumns}
+        showParentTasks={showParentTasks}
+        onTaskClick={onTaskClick}
+        onTaskStatusChange={onTaskStatusChange}
+      />
+    );
   }
 
   return (
