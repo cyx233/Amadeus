@@ -245,11 +245,13 @@ router.get('/effective-model', authenticateToken, async (req, res) => {
     const resolved = await resolveModel(req.user.id, feature, { provider: providerPin });
 
     // A concrete session overrides the preference default with its own model.
+    // Single source of truth for that (change-override → transcript) is
+    // resolveSessionModel — no hand-rolled ordering here.
     if (sessionId) {
       try {
-        const active = await providerModelsService.getCurrentActiveModel(resolved.provider, sessionId);
-        if (active?.model) {
-          return res.json({ provider: resolved.provider, model: active.model });
+        const sessionModel = await providerModelsService.resolveSessionModel(resolved.provider, sessionId);
+        if (sessionModel) {
+          return res.json({ provider: resolved.provider, model: sessionModel });
         }
       } catch {
         // Session lookup is best-effort; fall through to the preference model.
