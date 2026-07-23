@@ -41,7 +41,7 @@ ensure_secret AMADEUS_ADMIN_TOKEN
 [ -f .env ] && set -a && . ./.env && set +a
 
 MULTI_FILE="docker-compose.multi.yml"
-AUTH_URL="${AMADEUS_AUTH_URL:-http://localhost:3001}"
+AUTH_URL="${AMADEUS_AUTH_URL:-http://localhost:8888}"
 COMPOSE=(docker compose -f docker-compose.yml -f "$MULTI_FILE")
 # Matches DATABASE_PATH set for auth-gateway in docker-compose.yml.
 AUTH_DB="/home/agent/.amadeus/auth.db"
@@ -168,7 +168,7 @@ EOF
     "${COMPOSE[@]}" up -d --build "amadeus-${USERNAME}"
   fi
   echo ""
-  echo "Access: http://localhost:3001  (log in as ${USERNAME})"
+  echo "Access: ${AUTH_URL}  (log in as ${USERNAME})"
 }
 
 cmd_remove() {
