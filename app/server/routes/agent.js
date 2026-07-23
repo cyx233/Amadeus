@@ -6,13 +6,10 @@ import os from 'os';
 import { promises as fs } from 'fs';
 import crypto from 'crypto';
 import { userDb, apiKeysDb, githubTokensDb, projectsDb } from '../modules/database/index.js';
-import { queryClaudeSDK } from '../claude-sdk.js';
-import { spawnCursor } from '../cursor-cli.js';
-import { queryCodex } from '../openai-codex.js';
-import { spawnOpenCode } from '../opencode-cli.js';
 import { Octokit } from '@octokit/rest';
 import { providerModelsService } from '../modules/providers/services/provider-models.service.js';
 import { resolveModel, CHAT_PROVIDERS } from '../modules/providers/services/model-preference.service.js';
+import { getProviderRunner } from '../modules/providers/services/provider-runtime.service.js';
 import { IS_PLATFORM } from '../constants/config.js';
 import { normalizeProjectPath } from '../shared/utils.js';
 
@@ -959,52 +956,29 @@ router.post('/', validateExternalApiKey, async (req, res) => {
       resolvedModel = (await resolveModel(req.user.id, 'chat', { provider })).model || undefined;
     }
 
-    // Start the appropriate session
-    if (provider === 'claude') {
-      console.log('🤖 Starting Claude SDK session');
-
-      await queryClaudeSDK(message.trim(), {
-        projectPath: finalProjectPath,
-        cwd: finalProjectPath,
-        sessionId: sessionId || null,
-        model: resolvedModel,
-        effort,
-        permissionMode: 'bypassPermissions' // Bypass all permissions for API calls
-      }, writer);
-
-    } else if (provider === 'cursor') {
-      console.log('🖱️ Starting Cursor CLI session');
-
-      await spawnCursor(message.trim(), {
-        projectPath: finalProjectPath,
-        cwd: finalProjectPath,
-        sessionId: sessionId || null,
-        model: resolvedModel,
-        skipPermissions: true // Bypass permissions for Cursor
-      }, writer);
-    } else if (provider === 'codex') {
-      console.log('🤖 Starting Codex SDK session');
-
-      await queryCodex(message.trim(), {
-        projectPath: finalProjectPath,
-        cwd: finalProjectPath,
-        sessionId: sessionId || null,
-        model: resolvedModel || codexModels.DEFAULT,
-        effort,
-        permissionMode: 'bypassPermissions'
-      }, writer);
-    } else if (provider === 'opencode') {
-      console.log('Starting OpenCode CLI session');
-
-      await spawnOpenCode(message.trim(), {
-        projectPath: finalProjectPath,
-        cwd: finalProjectPath,
-        sessionId: sessionId || null,
-        model: resolvedModel || opencodeModels.DEFAULT,
-        effort,
-        permissionMode: 'bypassPermissions' // Agent runs are non-interactive, like the other providers above
-      }, writer);
+    // Start the session via the shared provider-runner registry (no per-provider
+    // branching here). codex/opencode want a concrete model, so fall back to
+    // their catalog default when the preference didn't yield one.
+    const runner = getProviderRunner(provider);
+    if (!runner) {
+      throw new Error(`Unsupported provider: ${provider}`);
     }
+    const runnerModel = resolvedModel
+      ?? (provider === 'codex' ? codexModels.DEFAULT
+        : provider === 'opencode' ? opencodeModels.DEFAULT
+        : undefined);
+    console.log(`🤖 Starting ${provider} session`);
+    await runner(message.trim(), {
+      projectPath: finalProjectPath,
+      cwd: finalProjectPath,
+      sessionId: sessionId || null,
+      model: runnerModel,
+      effort,
+      // Agent runs are non-interactive; both flags mean "don't prompt" and each
+      // runtime reads the one it understands.
+      permissionMode: 'bypassPermissions',
+      skipPermissions: true,
+    }, writer);
 
     // Handle GitHub branch and PR creation after successful agent completion
     let branchInfo = null;
