@@ -38,6 +38,8 @@ export interface ChatMessage {
   type: string;
   content?: string;
   displayText?: string;
+  /** Model id that produced this assistant message (shown next to its timestamp). */
+  model?: string;
   timestamp: string | number | Date;
   images?: ChatImage[];
   reasoning?: string;

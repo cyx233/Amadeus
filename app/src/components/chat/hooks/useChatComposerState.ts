@@ -321,6 +321,16 @@ export function useChatComposerState({
     setCommandModalPayload(null);
   }, []);
 
+  // Open the same model picker that `/model` shows, without running the command.
+  // The modal derives its options/selection from the live provider catalog; we
+  // only seed `current` so it targets the right provider + shows today's model.
+  const openModelPicker = useCallback((provider: LLMProvider, model?: string | null) => {
+    setCommandModalPayload({
+      kind: 'models',
+      data: { current: { provider, model: model || undefined } },
+    });
+  }, []);
+
   const handleCustomCommand = useCallback(async (result: CommandExecutionResult) => {
     const { content, hasBashCommands } = result;
 
@@ -1217,6 +1227,7 @@ export function useChatComposerState({
     isInputFocused,
     commandModalPayload,
     closeCommandModal,
+    openModelPicker,
     showCostModal,
   };
 }

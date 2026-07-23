@@ -522,6 +522,11 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     if (raw.message?.role === 'assistant' && raw.message?.content) {
+      // '<synthetic>' is a placeholder Claude stamps on SDK-generated turns
+      // (e.g. error/limit notices), not a real model — don't surface it.
+      const assistantModel = typeof raw.message.model === 'string' && raw.message.model !== '<synthetic>'
+        ? raw.message.model
+        : undefined;
       if (Array.isArray(raw.message.content)) {
         let partIndex = 0;
         for (const part of raw.message.content) {
@@ -534,6 +539,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
               kind: 'text',
               role: 'assistant',
               content: part.text,
+              model: assistantModel,
             }));
           } else if (part.type === 'tool_use') {
             messages.push(createNormalizedMessage({
@@ -567,6 +573,7 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           kind: 'text',
           role: 'assistant',
           content: raw.message.content,
+          model: assistantModel,
         }));
       }
       return messages;

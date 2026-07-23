@@ -65,6 +65,8 @@ interface ChatComposerProps {
   onAbortSession: () => void;
   permissionMode: PermissionMode | string;
   onModeSwitch: () => void;
+  currentModel?: string;
+  onOpenModelPicker: () => void;
   effort: string;
   availableEffortOptions: NonNullable<ProviderModelOption['effort']>['values'];
   onSelectEffort: (effort: string) => void;
@@ -123,6 +125,8 @@ export default function ChatComposer({
   onAbortSession,
   permissionMode,
   onModeSwitch,
+  currentModel,
+  onOpenModelPicker,
   effort,
   availableEffortOptions,
   onSelectEffort,
@@ -437,6 +441,17 @@ export default function ChatComposer({
             {onVoiceTranscript && voiceAvailable && (
               <VoiceInputButton state={voiceState} onToggle={voiceToggle} errorMsg={voiceError} />
             )}
+
+            <button
+              type="button"
+              onClick={onOpenModelPicker}
+              className="inline-flex h-8 max-w-36 items-center rounded-lg border border-border/60 bg-muted/40 px-2 text-xs font-medium text-foreground transition-all duration-200 hover:bg-muted sm:px-2.5"
+              title={currentModel || t('input.selectModel', { defaultValue: 'Select model' })}
+            >
+              <span className="truncate">
+                {currentModel || t('input.selectModel', { defaultValue: 'Select model' })}
+              </span>
+            </button>
 
             <button
               type="button"
