@@ -11,6 +11,7 @@ import {
   Edit,
   Pause,
   Save,
+  Trash2,
   X,
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
@@ -28,6 +29,7 @@ type TaskDetailModalProps = {
   onEdit?: ((task: TaskMasterTask) => void) | null;
   onStatusChange?: ((taskId: TaskId, status: string) => void) | null;
   onTaskClick?: ((task: TaskReference) => void) | null;
+  onDeleted?: ((taskId: TaskId) => void) | null;
 };
 
 const STATUS_OPTIONS = [
@@ -63,11 +65,13 @@ export default function TaskDetailModal({
   onEdit = null,
   onStatusChange = null,
   onTaskClick = null,
+  onDeleted = null,
 }: TaskDetailModalProps) {
   const { currentProject, refreshTasks } = useTaskMaster();
 
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showTestStrategy, setShowTestStrategy] = useState(false);
   const [editableTask, setEditableTask] = useState<TaskMasterTask | null>(task);
@@ -166,6 +170,27 @@ export default function TaskDetailModal({
     }
   };
 
+  const handleDelete = async () => {
+    if (!currentProject?.projectId) return;
+    if (!window.confirm(`Delete task ${task.id} "${task.title}"? This cannot be undone.`)) return;
+    setIsDeleting(true);
+    try {
+      const response = await api.taskmaster.removeTask(currentProject.projectId, task.id, task.sourceTag);
+      if (!response.ok) {
+        const errorPayload = (await response.json()) as { message?: string };
+        throw new Error(errorPayload.message ?? 'Failed to delete task');
+      }
+      await refreshTasks();
+      onDeleted?.(task.id);
+      onClose();
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+      alert(error instanceof Error ? error.message : 'Failed to delete task');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
@@ -226,13 +251,23 @@ export default function TaskDetailModal({
                 </button>
               </>
             ) : (
-              <button
-                onClick={() => setIsEditMode(true)}
-                className="rounded-md p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
-                title="Edit task"
-              >
-                <Edit className="h-5 w-5" />
-              </button>
+              <>
+                <button
+                  onClick={() => setIsEditMode(true)}
+                  className="rounded-md p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                  title="Edit task"
+                >
+                  <Edit className="h-5 w-5" />
+                </button>
+                <button
+                  onClick={() => { void handleDelete(); }}
+                  disabled={isDeleting}
+                  className="rounded-md p-2 text-gray-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 dark:hover:bg-red-950 dark:hover:text-red-400"
+                  title="Delete task"
+                >
+                  <Trash2 className={cn('w-5 h-5', isDeleting && 'animate-pulse')} />
+                </button>
+              </>
             )}
             <button onClick={onClose} className="rounded-md p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" title="Close">
               <X className="h-5 w-5" />

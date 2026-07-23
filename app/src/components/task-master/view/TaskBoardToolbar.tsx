@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Check,
   ChevronDown,
   Columns,
   FileText,
@@ -87,7 +86,7 @@ export default function TaskBoardToolbar({
   onOpenCreateTask,
 }: TaskBoardToolbarProps) {
   const { t } = useTranslation('tasks');
-  const { availableTags, selectedTags, selectTag, selectTags, toggleTag, currentProject, refreshTasks } = useTaskMaster();
+  const { availableTags, selectedTag, selectTag, currentProject, refreshTasks } = useTaskMaster();
   const [isPrdDropdownOpen, setIsPrdDropdownOpen] = useState(false);
   const [deletingPrd, setDeletingPrd] = useState<string | null>(null);
   const { progress: generateProgress, isRunning: isGenerating, start: startGenerate, stop: stopGenerate, dismiss: dismissGenerate } = useGenerateTasks();
@@ -126,25 +125,15 @@ export default function TaskBoardToolbar({
     try {
       setDeletingPrd(prd.name);
       await api.taskmaster.deletePRD(currentProject.projectId, prd.name, slug);
-      // If the deleted set was selected, drop it from the selection.
-      if (selectedTags.includes(slug)) {
-        selectTags(selectedTags.filter((tagName) => tagName !== slug));
+      // If the deleted set was selected, let the server pick a default on refresh.
+      if (selectedTag === slug) {
+        selectTag('master');
       }
       await refreshTasks();
       onPrdDeleted?.();
     } finally {
       setDeletingPrd(null);
     }
-  };
-
-  // "Select all" toggles every available tag into the merged view. Deselecting
-  // clears the selection and lets the server pick a sensible non-empty default
-  // (same path as initial load) — never falls back to an empty master, which
-  // would blank the board into the "Getting Started" state.
-  const allSelectableTags = availableTags;
-  const allSelected = allSelectableTags.length > 0 && allSelectableTags.every((tagName) => selectedTags.includes(tagName));
-  const toggleSelectAll = () => {
-    selectTags(allSelected ? [] : allSelectableTags);
   };
 
   useEffect(() => {
@@ -270,153 +259,94 @@ export default function TaskBoardToolbar({
 
                           <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
 
-                          {/* Each row: a checkbox (add/remove from the merged view)
-                              and a label (click = view just that set). Selection is
-                              explicit — any set, including Default, can be unchecked. */}
-                          {(() => {
-                            const isChecked = (tag: string) => selectedTags.includes(tag);
-                            const Checkbox = ({ tag, disabled = false }: { tag: string; disabled?: boolean }) => (
-                              <button
-                                type="button"
-                                disabled={disabled}
-                                onClick={(e) => { e.stopPropagation(); if (!disabled) toggleTag(tag); }}
-                                title={disabled
-                                  ? t('tags.noTasksYet', 'Generate tasks first')
-                                  : t('tags.toggle', 'Show alongside others')}
+                          {/* Single-select: one PRD's task set at a time. Clicking a
+                              row selects it (radio semantics) and closes the menu. The
+                              selected row is highlighted; the ✨/📄/🗑 actions stay. */}
+                          {existingPrds.map((prd) => {
+                            const slug = prdNameToTag(prd.name);
+                            const isGenerating = generatingTag === slug;
+                            const isDeleting = deletingPrd === prd.name;
+                            const hasTasks = tagsWithTasks.has(slug);
+                            const isSelected = selectedTag === slug;
+                            return (
+                              <div
+                                key={prd.name}
                                 className={cn(
-                                  'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
-                                  disabled && 'cursor-not-allowed opacity-40',
-                                  isChecked(tag)
-                                    ? 'border-purple-600 bg-purple-600 text-white'
-                                    : 'border-gray-300 dark:border-gray-500'
+                                  'group flex items-center gap-2 rounded px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700',
+                                  isSelected && 'bg-purple-50 dark:bg-purple-900/20'
                                 )}
                               >
-                                {isChecked(tag) && <Check className="h-3 w-3" />}
-                              </button>
+                                <button
+                                  onClick={() => { if (hasTasks) { selectTag(slug); setIsPrdDropdownOpen(false); } }}
+                                  disabled={!hasTasks}
+                                  title={!hasTasks ? t('tags.noTasksYet', 'Generate tasks first') : undefined}
+                                  className={cn(
+                                    'min-w-0 flex-1 truncate text-left text-sm text-gray-700 dark:text-gray-300',
+                                    !hasTasks && 'cursor-default text-gray-400 dark:text-gray-500'
+                                  )}
+                                >
+                                  {prd.name}
+                                </button>
+                                <button
+                                  onClick={() => { void handleGenerateTasks(prd); }}
+                                  disabled={isGenerating || isDeleting}
+                                  title={t('tags.generateTasks', 'Generate tasks from this PRD')}
+                                  className={cn(
+                                    'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded disabled:opacity-50',
+                                    // Highlight when this PRD has no task set yet — that's the next action.
+                                    hasTasks
+                                      ? 'text-gray-500 hover:bg-purple-100 hover:text-purple-700 dark:hover:bg-purple-900/40'
+                                      : 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/40 dark:text-purple-300'
+                                  )}
+                                >
+                                  {isGenerating
+                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    : <Sparkles className="h-3.5 w-3.5" />}
+                                </button>
+                                <button
+                                  onClick={() => { onOpenPrd(prd); setIsPrdDropdownOpen(false); }}
+                                  title={t('tags.openEditor', 'Open PRD')}
+                                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"
+                                >
+                                  <FileText className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => { void handleDeletePrd(prd); }}
+                                  disabled={isDeleting || isGenerating}
+                                  title={t('tags.delete', 'Delete PRD and its tasks')}
+                                  className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:bg-red-100 hover:text-red-700 disabled:opacity-50 dark:hover:bg-red-900/40"
+                                >
+                                  {isDeleting
+                                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    : <Trash2 className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
                             );
+                          })}
 
-                            return (
-                              <>
-                                {/* Select all — bulk toggle every task set into the merged view. */}
-                                <div className="group flex items-center gap-2 rounded px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
+                          {/* Orphan task sets whose PRD file is gone (incl. a non-empty
+                              master). Still selectable so their tasks stay reachable. */}
+                          {orphanTags.length > 0 && (
+                            <>
+                              <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
+                              {orphanTags.map((tagName) => (
+                                <div
+                                  key={tagName}
+                                  className={cn(
+                                    'group flex items-center gap-2 rounded px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700',
+                                    selectedTag === tagName && 'bg-purple-50 dark:bg-purple-900/20'
+                                  )}
+                                >
                                   <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); toggleSelectAll(); }}
-                                    title={t('tags.selectAll', 'Select all')}
-                                    className={cn(
-                                      'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
-                                      allSelected
-                                        ? 'border-purple-600 bg-purple-600 text-white'
-                                        : 'border-gray-300 dark:border-gray-500'
-                                    )}
+                                    onClick={() => { selectTag(tagName); setIsPrdDropdownOpen(false); }}
+                                    className="min-w-0 flex-1 truncate text-left text-sm italic text-gray-500"
                                   >
-                                    {allSelected && <Check className="h-3 w-3" />}
-                                  </button>
-                                  <span className="min-w-0 flex-1 truncate text-left text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    {t('tags.selectAll', 'Select all')}
-                                  </span>
-                                </div>
-
-                                <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
-
-                                {/* Default (master) — manual/unassigned tasks. */}
-                                <div className="group flex items-center gap-2 rounded px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700">
-                                  <Checkbox tag="master" />
-                                  <button
-                                    onClick={() => { selectTag('master'); setIsPrdDropdownOpen(false); }}
-                                    className="min-w-0 flex-1 truncate text-left text-sm text-gray-700 dark:text-gray-300"
-                                  >
-                                    {t('tags.default', 'Default')}
+                                    {tagName === 'master' ? t('tags.default', 'Default') : tagName}
                                   </button>
                                 </div>
-
-                                {/* One row per PRD: checkbox = add to merged view;
-                                    label = view just this; ✨ = generate; 📄 = edit; 🗑 = delete. */}
-                                {existingPrds.map((prd) => {
-                                  const slug = prdNameToTag(prd.name);
-                                  const isGenerating = generatingTag === slug;
-                                  const isDeleting = deletingPrd === prd.name;
-                                  const hasTasks = tagsWithTasks.has(slug);
-                                  return (
-                                    <div
-                                      key={prd.name}
-                                      className={cn(
-                                        'group flex items-center gap-2 rounded px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700',
-                                        isChecked(slug) && 'bg-purple-50 dark:bg-purple-900/20'
-                                      )}
-                                    >
-                                      {/* No task set yet → checkbox disabled (nothing to merge). */}
-                                      <Checkbox tag={slug} disabled={!hasTasks} />
-                                      <button
-                                        onClick={() => { if (hasTasks) { selectTag(slug); setIsPrdDropdownOpen(false); } }}
-                                        disabled={!hasTasks}
-                                        className={cn(
-                                          'min-w-0 flex-1 truncate text-left text-sm text-gray-700 dark:text-gray-300',
-                                          !hasTasks && 'cursor-default text-gray-400 dark:text-gray-500'
-                                        )}
-                                      >
-                                        {prd.name}
-                                      </button>
-                                      <button
-                                        onClick={() => { void handleGenerateTasks(prd); }}
-                                        disabled={isGenerating || isDeleting}
-                                        title={t('tags.generateTasks', 'Generate tasks from this PRD')}
-                                        className={cn(
-                                          'flex h-6 w-6 flex-shrink-0 items-center justify-center rounded disabled:opacity-50',
-                                          // Highlight when this PRD has no task set yet — that's the next action.
-                                          hasTasks
-                                            ? 'text-gray-500 hover:bg-purple-100 hover:text-purple-700 dark:hover:bg-purple-900/40'
-                                            : 'bg-purple-100 text-purple-700 hover:bg-purple-200 dark:bg-purple-900/40 dark:text-purple-300'
-                                        )}
-                                      >
-                                        {isGenerating
-                                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                          : <Sparkles className="h-3.5 w-3.5" />}
-                                      </button>
-                                      <button
-                                        onClick={() => { onOpenPrd(prd); setIsPrdDropdownOpen(false); }}
-                                        title={t('tags.openEditor', 'Open PRD')}
-                                        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-700"
-                                      >
-                                        <FileText className="h-3.5 w-3.5" />
-                                      </button>
-                                      <button
-                                        onClick={() => { void handleDeletePrd(prd); }}
-                                        disabled={isDeleting || isGenerating}
-                                        title={t('tags.delete', 'Delete PRD and its tasks')}
-                                        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded text-gray-500 hover:bg-red-100 hover:text-red-700 disabled:opacity-50 dark:hover:bg-red-900/40"
-                                      >
-                                        {isDeleting
-                                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                          : <Trash2 className="h-3.5 w-3.5" />}
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-
-                                {/* Orphan tags: task sets whose PRD file is gone. */}
-                                {orphanTags.length > 0 && (
-                                  <>
-                                    <div className="my-1 border-t border-gray-200 dark:border-gray-700" />
-                                    {orphanTags.filter((tagName) => tagName !== 'master').map((tagName) => (
-                                      <div
-                                        key={tagName}
-                                        className="group flex items-center gap-2 rounded px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                      >
-                                        <Checkbox tag={tagName} />
-                                        <button
-                                          onClick={() => { selectTag(tagName); setIsPrdDropdownOpen(false); }}
-                                          className="min-w-0 flex-1 truncate text-left text-sm italic text-gray-500"
-                                        >
-                                          {tagName}
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </>
-                                )}
-                              </>
-                            );
-                          })()}
+                              ))}
+                            </>
+                          )}
                         </div>
                       </div>
                     )}

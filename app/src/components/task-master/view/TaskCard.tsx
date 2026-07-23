@@ -13,7 +13,6 @@ import {
 
 import { cn } from '../../../lib/utils';
 import { Tooltip } from '../../../shared/view/ui';
-import { useTaskMaster } from '../context/TaskMasterContext';
 import type { TaskMasterTask } from '../types';
 
 type TaskCardProps = {
@@ -136,10 +135,6 @@ function getSubtaskProgress(task: TaskMasterTask): { completed: number; total: n
 function TaskCard({ task, onClick = null, showParent = false, className = '' }: TaskCardProps) {
   const statusStyle = getStatusStyle(task.status);
   const progress = getSubtaskProgress(task);
-  // In a merged multi-PRD view, task ids collide across sets, so show which PRD
-  // (tag) each task came from. Redundant in single-select, so only when >1 set.
-  const { selectedTags } = useTaskMaster();
-  const showSourceChip = selectedTags.length > 1 && Boolean(task.sourceTag);
 
   return (
     <div
@@ -159,13 +154,6 @@ function TaskCard({ task, onClick = null, showParent = false, className = '' }: 
                 {task.id}
               </span>
             </Tooltip>
-            {showSourceChip && (
-              <Tooltip content={`From PRD: ${task.sourceTag}`}>
-                <span className="max-w-32 truncate rounded bg-purple-100 px-2 py-0.5 text-xs text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-                  {task.sourceTag}
-                </span>
-              </Tooltip>
-            )}
           </div>
 
           <h3 className="break-words text-sm font-medium leading-tight text-gray-900 dark:text-white">

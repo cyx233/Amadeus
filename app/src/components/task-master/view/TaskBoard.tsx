@@ -106,7 +106,10 @@ export default function TaskBoard({
     onRefreshPRDs?.(false);
   };
 
-  if (tasks.length === 0) {
+  // "Getting Started" is for projects with no work yet. Once any PRD exists the
+  // user is past onboarding, so show the board (toolbar + possibly-empty kanban)
+  // even if the selected set has no tasks — they can generate/switch from there.
+  if (tasks.length === 0 && existingPRDs.length === 0) {
     return (
       <>
         <TaskEmptyState

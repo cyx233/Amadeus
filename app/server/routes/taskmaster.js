@@ -823,14 +823,15 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
         }
 
         // Tasks live inside a tag (per-PRD set), so tag-aware sub-commands must
-        // target the same tag or they'd touch the wrong set. All commands routed
-        // through run() below (add/remove-dependency, update-task) accept --tag.
+        // target the same tag or they'd touch the wrong set. add/remove-dependency
+        // and update-task accept --tag; set-status and `tags use` do NOT, so pass
+        // tagged=false for those (see the status branch).
         const tagArgs = tag && tag !== 'master' ? ['--tag', String(tag)] : [];
 
-        // Promisified spawn so we can run several structured sub-commands (deps,
-        // prompt) in sequence and fail fast on the first error.
-        const run = (args) => new Promise((resolve, reject) => {
-            const cmdArgs = [...args, ...tagArgs];
+        // Promisified spawn so we can run several structured sub-commands (status,
+        // deps, prompt) in sequence and fail fast on the first error.
+        const run = (args, tagged = true) => new Promise((resolve, reject) => {
+            const cmdArgs = tagged ? [...args, ...tagArgs] : args;
             const child = spawn('npx', ['task-master', ...cmdArgs], {
                 cwd: projectPath,
                 stdio: ['ignore', 'pipe', 'pipe'],
@@ -846,40 +847,16 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
             });
         });
 
-        // Status → write tasks.json directly. TaskMaster's CLI `set-status` (v0.43.1,
-        // apps/cli/src/commands/set-status.command.ts) has NO --tag option — it calls
-        // tmCore.tasks.updateStatus(id, status) against whatever tag state.json marks
-        // active, so it can't target a tag without a global `tags use` side effect.
-        // The tag-aware core isn't importable (published as minified, hashed chunks
-        // with no `exports`). A status change is a single-field write, so we do it in
-        // place under the correct tag, replicating updateStatus's two guards: valid
-        // status, and no done→pending. Supports "5" (task) and "5.2" (subtask) ids.
+        // Status → `set-status`. The CLI's set-status (v0.43.1) has no --tag flag:
+        // it acts on the tag marked active in state.json. The UI is single-select
+        // (one PRD = one active tag at a time), so we make the active tag match the
+        // task's tag via `tags use` before setting status — the board is already
+        // showing exactly this tag, so this aligns the active tag with the view
+        // rather than causing a hidden side effect. Neither command accepts --tag,
+        // hence tagged=false.
         if (typeof status === 'string' && status) {
-            // Mirror tm-core Task.isValidStatus (config-manager). Trust boundary: status
-            // comes from the request body.
-            const VALID_STATUSES = ['pending', 'in-progress', 'done', 'deferred', 'cancelled', 'blocked', 'review'];
-            if (!VALID_STATUSES.includes(status)) {
-                return res.status(400).json({ error: 'Invalid status', message: `Status must be one of: ${VALID_STATUSES.join(', ')}` });
-            }
-            const tasksFilePath = path.join(projectPath, '.taskmaster', 'tasks', 'tasks.json');
-            const data = JSON.parse(await fsPromises.readFile(tasksFilePath, 'utf8'));
-            const tagKey = tag || 'master';
-            const list = data[tagKey]?.tasks ?? data.tasks;
-            if (!Array.isArray(list)) {
-                return res.status(404).json({ error: 'Tag not found', message: `Tag "${tagKey}" has no tasks` });
-            }
-            const [parentId, subId] = String(taskId).split('.');
-            const task = list.find((tk) => String(tk.id) === parentId);
-            const target = subId != null ? task?.subtasks?.find((st) => String(st.id) === subId) : task;
-            if (!target) {
-                return res.status(404).json({ error: 'Task not found', message: `Task "${taskId}" not found in tag "${tagKey}"` });
-            }
-            if (target.status === 'done' && status === 'pending') {
-                return res.status(400).json({ error: 'Invalid transition', message: 'Cannot move a completed task back to pending' });
-            }
-            target.status = status;
-            target.updatedAt = new Date().toISOString();
-            await fsPromises.writeFile(tasksFilePath, JSON.stringify(data, null, 2) + '\n');
+            if (tag) await run(['tags', 'use', String(tag)], false);
+            await run(['set-status', `--id=${taskId}`, `--status=${status}`], false);
         }
 
         // Dependencies → diff the requested list against the current one and add/
@@ -936,6 +913,48 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
             error: 'Failed to update task',
             message: error.message
         });
+    }
+});
+
+/**
+ * DELETE /api/taskmaster/task/:projectId/:taskId
+ * Remove a task (or subtask, id like "5.2") from a tag via `remove-task`.
+ */
+router.delete('/task/:projectId/:taskId', async (req, res) => {
+    try {
+        const { projectId, taskId } = req.params;
+        const tag = typeof req.query.tag === 'string' ? req.query.tag.trim() : '';
+
+        const projectPath = await resolveProjectPathFromId(projectId);
+        if (!projectPath) {
+            return res.status(404).json({ error: 'Project not found', message: `Project "${projectId}" does not exist` });
+        }
+
+        // remove-task accepts --tag; -y skips the confirmation prompt (otherwise it
+        // blocks on stdin, which we've closed).
+        const args = ['task-master', 'remove-task', `--id=${taskId}`, '-y'];
+        if (tag && tag !== 'master') args.push('--tag', tag);
+
+        const child = spawn('npx', args, { cwd: projectPath, stdio: ['ignore', 'pipe', 'pipe'] });
+        let stdout = '';
+        let stderr = '';
+        child.stdout.on('data', (d) => { stdout += d.toString(); });
+        child.stderr.on('data', (d) => { stderr += d.toString(); });
+        child.on('close', (code) => {
+            if (code !== 0) {
+                return res.status(500).json({ error: 'Failed to remove task', message: stderr || stdout || `remove-task exited with code ${code}` });
+            }
+            if (req.app.locals.wss) {
+                broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
+            }
+            res.json({ projectId, taskId, message: 'Task removed successfully', timestamp: new Date().toISOString() });
+        });
+        child.on('error', (err) => {
+            res.status(500).json({ error: 'Failed to remove task', message: err.message });
+        });
+    } catch (error) {
+        console.error('Remove task error:', error);
+        res.status(500).json({ error: 'Failed to remove task', message: error.message });
     }
 });
 

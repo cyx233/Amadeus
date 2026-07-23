@@ -69,13 +69,14 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
 
   const [tasks, setTasks] = useState<TaskMasterTask[]>([]);
   const [nextTask, setNextTask] = useState<TaskMasterTask | null>(null);
-  // Per-PRD task sets: each PRD parses into its own TaskMaster tag. currentTag
-  // is the first selected set; availableTags is the full list. selectedTags is
-  // the set being viewed — usually one (single-select), but the checkbox UI can
-  // pick several for a merged cross-PRD view.
+  // Per-PRD task sets: each PRD parses into its own TaskMaster tag. Single-select
+  // — the board shows exactly one set at a time (selectedTag). This mirrors
+  // TaskMaster's own model (one active tag), which lets set-status target the
+  // right tag without any cross-tag juggling. null = let the server pick a
+  // sensible default (first non-empty set). availableTags is the full list.
   const [currentTag, setCurrentTag] = useState<string>('master');
   const [availableTags, setAvailableTags] = useState<string[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
@@ -288,8 +289,8 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setIsLoadingTasks(true);
       clearError();
 
-      const tagQuery = selectedTags.length
-        ? `?tags=${encodeURIComponent(selectedTags.join(','))}`
+      const tagQuery = selectedTag
+        ? `?tag=${encodeURIComponent(selectedTag)}`
         : '';
       const response = await api.get(`/taskmaster/tasks/${encodeURIComponent(projectId)}${tagQuery}`);
       if (!response.ok) {
@@ -309,15 +310,12 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setNextTask(getNextTask(loadedTasks));
       if (data.currentTag) setCurrentTag(data.currentTag);
       setAvailableTags(Array.isArray(data.availableTags) ? data.availableTags : []);
-      // Adopt the server-resolved selection. The server is authoritative: it drops
-      // invalid tags and, for an empty request, picks a sensible non-empty default
-      // (avoids landing on an empty master and blanking the board). This covers
-      // both the initial empty request and later refinements.
-      if (Array.isArray(data.selectedTags) && data.selectedTags.length) {
-        const resolved = data.selectedTags;
-        if (resolved.join(',') !== selectedTags.join(',')) {
-          setSelectedTags(resolved);
-        }
+      // Adopt the server-resolved selection. The server is authoritative: for an
+      // empty request it picks a sensible non-empty default (avoids landing on an
+      // empty master and blanking the board), so sync selectedTag to what it chose.
+      const resolved = data.selectedTags?.[0] ?? data.currentTag;
+      if (resolved && resolved !== selectedTag) {
+        setSelectedTag(resolved);
       }
     } catch (caughtError) {
       handleError('load tasks', caughtError);
@@ -326,25 +324,11 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
     } finally {
       setIsLoadingTasks(false);
     }
-  }, [clearError, currentProject?.projectId, handleError, token, user, selectedTags]);
+  }, [clearError, currentProject?.projectId, handleError, token, user, selectedTag]);
 
-  // Single-select: view exactly one task set (PRD). Common case.
+  // View exactly one task set (PRD). The board is single-select.
   const selectTag = useCallback((tag: string) => {
-    setSelectedTags([tag]);
-  }, []);
-
-  // Bulk setter for the "Select all" control.
-  const selectTags = useCallback((tags: string[]) => {
-    setSelectedTags(tags);
-  }, []);
-
-  // Multi-select: add/remove a task set from the merged view (checkbox). The
-  // selection is explicit (no "empty means master" special case), so any set —
-  // including the default/master — can be unchecked while others stay checked.
-  const toggleTag = useCallback((tag: string) => {
-    setSelectedTags((current) => (
-      current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag]
-    ));
+    setSelectedTag(tag);
   }, []);
 
   const refreshMCPStatus = useCallback(async () => {
@@ -420,10 +404,8 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       nextTask,
       currentTag,
       availableTags,
-      selectedTags,
+      selectedTag,
       selectTag,
-      selectTags,
-      toggleTag,
       isLoading,
       isLoadingTasks,
       isLoadingMCP,
@@ -439,8 +421,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       clearError,
       currentProject,
       currentTag,
-      selectedTags,
-      toggleTag,
+      selectedTag,
       error,
       isLoading,
       isLoadingMCP,
@@ -453,7 +434,6 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       refreshProjects,
       refreshTasks,
       selectTag,
-      selectTags,
       setCurrentProject,
       tasks,
     ],

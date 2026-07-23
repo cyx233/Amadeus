@@ -106,10 +106,8 @@ export type TaskMasterContextValue = {
   nextTask: TaskMasterTask | null;
   currentTag: string;
   availableTags: string[];
-  selectedTags: string[];
+  selectedTag: string | null;
   selectTag: (tag: string) => void;
-  selectTags: (tags: string[]) => void;
-  toggleTag: (tag: string) => void;
   isLoading: boolean;
   isLoadingTasks: boolean;
   isLoadingMCP: boolean;

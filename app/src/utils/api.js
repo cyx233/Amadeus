@@ -271,6 +271,15 @@ export const api = {
         method: 'PUT',
         body: JSON.stringify(updates),
       }),
+
+    // Remove a task (or subtask). tag targets the task's own PRD set.
+    removeTask: (projectId, taskId, tag) => {
+      const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
+      return authenticatedFetch(
+        `/api/taskmaster/task/${encodeURIComponent(projectId)}/${encodeURIComponent(taskId)}${qs}`,
+        { method: 'DELETE' },
+      );
+    },
   },
 
 

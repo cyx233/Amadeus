@@ -13,7 +13,7 @@ type CreateTaskModalProps = {
 
 export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProps) {
   const { t } = useTranslation('tasks');
-  const { currentProject, availableTags, selectedTags, selectTag, refreshTasks } = useTaskMaster();
+  const { currentProject, availableTags, selectedTag, selectTag, refreshTasks } = useTaskMaster();
 
   const [prompt, setPrompt] = useState('');
   const [priority, setPriority] = useState('medium');
@@ -26,12 +26,12 @@ export default function CreateTaskModal({ isOpen, onClose }: CreateTaskModalProp
   // where the user is looking. Reset the form each time the dialog opens.
   useEffect(() => {
     if (isOpen) {
-      setTag(selectedTags[0] ?? 'master');
+      setTag(selectedTag ?? 'master');
       setPrompt('');
       setPriority('medium');
       setError(null);
     }
-  }, [isOpen, selectedTags]);
+  }, [isOpen, selectedTag]);
 
   // master always available as "Default"; merge in any real tags.
   const tagOptions = Array.from(new Set(['master', ...availableTags]));
