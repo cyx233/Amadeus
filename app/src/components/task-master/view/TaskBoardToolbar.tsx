@@ -137,11 +137,14 @@ export default function TaskBoardToolbar({
     }
   };
 
-  // "Select all" reflects/【toggles】every selectable tag (master + all with tasks).
+  // "Select all" toggles every available tag into the merged view. Deselecting
+  // clears the selection and lets the server pick a sensible non-empty default
+  // (same path as initial load) — never falls back to an empty master, which
+  // would blank the board into the "Getting Started" state.
   const allSelectableTags = availableTags;
   const allSelected = allSelectableTags.length > 0 && allSelectableTags.every((tagName) => selectedTags.includes(tagName));
   const toggleSelectAll = () => {
-    selectTags(allSelected ? (availableTags.includes('master') ? ['master'] : availableTags.slice(0, 1)) : allSelectableTags);
+    selectTags(allSelected ? [] : allSelectableTags);
   };
 
   useEffect(() => {
