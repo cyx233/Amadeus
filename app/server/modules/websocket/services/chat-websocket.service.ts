@@ -423,8 +423,15 @@ export function handleChatConnection(
     }
   });
 
-  ws.on('close', () => {
-    console.log('[INFO] Chat client disconnected');
+  ws.on('close', (code, reason) => {
+    // Log close code/reason to diagnose tool-time disconnects: 1006 = abnormal
+    // (proxy/network cut), 1009 = message too big, 1001 = going away.
+    const reasonText = reason?.toString?.() || '';
+    console.log(`[INFO] Chat client disconnected (code=${code}${reasonText ? ` reason="${reasonText}"` : ''})`);
     connectedClients.delete(ws);
+  });
+
+  ws.on('error', (error) => {
+    console.error('[ERROR] Chat WebSocket socket error:', error?.message || error);
   });
 }
