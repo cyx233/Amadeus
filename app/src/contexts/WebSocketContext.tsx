@@ -72,7 +72,15 @@ const useWebSocketProviderState = (): WebSocketContextType => {
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  // Always-current token for (re)connects. The connect effect is keyed on the
+  // auth identity (not the token string), so a token refresh doesn't rebuild the
+  // socket — but if the socket later drops and reconnects, it must use the LATEST
+  // token, not the one captured when the effect last ran. Reading from a ref
+  // avoids a stale/expired token on the reconnect handshake (OSS mode, where the
+  // token is in the URL; harmless in platform mode, which ignores it).
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
 
   const dispatch = useCallback((event: ServerEvent) => {
     for (const listener of listenersRef.current) {
@@ -85,10 +93,18 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     setLatestMessage(event);
   }, []);
 
+  // Reconnect only when the authenticated *identity* changes (login / logout /
+  // switch user) — never on a token-string refresh. A refreshed JWT doesn't
+  // invalidate an already-open socket (the token is only checked at connect
+  // time), and in platform mode the URL has no token at all. Keying the connect
+  // effect on identity, not the token string, stops the constant 1001
+  // close→reconnect cycles that were dropping mid-tool-call streams.
+  const authIdentity = user?.id ?? user?.username ?? null;
+
   useEffect(() => {
     // The cleanup below sets unmountedRef = true. Without this reset, every
-    // re-run of the effect (e.g. on token refresh) would short-circuit connect()
-    // at its unmounted guard and leave the socket permanently disconnected.
+    // re-run of the effect would short-circuit connect() at its unmounted guard
+    // and leave the socket permanently disconnected.
     unmountedRef.current = false;
     connect();
 
@@ -105,13 +121,15 @@ const useWebSocketProviderState = (): WebSocketContextType => {
         wsRef.current.close();
       }
     };
-  }, [token]); // everytime token changes, we reconnect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authIdentity]); // reconnect only when the authenticated identity changes
 
   const connect = useCallback(() => {
     if (unmountedRef.current) return; // Prevent connection if unmounted
     try {
-      // Construct WebSocket URL
-      const wsUrl = buildWebSocketUrl(token);
+      // Read the token from the ref so reconnects (onclose → connect) always use
+      // the current token, not one captured in a stale closure.
+      const wsUrl = buildWebSocketUrl(tokenRef.current);
 
       if (!wsUrl) return console.warn('No authentication token found for WebSocket connection');
 
@@ -170,7 +188,7 @@ const useWebSocketProviderState = (): WebSocketContextType => {
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
     }
-  }, [token, dispatch]); // everytime token changes, we reconnect
+  }, [dispatch]); // token is read from tokenRef; stable identity keys the effect
 
   const sendMessage = useCallback((message: unknown) => {
     const socket = wsRef.current;
