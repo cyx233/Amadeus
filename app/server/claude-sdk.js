@@ -677,10 +677,18 @@ async function queryClaudeSDK(command, options = {}, ws) {
         ws.send(msg);
       }
 
-      // Extract and send token budget updates from assistant/result usage payloads
-      const tokenBudgetData = extractTokenBudget(message);
-      if (tokenBudgetData) {
-        ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+      // Token budget: only from terminal `result` and settled `assistant`
+      // messages — NOT partial `stream_event`s. With includePartialMessages on,
+      // the SDK now emits an `assistant` snapshot mid-stream (partial
+      // output_tokens) followed by a `message_delta` with the final count, so
+      // reading every event made the usage bar jump to a premature (too small)
+      // value. `result` carries the authoritative cumulative usage; a non-partial
+      // `assistant` carries its completed turn's usage.
+      if (message.type === 'result' || message.type === 'assistant') {
+        const tokenBudgetData = extractTokenBudget(message);
+        if (tokenBudgetData) {
+          ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
+        }
       }
     }
 
