@@ -227,6 +227,8 @@ export type NormalizedMessage = {
   seq?: number;
   role?: 'user' | 'assistant';
   content?: string;
+  /** Model id that produced this assistant message (shown next to its timestamp). */
+  model?: string;
   /**
    * Optional display-oriented metadata used by providers that need to expose
    * richer transcript artifacts without introducing a brand-new message kind.

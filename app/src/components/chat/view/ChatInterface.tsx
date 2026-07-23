@@ -189,6 +189,7 @@ function ChatInterface({
     isInputFocused,
     commandModalPayload,
     closeCommandModal,
+    openModelPicker,
     showCostModal,
   } = useChatComposerState({
     selectedProject,
@@ -394,6 +395,19 @@ function ChatInterface({
           onAbortSession={handleAbortSession}
           permissionMode={permissionMode}
           onModeSwitch={cyclePermissionMode}
+          currentModel={
+            provider === 'cursor' ? cursorModel
+              : provider === 'codex' ? codexModel
+                : provider === 'opencode' ? opencodeModel
+                  : claudeModel
+          }
+          onOpenModelPicker={() => openModelPicker(
+            provider,
+            provider === 'cursor' ? cursorModel
+              : provider === 'codex' ? codexModel
+                : provider === 'opencode' ? opencodeModel
+                  : claudeModel,
+          )}
           effort={currentProviderEffort}
           availableEffortOptions={currentProviderEffortOptions}
           onSelectEffort={(nextEffort) => setStoredProviderEffort(provider, nextEffort)}

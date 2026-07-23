@@ -52,6 +52,10 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
       (prevMessage.type === 'user') ||
       (prevMessage.type === 'tool') ||
       (prevMessage.type === 'error'));
+  // Show the model label whenever it changes, even inside a group — the point of
+  // the label is to flag which model produced each turn, so a mid-group switch
+  // (e.g. /model between replies) must stay visible.
+  const modelChanged = Boolean(message.model) && message.model !== prevMessage?.model;
   const messageRef = useRef<HTMLDivElement | null>(null);
   const userCopyContent = String(message.content || '');
   const formattedMessageContent = useMemo(
@@ -382,7 +386,7 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
               </div>
             )}
 
-            {(shouldShowAssistantCopyControl || !isGrouped) && (
+            {(shouldShowAssistantCopyControl || !isGrouped || modelChanged) && (
               <div className="mt-1 flex w-full items-center gap-2 text-[11px] text-gray-400 dark:text-gray-500">
                 {shouldShowAssistantCopyControl && (
                   <MessageCopyControl content={assistantCopyContent} messageType="assistant" />
@@ -391,6 +395,9 @@ const MessageComponent = memo(({ message, prevMessage, createDiff, onFileOpen, s
                   <MessageSpeakControl content={assistantCopyContent} />
                 )}
                 {!isGrouped && <span>{formattedTime}</span>}
+                {(!isGrouped || modelChanged) && message.model && (
+                  <span className="opacity-70" title={message.model}>{message.model}</span>
+                )}
               </div>
             )}
           </div>

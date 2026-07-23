@@ -135,6 +135,7 @@ export function normalizedToChatMessages(messages: NormalizedMessage[]): ChatMes
             type: 'assistant',
             content: text,
             timestamp: msg.timestamp,
+            model: typeof msg.model === 'string' ? msg.model : undefined,
             ...sharedMetadata,
           });
         }

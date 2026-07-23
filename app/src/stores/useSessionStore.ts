@@ -46,6 +46,8 @@ export interface NormalizedMessage {
   // kind-specific fields (flat for simplicity)
   role?: 'user' | 'assistant';
   content?: string;
+  /** Model id that produced this assistant message (shown next to its timestamp). */
+  model?: string;
   /**
    * Mirrors optional transcript metadata from the server.
    *
