@@ -11,12 +11,11 @@ dist-server/
 .mcp.json
 CLAUDE.md
 build.log
-scripts/refresh-creds.sh
-scripts/entrypoint-local.sh
+# Dev-only local scripts (referenced by the gitignored dev Dockerfile/compose).
+.local/
 gateway/htpasswd
 gateway/user-routes.conf
 docker-compose.dev.yml
 docker-compose.multi.yml
 Dockerfile.dev
-scripts/host-shims/
 workspace/
