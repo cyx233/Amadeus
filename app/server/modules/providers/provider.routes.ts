@@ -408,6 +408,19 @@ router.post(
   }),
 );
 
+// Read a session's current model (per-session, from its transcript / stored
+// override). Lets the frontend show the model a session was actually using when
+// you switch to it, instead of the global default.
+router.get(
+  '/:provider/sessions/:sessionId/active-model',
+  asyncHandler(async (req: Request, res: Response) => {
+    const provider = parseProvider(req.params.provider);
+    const sessionId = parseSessionId(req.params.sessionId);
+    const active = await providerModelsService.getCurrentActiveModel(provider, sessionId);
+    res.json(createApiSuccessResponse({ provider, model: active?.model ?? null }));
+  }),
+);
+
 // ----------------- Skills routes -----------------
 router.get(
   '/:provider/skills',
