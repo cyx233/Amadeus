@@ -293,9 +293,19 @@ export class ClaudeSessionsProvider implements IProviderSessions {
    * message shape consumed by REST and WebSocket clients.
    */
   normalizeMessage(rawMessage: unknown, sessionId: string | null): NormalizedMessage[] {
-    const raw = readObjectRecord(rawMessage);
+    let raw = readObjectRecord(rawMessage);
     if (!raw) {
       return [];
+    }
+
+    // includePartialMessages wraps raw Anthropic stream events as
+    // { type: 'stream_event', event: { type: 'content_block_delta', ... } }.
+    // Unwrap so the delta/stop handling below sees the inner event.
+    if (raw.type === 'stream_event' && raw.event) {
+      const inner = readObjectRecord(raw.event);
+      if (inner) {
+        raw = inner;
+      }
     }
 
     if (raw.type === 'content_block_delta' && raw.delta?.text) {
