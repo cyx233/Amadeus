@@ -11,6 +11,7 @@ import GitSettingsTab from '../view/tabs/git-settings/GitSettingsTab';
 import NotificationsSettingsTab from '../view/tabs/NotificationsSettingsTab';
 import FeaturesSettingsTab from '../view/tabs/FeaturesSettingsTab';
 import AccountSettingsTab from '../view/tabs/AccountSettingsTab';
+import ModelsTab from '../view/tabs/ModelsTab';
 import AboutTab from '../view/tabs/AboutTab';
 import { useSettingsController } from '../hooks/useSettingsController';
 import { useWebPush } from '../../../hooks/useWebPush';
@@ -117,23 +118,9 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                 />
               )}
 
-              {activeTab === 'git' && <GitSettingsTab />}
-
-              {activeTab === 'agents' && (
-                <AgentsSettingsTab
-                  providerAuthStatus={providerAuthStatus}
-                  onProviderLogin={openLoginForProvider}
-                  claudePermissions={claudePermissions}
-                  onClaudePermissionsChange={setClaudePermissions}
-                  cursorPermissions={cursorPermissions}
-                  onCursorPermissionsChange={setCursorPermissions}
-                  codexPermissionMode={codexPermissionMode}
-                  onCodexPermissionModeChange={setCodexPermissionMode}
-                  projects={projects}
-                />
-              )}
-
               {activeTab === 'features' && <FeaturesSettingsTab />}
+
+              {activeTab === 'models' && <ModelsTab />}
 
               {activeTab === 'notifications' && (
                 <NotificationsSettingsTab
@@ -149,7 +136,26 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
 
               {activeTab === 'api' && <CredentialsSettingsTab />}
 
-              {activeTab === 'account' && <AccountSettingsTab />}
+              {activeTab === 'account' && (
+                <div className="space-y-8">
+                  {/* Account/password (platform-only), then Git identity, then the
+                      AI agents — all "who I am / what I use", merged from the
+                      former Git and Agents tabs. */}
+                  <AccountSettingsTab />
+                  <GitSettingsTab />
+                  <AgentsSettingsTab
+                    providerAuthStatus={providerAuthStatus}
+                    onProviderLogin={openLoginForProvider}
+                    claudePermissions={claudePermissions}
+                    onClaudePermissionsChange={setClaudePermissions}
+                    cursorPermissions={cursorPermissions}
+                    onCursorPermissionsChange={setCursorPermissions}
+                    codexPermissionMode={codexPermissionMode}
+                    onCodexPermissionModeChange={setCodexPermissionMode}
+                    projects={projects}
+                  />
+                </div>
+              )}
 
               {activeTab === 'about' && <AboutTab />}
             </div>

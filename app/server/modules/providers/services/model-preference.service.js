@@ -19,6 +19,14 @@ import { providerModelsService } from './provider-models.service.js';
 export const CHAT_PROVIDERS = ['claude', 'cursor', 'codex', 'opencode'];
 const FALLBACK_PROVIDER = 'claude';
 
+// Features that resolve a model independently and can be overridden per-feature.
+// (chat isn't here: it's provider-pinned by the agent the user picks, not a
+// fixed feature.) `id` is the key namespace; `label` is for the UI.
+export const MODEL_FEATURES = [
+  { id: 'commit-message', label: 'Commit message generation' },
+  { id: 'task-gen', label: 'Task generation (TaskMaster)' },
+];
+
 // Key builders — the single place that knows the KV layout.
 export const prefKeys = {
   globalProvider: () => 'global:provider',
@@ -27,12 +35,8 @@ export const prefKeys = {
   featureModel: (feature) => `feature:${feature}:model`,
 };
 
-// task-master self-calls its own AI SDK and only understands Bedrock/Anthropic
-// -style ids, so it borrows claude's catalog for its selectable models.
-const catalogProviderFor = (provider) => (provider === 'taskmaster' ? 'claude' : provider);
-
 async function catalogDefault(provider) {
-  const catalog = (await providerModelsService.getProviderModels(catalogProviderFor(provider))).models;
+  const catalog = (await providerModelsService.getProviderModels(provider)).models;
   return catalog.DEFAULT;
 }
 

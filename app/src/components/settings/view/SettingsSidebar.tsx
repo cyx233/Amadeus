@@ -1,8 +1,7 @@
-import { Bell, Bot, GitBranch, Info, Key, Palette, SlidersHorizontal, UserCog } from 'lucide-react';
+import { Bell, Bot, Cpu, Info, Key, Palette, SlidersHorizontal, UserCog } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '../../../lib/utils';
-import { IS_PLATFORM } from '../../../constants/config';
 import { PillBar, Pill } from '../../../shared/view/ui';
 import type { SettingsMainTab } from '../types/types';
 
@@ -18,15 +17,15 @@ type NavItem = {
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'agents', labelKey: 'mainTabs.agents', icon: Bot },
+  // Account holds account/password (platform), Git identity, and the AI agents
+  // (login/permissions/MCP) — merged from the former Git and Agents tabs.
+  { id: 'account', labelKey: 'mainTabs.account', icon: UserCog },
   { id: 'appearance', labelKey: 'mainTabs.appearance', icon: Palette },
-  { id: 'git', labelKey: 'mainTabs.git', icon: GitBranch },
   { id: 'api', labelKey: 'mainTabs.apiTokens', icon: Key },
   { id: 'features', labelKey: 'mainTabs.features', icon: SlidersHorizontal },
+  // Model defaults + per-feature overrides (two linked sections in one tab).
+  { id: 'models', labelKey: 'mainTabs.models', icon: Cpu },
   { id: 'notifications', labelKey: 'mainTabs.notifications', icon: Bell },
-  // Account/password only applies to the multi-user gateway deploy (platform
-  // mode); single-user has no login to change.
-  ...(IS_PLATFORM ? [{ id: 'account' as const, labelKey: 'mainTabs.account', icon: UserCog }] : []),
   { id: 'about', labelKey: 'mainTabs.about', icon: Info },
 ];
 

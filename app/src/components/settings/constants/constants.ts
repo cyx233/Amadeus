@@ -1,8 +1,7 @@
 import type { ComponentType } from 'react';
 import {
   Bell,
-  Bot,
-  GitBranch,
+  Cpu,
   Info,
   KeyRound,
   Palette,
@@ -27,14 +26,16 @@ export type SettingsMainTabMeta = {
 };
 
 export const SETTINGS_MAIN_TABS: SettingsMainTabMeta[] = [
-  { id: 'agents', label: 'Agents', keywords: 'agents subagents claude code', icon: Bot },
+  // Account holds account/password, Git identity, and the AI agents — merged
+  // from the former Git and Agents tabs.
+  { id: 'account', label: 'Account', keywords: 'account password security git github commits agents subagents claude cursor codex opencode login permissions mcp', icon: UserCog },
   { id: 'appearance', label: 'Appearance', keywords: 'appearance theme dark light language', icon: Palette },
-  { id: 'git', label: 'Git', keywords: 'git github commits', icon: GitBranch },
   { id: 'api', label: 'API Tokens', keywords: 'api tokens auth keys', icon: KeyRound },
   // Voice, Tasks/TaskMaster, and Browser automation merged into one Features tab.
   { id: 'features', label: 'Features', keywords: 'features voice tasks taskmaster browser playwright chromium automation', icon: SlidersHorizontal },
+  // Model defaults + per-feature overrides (two linked sections).
+  { id: 'models', label: 'Model Preference', keywords: 'model default provider override commit message task generation claude opus sonnet haiku bedrock', icon: Cpu },
   { id: 'notifications', label: 'Notifications', keywords: 'notifications alerts push', icon: Bell },
-  { id: 'account', label: 'Account', keywords: 'account password security', icon: UserCog },
   { id: 'about', label: 'About', keywords: 'about version info', icon: Info },
 ];
 

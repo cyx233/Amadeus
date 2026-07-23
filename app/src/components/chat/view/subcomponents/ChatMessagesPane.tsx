@@ -42,7 +42,6 @@ interface ChatMessagesPaneProps {
   setOpenCodeModel: (model: string) => void;
   providerModelCatalog: Partial<Record<LLMProvider, ProviderModelsDefinition>>;
   providerModelsLoading: boolean;
-  tasksEnabled: boolean;
   isTaskMasterInstalled: boolean | null;
   setInput: Dispatch<SetStateAction<string>>;
   isLoadingMoreMessages: boolean;
@@ -89,7 +88,6 @@ function ChatMessagesPane({
   setOpenCodeModel,
   providerModelCatalog,
   providerModelsLoading,
-  tasksEnabled,
   isTaskMasterInstalled,
   setInput,
   isLoadingMoreMessages,
@@ -187,7 +185,6 @@ function ChatMessagesPane({
           setOpenCodeModel={setOpenCodeModel}
           providerModelCatalog={providerModelCatalog}
           providerModelsLoading={providerModelsLoading}
-          tasksEnabled={tasksEnabled}
           isTaskMasterInstalled={isTaskMasterInstalled}
           setInput={setInput}
         />
