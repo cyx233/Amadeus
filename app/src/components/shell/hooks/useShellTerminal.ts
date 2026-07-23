@@ -211,30 +211,11 @@ export function useShellTerminal({
         return false;
       }
 
-      if (
-        event.type === 'keydown' &&
-        (event.ctrlKey || event.metaKey) &&
-        event.key?.toLowerCase() === 'v'
-      ) {
-        // Block native paste so data is only injected after clipboard-read resolves.
-        event.preventDefault();
-        event.stopPropagation();
-
-        if (typeof navigator !== 'undefined' && navigator.clipboard?.readText) {
-          navigator.clipboard
-            .readText()
-            .then((text) => {
-              sendSocketMessage(wsRef.current, {
-                type: 'input',
-                data: text,
-              });
-            })
-            .catch(() => {});
-        }
-
-        return false;
-      }
-
+      // Cmd/Ctrl-V: do NOT intercept. The old handler preventDefault()'d paste
+      // and called navigator.clipboard.readText() — but read is permission-gated
+      // (write isn't), so copy worked while paste silently failed. Letting the
+      // key through lets xterm's textarea receive the native paste and emit it
+      // via onData (already wired to the socket below), no read permission.
       return true;
     });
 
