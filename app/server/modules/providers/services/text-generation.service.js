@@ -11,8 +11,6 @@
  * Nothing above this leaks provider knowledge (no "if provider === 'claude'").
  */
 
-import { generateTextOnce } from '../../../claude-sdk.js';
-
 import { getProviderRunner } from './provider-runtime.service.js';
 import { resolveModel } from './model-preference.service.js';
 
@@ -57,22 +55,19 @@ export async function generateOnce({ userId, feature, prompt, cwd, provider: pro
   const timer = setTimeout(() => abort.abort(), timeoutMs);
 
   try {
+    // All providers run through the shared streaming runner — no per-provider
+    // special-casing. Each creates its own session (a short-lived "git message"
+    // session shows up like any other); we accept that for symmetry rather than
+    // maintaining a claude-only in-memory path plus per-CLI isolation.
+    const runner = getProviderRunner(provider);
+    if (!runner) throw new Error(`Unsupported provider for one-shot generation: ${provider}`);
     let text = '';
-    if (provider === 'claude') {
-      // claude uniquely has an SDK one-shot mode that leaves no session record;
-      // the external CLIs have no such mode, so they use the shared streaming
-      // runner and always create their own session (unavoidable for those tools).
-      text = await generateTextOnce(prompt, { cwd, model: modelArg, signal: abort.signal });
-    } else {
-      const runner = getProviderRunner(provider);
-      if (!runner) throw new Error(`Unsupported provider for one-shot generation: ${provider}`);
-      const writer = { send: (d) => collectText(d, (t) => { text += t; }), setSessionId: () => {} };
-      const opts = { cwd, model: modelArg, skipPermissions: true, permissionMode: 'bypassPermissions' };
-      const timeout = new Promise((_, reject) => {
-        abort.signal.addEventListener('abort', () => reject(new Error(`${feature} generation timed out`)));
-      });
-      await Promise.race([runner(prompt, opts, writer), timeout]);
-    }
+    const writer = { send: (d) => collectText(d, (t) => { text += t; }), setSessionId: () => {} };
+    const opts = { cwd, model: modelArg, skipPermissions: true, permissionMode: 'bypassPermissions' };
+    const timeout = new Promise((_, reject) => {
+      abort.signal.addEventListener('abort', () => reject(new Error(`${feature} generation timed out`)));
+    });
+    await Promise.race([runner(prompt, opts, writer), timeout]);
     return { text, provider, model };
   } finally {
     clearTimeout(timer);
