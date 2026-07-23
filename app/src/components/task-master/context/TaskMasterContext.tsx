@@ -309,12 +309,13 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       setNextTask(getNextTask(loadedTasks));
       if (data.currentTag) setCurrentTag(data.currentTag);
       setAvailableTags(Array.isArray(data.availableTags) ? data.availableTags : []);
-      // Sync back the server-resolved selection (drops invalid/nonexistent tags).
-      // Only when we asked for specific tags — an empty first request is seeded by
-      // the effect below once availableTags is known.
-      if (selectedTags.length && Array.isArray(data.selectedTags)) {
+      // Adopt the server-resolved selection. The server is authoritative: it drops
+      // invalid tags and, for an empty request, picks a sensible non-empty default
+      // (avoids landing on an empty master and blanking the board). This covers
+      // both the initial empty request and later refinements.
+      if (Array.isArray(data.selectedTags) && data.selectedTags.length) {
         const resolved = data.selectedTags;
-        if (resolved.length && resolved.join(',') !== selectedTags.join(',')) {
+        if (resolved.join(',') !== selectedTags.join(',')) {
           setSelectedTags(resolved);
         }
       }
@@ -345,14 +346,6 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag]
     ));
   }, []);
-
-  // Seed the selection once the tag list is known, and never leave it stranded
-  // empty (which would blank the board): fall back to master, else the first tag.
-  useEffect(() => {
-    if (selectedTags.length === 0 && availableTags.length > 0) {
-      setSelectedTags(availableTags.includes('master') ? ['master'] : [availableTags[0]]);
-    }
-  }, [availableTags, selectedTags.length]);
 
   const refreshMCPStatus = useCallback(async () => {
     if (!user || (!token && !IS_PLATFORM)) {

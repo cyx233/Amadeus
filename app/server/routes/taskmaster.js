@@ -221,12 +221,21 @@ router.get('/tasks/:projectId', async (req, res) => {
                 );
 
                 // Keep only requested tags that actually exist; if none valid,
-                // fall back to master (or the first available tag).
+                // pick a sensible default. Prefer a NON-EMPTY tag over master —
+                // once a project's work moves into per-PRD tags, master is often
+                // empty, and defaulting to it would blank the board ("Getting
+                // Started") even though tasks exist under another tag.
                 selectedTags = requestedTags.filter(tagName => availableTags.includes(tagName));
                 if (selectedTags.length === 0) {
-                    selectedTags = availableTags.includes('master')
-                        ? ['master']
-                        : availableTags.slice(0, 1);
+                    const hasTasks = (tagName) => (tasksData[tagName]?.tasks?.length ?? 0) > 0;
+                    if (availableTags.includes('master') && hasTasks('master')) {
+                        selectedTags = ['master'];
+                    } else {
+                        const firstNonEmpty = availableTags.find(hasTasks);
+                        selectedTags = firstNonEmpty
+                            ? [firstNonEmpty]
+                            : (availableTags.includes('master') ? ['master'] : availableTags.slice(0, 1));
+                    }
                 }
 
                 sourceTasks = selectedTags.flatMap(tagName =>
@@ -559,7 +568,9 @@ router.delete('/prd/:projectId/:fileName', async (req, res) => {
             }
         }
 
-        broadcastTaskMasterTasksUpdate(projectId);
+        if (req.app.locals.wss) {
+            broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
+        }
         res.json({
             projectId,
             fileName: safeName,
@@ -671,7 +682,7 @@ router.post('/init/:projectId', async (req, res) => {
 router.post('/add-task/:projectId', async (req, res) => {
     try {
         const { projectId } = req.params;
-        const { prompt, title, description, priority = 'medium', dependencies, research = false } = req.body;
+        const { prompt, title, description, priority = 'medium', dependencies, research = false, tag } = req.body;
 
         if (!prompt && (!title || !description)) {
             return res.status(400).json({
@@ -707,9 +718,15 @@ router.post('/add-task/:projectId', async (req, res) => {
         if (priority) {
             args.push('--priority', priority);
         }
-        
+
         if (dependencies) {
             args.push('--dependencies', dependencies);
+        }
+
+        // Target a specific task set (per-PRD tag). Omitting it writes to the
+        // default (master) tag, matching TaskMaster's own default.
+        if (tag) {
+            args.push('--tag', String(tag));
         }
 
         // Run task-master add-task command
@@ -779,7 +796,7 @@ router.post('/add-task/:projectId', async (req, res) => {
 router.put('/update-task/:projectId/:taskId', async (req, res) => {
     try {
         const { projectId, taskId } = req.params;
-        const { title, description, status, priority, details } = req.body;
+        const { title, description, status, priority, details, dependencies, tag } = req.body;
 
         const projectPath = await resolveProjectPathFromId(projectId);
         if (!projectPath) {
@@ -789,104 +806,82 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
             });
         }
 
-        // If only updating status, use set-status command
-        if (status && Object.keys(req.body).length === 1) {
-            const setStatusProcess = spawn('npx', ['task-master', 'set-status', `--id=${taskId}`, `--status=${status}`], {
-                cwd: projectPath,
-                stdio: ['pipe', 'pipe', 'pipe']
-            });
+        // Tasks live inside a tag (per-PRD set), so every sub-command must target
+        // the same tag or it would touch the wrong set. `tagArgs` is spread into
+        // each spawn (empty for master / when no tag is given).
+        const tagArgs = tag && tag !== 'master' ? ['--tag', String(tag)] : [];
 
+        // Promisified spawn so we can run several structured sub-commands (status,
+        // priority, deps, prompt) in sequence and fail fast on the first error.
+        const run = (args) => new Promise((resolve, reject) => {
+            const child = spawn('npx', ['task-master', ...args, ...tagArgs], {
+                cwd: projectPath,
+                stdio: ['ignore', 'pipe', 'pipe'],
+            });
             let stdout = '';
             let stderr = '';
-
-            setStatusProcess.stdout.on('data', (data) => {
-                stdout += data.toString();
+            child.stdout.on('data', (d) => { stdout += d.toString(); });
+            child.stderr.on('data', (d) => { stderr += d.toString(); });
+            child.on('error', reject);
+            child.on('close', (code) => {
+                if (code === 0) resolve(stdout);
+                else reject(new Error(stderr || stdout || `command failed: task-master ${args[0]}`));
             });
+        });
 
-            setStatusProcess.stderr.on('data', (data) => {
-                stderr += data.toString();
-            });
-
-            setStatusProcess.on('close', (code) => {
-                if (code === 0) {
-                    // Broadcast task update via WebSocket
-                    if (req.app.locals.wss) {
-                        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
-                    }
-
-                    res.json({
-                        projectId,
-                        projectPath,
-                        taskId,
-                        message: 'Task status updated successfully',
-                        output: stdout,
-                        timestamp: new Date().toISOString()
-                    });
-                } else {
-                    console.error('Set task status failed:', stderr);
-                    res.status(500).json({
-                        error: 'Failed to update task status',
-                        message: stderr || stdout,
-                        code
-                    });
-                }
-            });
-
-            setStatusProcess.stdin.end();
-        } else {
-            // For other updates, use update-task command with a prompt describing the changes
-            const updates = [];
-            if (title) updates.push(`title: "${title}"`);
-            if (description) updates.push(`description: "${description}"`);
-            if (priority) updates.push(`priority: "${priority}"`);
-            if (details) updates.push(`details: "${details}"`);
-            
-            const prompt = `Update task with the following changes: ${updates.join(', ')}`;
-
-            const updateProcess = spawn('npx', ['task-master', 'update-task', `--id=${taskId}`, `--prompt=${prompt}`], {
-                cwd: projectPath,
-                stdio: ['pipe', 'pipe', 'pipe']
-            });
-
-            let stdout = '';
-            let stderr = '';
-
-            updateProcess.stdout.on('data', (data) => {
-                stdout += data.toString();
-            });
-
-            updateProcess.stderr.on('data', (data) => {
-                stderr += data.toString();
-            });
-
-            updateProcess.on('close', (code) => {
-                if (code === 0) {
-                    // Broadcast task update via WebSocket
-                    if (req.app.locals.wss) {
-                        broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
-                    }
-
-                    res.json({
-                        projectId,
-                        projectPath,
-                        taskId,
-                        message: 'Task updated successfully',
-                        output: stdout,
-                        timestamp: new Date().toISOString()
-                    });
-                } else {
-                    console.error('Update task failed:', stderr);
-                    res.status(500).json({
-                        error: 'Failed to update task',
-                        message: stderr || stdout,
-                        code
-                    });
-                }
-            });
-
-            updateProcess.stdin.end();
+        // Status → dedicated set-status command.
+        if (typeof status === 'string' && status) {
+            await run(['set-status', `--id=${taskId}`, `--status=${status}`]);
         }
 
+        // Dependencies → diff the requested list against the current one and add/
+        // remove individually via TaskMaster's structured dependency commands.
+        if (Array.isArray(dependencies)) {
+            const tasksFilePath = path.join(projectPath, '.taskmaster', 'tasks', 'tasks.json');
+            let currentDeps = [];
+            try {
+                const data = JSON.parse(await fsPromises.readFile(tasksFilePath, 'utf8'));
+                const tagKey = tag || 'master';
+                const list = data[tagKey]?.tasks ?? data.tasks ?? [];
+                const found = list.find((tk) => String(tk.id) === String(taskId));
+                currentDeps = Array.isArray(found?.dependencies) ? found.dependencies.map(String) : [];
+            } catch (readError) {
+                console.error('Failed to read current dependencies:', readError);
+            }
+            const wanted = dependencies.map(String);
+            const toAdd = wanted.filter((d) => !currentDeps.includes(d));
+            const toRemove = currentDeps.filter((d) => !wanted.includes(d));
+            for (const dep of toAdd) {
+                await run(['add-dependency', `--id=${taskId}`, `--depends-on=${dep}`]);
+            }
+            for (const dep of toRemove) {
+                await run(['remove-dependency', `--id=${taskId}`, `--depends-on=${dep}`]);
+            }
+        }
+
+        // Title / description / details / priority are applied via one AI-prompt
+        // update-task — TaskMaster's update-task has no structured flags for these
+        // (only --prompt), so we describe the change and let it rewrite the task.
+        const textUpdates = [];
+        if (title) textUpdates.push(`title: "${title}"`);
+        if (description) textUpdates.push(`description: "${description}"`);
+        if (details) textUpdates.push(`details: "${details}"`);
+        if (priority) textUpdates.push(`priority: "${priority}"`);
+        if (textUpdates.length > 0) {
+            const prompt = `Update task with the following changes: ${textUpdates.join(', ')}`;
+            await run(['update-task', `--id=${taskId}`, `--prompt=${prompt}`]);
+        }
+
+        if (req.app.locals.wss) {
+            broadcastTaskMasterTasksUpdate(req.app.locals.wss, projectId);
+        }
+        res.json({
+            projectId,
+            projectPath,
+            taskId,
+            message: 'Task updated successfully',
+            timestamp: new Date().toISOString()
+        });
     } catch (error) {
         console.error('Update task error:', error);
         res.status(500).json({

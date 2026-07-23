@@ -149,5 +149,14 @@
   "noMatchingTasks": {
     "title": "No tasks match your filters",
     "description": "Try adjusting your search or filter criteria."
+  },
+  "createTask": {
+    "title": "Add Task",
+    "promptLabel": "Describe the task",
+    "promptPlaceholder": "e.g. Add profile image uploads with validation",
+    "tagLabel": "Task set",
+    "priorityLabel": "Priority",
+    "submit": "Generate task",
+    "tip": "Tip: for richer, context-aware tasks, ask the agent in chat — it can research and break work down with implementation detail."
   }
 }

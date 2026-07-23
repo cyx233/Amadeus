@@ -210,11 +210,11 @@ export const api = {
         method: 'POST',
       }),
 
-    // Add a new task
-    addTask: (projectId, { prompt, title, description, priority, dependencies }) =>
+    // Add a new task. `tag` targets a per-PRD task set; omit for the default set.
+    addTask: (projectId, { prompt, title, description, priority, dependencies, tag }) =>
       authenticatedFetch(`/api/taskmaster/add-task/${projectId}`, {
         method: 'POST',
-        body: JSON.stringify({ prompt, title, description, priority, dependencies }),
+        body: JSON.stringify({ prompt, title, description, priority, dependencies, tag }),
       }),
 
     // Parse PRD to generate tasks. `tag` scopes the generated tasks to a

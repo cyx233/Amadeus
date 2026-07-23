@@ -84,11 +84,12 @@ export default function TaskDetailModal({
   }
 
   const handleSaveChanges = async () => {
-    if (!currentProject?.name) {
+    // The API is keyed by the DB projectId, not the folder name.
+    if (!currentProject?.projectId) {
       return;
     }
 
-    const updates: Record<string, string> = {};
+    const updates: Record<string, unknown> = {};
 
     if (editableTask.title !== task.title) {
       updates.title = editableTask.title;
@@ -102,14 +103,31 @@ export default function TaskDetailModal({
       updates.details = editableTask.details ?? '';
     }
 
+    if (editableTask.priority !== task.priority) {
+      updates.priority = editableTask.priority ?? 'medium';
+    }
+
+    // Dependencies are structured; send the full desired list and let the server
+    // diff it against the current one (add/remove individually).
+    const currentDeps = (task.dependencies ?? []).map(String);
+    const editedDeps = (editableTask.dependencies ?? []).map(String);
+    if (currentDeps.join(',') !== editedDeps.join(',')) {
+      updates.dependencies = editedDeps;
+    }
+
     if (Object.keys(updates).length === 0) {
       setIsEditMode(false);
       return;
     }
 
+    // Every sub-command must target the task's own tag (per-PRD set).
+    if (task.sourceTag) {
+      updates.tag = task.sourceTag;
+    }
+
     setIsSaving(true);
     try {
-      const response = await api.taskmaster.updateTask(currentProject.name, task.id, updates);
+      const response = await api.taskmaster.updateTask(currentProject.projectId, task.id, updates);
       if (!response.ok) {
         const errorPayload = (await response.json()) as { message?: string };
         throw new Error(errorPayload.message ?? 'Failed to update task');
@@ -127,12 +145,14 @@ export default function TaskDetailModal({
   };
 
   const handleStatusSelect = async (nextStatus: string) => {
-    if (!currentProject?.name || nextStatus === task.status) {
+    if (!currentProject?.projectId || nextStatus === task.status) {
       return;
     }
 
     try {
-      const response = await api.taskmaster.updateTask(currentProject.name, task.id, { status: nextStatus });
+      const statusUpdate: Record<string, unknown> = { status: nextStatus };
+      if (task.sourceTag) statusUpdate.tag = task.sourceTag;
+      const response = await api.taskmaster.updateTask(currentProject.projectId, task.id, statusUpdate);
       if (!response.ok) {
         const errorPayload = (await response.json()) as { message?: string };
         throw new Error(errorPayload.message ?? 'Failed to update task status');
@@ -241,14 +261,45 @@ export default function TaskDetailModal({
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Priority</label>
-              <div className={cn('px-3 py-2 rounded-md text-sm font-medium capitalize', getPriorityBadgeClass(task.priority))}>
-                {task.priority ?? 'Not set'}
-              </div>
+              {isEditMode ? (
+                <select
+                  value={editableTask.priority ?? 'medium'}
+                  onChange={(event) => setEditableTask({ ...editableTask, priority: event.target.value })}
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                >
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              ) : (
+                <div className={cn('px-3 py-2 rounded-md text-sm font-medium capitalize', getPriorityBadgeClass(task.priority))}>
+                  {task.priority ?? 'Not set'}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Dependencies</label>
-              {Array.isArray(task.dependencies) && task.dependencies.length > 0 ? (
+              {isEditMode ? (
+                <>
+                  <input
+                    type="text"
+                    value={(editableTask.dependencies ?? []).join(', ')}
+                    onChange={(event) => {
+                      // Parse a comma/space-separated list of task ids; keep them as
+                      // strings so ids like "3" and subtask ids like "3.1" both work.
+                      const ids = event.target.value
+                        .split(/[\s,]+/)
+                        .map((value) => value.trim())
+                        .filter(Boolean);
+                      setEditableTask({ ...editableTask, dependencies: ids });
+                    }}
+                    placeholder="e.g. 3, 5, 12"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  />
+                  <span className="text-xs text-gray-400 dark:text-gray-500">Comma-separated task IDs</span>
+                </>
+              ) : Array.isArray(task.dependencies) && task.dependencies.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
                   {task.dependencies.map((dependency) => (
                     <button
