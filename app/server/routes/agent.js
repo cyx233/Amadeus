@@ -950,7 +950,7 @@ router.post('/', validateExternalApiKey, async (req, res) => {
     // When the request doesn't pin a model, use the user's Model Preference for
     // this provider (its default model → null). null means "let the provider use
     // its own default", so each branch keeps its existing fallback for that case.
-    // A resuming session's own model still wins downstream (resolveResumeModel).
+    // A resuming session's own model still wins downstream (resolveSessionModel).
     let resolvedModel = model || undefined;
     if (!resolvedModel && CHAT_PROVIDERS.includes(provider)) {
       resolvedModel = (await resolveModel(req.user.id, 'chat', { provider })).model || undefined;

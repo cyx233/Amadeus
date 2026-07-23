@@ -318,7 +318,7 @@ test('provider models service delegates active model change requests to the prov
   assert.equal(changedModel.model, 'opus');
 });
 
-test('resolveResumeModel prefers a stored changed model over the requested one', async () => {
+test('resolveSessionModel prefers a stored changed model over the requested one', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-change-'));
   const activeModelChangesPath = path.join(tempRoot, 'session-model-changes.json');
 
@@ -341,7 +341,7 @@ test('resolveResumeModel prefers a stored changed model over the requested one',
       filePath: activeModelChangesPath,
     });
 
-    const model = await service.resolveResumeModel('cursor', 'session-456', 'composer-2-fast');
+    const model = await service.resolveSessionModel('cursor', 'session-456', 'composer-2-fast');
     assert.equal(model, 'composer-2');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

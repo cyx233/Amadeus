@@ -234,7 +234,7 @@ export async function queryCodex(command, options = {}, ws) {
     permissionMode = 'default'
   } = options;
 
-  const resolvedModel = await providerModelsService.resolveResumeModel(
+  const resolvedModel = await providerModelsService.resolveSessionModel(
     'codex',
     sessionId,
     model,

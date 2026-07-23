@@ -315,25 +315,17 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     filePath: activeModelChangesPath,
   });
 
-  // The model a session is on, for DISPLAY: an explicit in-session switch (the
-  // change-override file) wins, then the model the transcript last actually ran.
-  // The UI resolver (/api/user/effective-model) uses this so the picker reflects
-  // reality. (resolveResumeModel below is the RUNTIME path: it stops at the
-  // override and lets the resuming CLI own its transcript, so it deliberately
-  // does NOT read the transcript here.)
+  // The single resolver for "which model is this session on" — used by both the
+  // UI picker (/api/user/effective-model) and the runtime (before spawning a
+  // resume). Order by intent, most explicit first:
+  //   1. change-override — the user's explicit in-session switch (written the
+  //      moment they pick, so it already captures their current choice)
+  //   2. requested — a model the caller explicitly passed THIS call (current
+  //      intent for flows that don't persist an override, e.g. no-UI callers)
+  //   3. transcript — what the session last actually ran (history fallback)
+  // requested beats transcript so an explicit choice is never overridden by past
+  // history; it sits below override because override IS the persisted choice.
   const resolveSessionModel = async (
-    provider: LLMProvider,
-    sessionId: string,
-  ): Promise<string | undefined> => {
-    const changedModel = await getChangedActiveModel(provider, sessionId);
-    if (changedModel.supported && changedModel.changed && changedModel.model?.trim()) {
-      return changedModel.model.trim();
-    }
-    const active = await getCurrentActiveModel(provider, sessionId);
-    return active?.model?.trim() || undefined;
-  };
-
-  const resolveResumeModel = async (
     provider: LLMProvider,
     sessionId: string | undefined,
     requestedModel?: string | null,
@@ -348,7 +340,12 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
       return changedModel.model.trim();
     }
 
-    return normalizedRequestedModel || undefined;
+    if (normalizedRequestedModel) {
+      return normalizedRequestedModel;
+    }
+
+    const active = await getCurrentActiveModel(provider, sessionId);
+    return active?.model?.trim() || undefined;
   };
 
   const clearCache = (): void => {
@@ -364,7 +361,6 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
     getChangedActiveModel,
     changeActiveModel,
     resolveSessionModel,
-    resolveResumeModel,
     clearCache,
   };
 };

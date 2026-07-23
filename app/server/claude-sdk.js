@@ -475,7 +475,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
   };
 
   try {
-    const resolvedModel = await providerModelsService.resolveResumeModel(
+    const resolvedModel = await providerModelsService.resolveSessionModel(
       'claude',
       sessionId,
       options.model,
