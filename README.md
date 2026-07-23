@@ -90,6 +90,16 @@ through a provider-keyed `spawnFns` map, not per-provider branches. TaskMaster
 is deliberately *outside* this — it's a task-management MCP server that any
 provider's agent calls over MCP, not an agent runtime.
 
+**Model preference** — features are model-id agnostic: they resolve a concrete
+model from a per-user preference store (`model_preferences`), never hardcode one.
+Two axes, each with a global fallback and optional per-feature override — a
+default provider, and a default model per provider — resolved by
+`resolveModel(userId, feature, {provider})`. One-shot generation (e.g. AI commit
+messages) goes through a single `generateOnce({feature, prompt})` entry point
+that owns provider dispatch, so no caller carries provider knowledge. Configure
+it in Settings → Model Preference. (TaskMaster keeps its own model selector —
+`task-master models --setup` — since it self-orchestrates behind MCP.)
+
 ## Data & Privacy
 
 Amadeus is self-hosted: **all persistent data stays on the machine you deploy
@@ -123,6 +133,7 @@ volumes) is a host-level concern and left to the operator.
 | Feature | How |
 |---------|-----|
 | Multiple agents | Claude Code, Codex, Cursor, OpenCode behind one `IProvider` adapter contract; chat dispatches by DB session provider |
+| Model preference | Per-user default provider + default model per provider, with per-feature overrides; features resolve a model via `resolveModel` instead of hardcoding one (Settings → Model Preference) |
 | Multi-user | One login URL; nginx routes each user to their own isolated `amadeus-<user>` container (own volume, `restart: unless-stopped`, CPU/RAM caps) |
 | Session reconnect/resume | `chat-run-registry` buffers seq-numbered events; `chat.subscribe` replays what a reconnecting client missed — survives refreshes, crashes, and restarts |
 | File + code editing | File tree + content search (ripgrep) + CodeMirror editor, real-time sync with agent workspace |

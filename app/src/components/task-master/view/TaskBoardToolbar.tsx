@@ -10,6 +10,7 @@ import {
   Loader2,
   Plus,
   Search,
+  Settings,
   Sparkles,
   Trash2,
 } from 'lucide-react';
@@ -53,6 +54,7 @@ type TaskBoardToolbarProps = {
   onOpenPrd: (prd: PrdFile) => void;
   onPrdDeleted?: () => void;
   onOpenHelp: () => void;
+  onOpenConfig: () => void;
   onOpenCreateTask: () => void;
 };
 
@@ -83,6 +85,7 @@ export default function TaskBoardToolbar({
   onOpenPrd,
   onPrdDeleted,
   onOpenHelp,
+  onOpenConfig,
   onOpenCreateTask,
 }: TaskBoardToolbarProps) {
   const { t } = useTranslation('tasks');
@@ -225,6 +228,15 @@ export default function TaskBoardToolbar({
                 title={t('buttons.help')}
               >
                 <HelpCircle className="h-4 w-4" />
+              </button>
+
+              {/* Config → TaskMaster init/setup for this project (models, MCP…). */}
+              <button
+                onClick={onOpenConfig}
+                className="rounded-lg border border-gray-300 p-2 text-gray-600 hover:bg-gray-100 hover:text-blue-600 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-blue-400"
+                title={t('buttons.config', 'Configure TaskMaster')}
+              >
+                <Settings className="h-4 w-4" />
               </button>
 
               <div ref={dropdownRef} className="relative">

@@ -167,6 +167,7 @@ export default function TaskBoard({
         }}
         onPrdDeleted={() => onRefreshPRDs?.(false)}
         onOpenHelp={() => setShowHelpModal(true)}
+        onOpenConfig={() => setShowSetupModal(true)}
         onOpenCreateTask={() => setShowCreateModal(true)}
       />
 
