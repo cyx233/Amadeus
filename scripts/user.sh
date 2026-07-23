@@ -64,6 +64,21 @@ ensure_multi_file() {
 }
 ensure_multi_file
 
+# Emit a JSON-quoted string (with surrounding quotes) for a shell value, so the
+# register payload doesn't depend on `jq` being installed. Escapes backslash,
+# double-quote, and control chars — enough for usernames/passwords.
+json_string() {
+  printf '%s' "$1" | LC_ALL=C awk '
+    BEGIN { RS="\0"; ORS=""; printf "\"" }
+    {
+      gsub(/\\/, "\\\\"); gsub(/"/, "\\\"")
+      gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); gsub(/\n/, "\\n")
+      printf "%s", $0
+    }
+    END { printf "\"" }
+  '
+}
+
 ensure_gateway() {
   if ! curl -s -o /dev/null --max-time 2 "${AUTH_URL}/api/auth/status"; then
     echo "[*] Gateway not responding — starting gateway + auth-gateway ..."
@@ -95,7 +110,7 @@ cmd_add() {
     -X POST "${AUTH_URL}/api/auth/register" \
     -H 'Content-Type: application/json' \
     -H "X-Admin-Token: ${AMADEUS_ADMIN_TOKEN:-}" \
-    -d "{\"username\":$(printf '%s' "$USERNAME" | jq -R .),\"password\":$(printf '%s' "$PASSWORD" | jq -R .)}") || {
+    -d "{\"username\":$(json_string "$USERNAME"),\"password\":$(json_string "$PASSWORD")}") || {
       echo "[!] Could not reach the auth-gateway."; exit 1; }
   if [ "$code" != "200" ]; then
     echo "[!] Registration failed (HTTP $code): $(cat /tmp/user-resp.$$)"; rm -f /tmp/user-resp.$$; exit 1
