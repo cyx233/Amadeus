@@ -1,14 +1,9 @@
-import fsSync from 'node:fs';
-
-import Database from 'better-sqlite3';
-
 import { parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
 import {
   createNormalizedMessage,
   generateMessageId,
-  getOpenCodeDatabasePath,
   normalizeProviderTimestamp,
   readObjectRecord,
   readJsonRecord,
@@ -16,6 +11,8 @@ import {
   sliceTailPage,
   unwrapJsonStringLiteral,
 } from '@/shared/utils.js';
+
+import { aggregateOpenCodeSessionTokenUsage, openOpenCodeDatabase } from './opencode-token-usage.js';
 
 const PROVIDER = 'opencode';
 
@@ -26,23 +23,6 @@ type OpenCodeHistoryRow = {
   part_id: string | null;
   part_time_created: number | null;
   part_data: string | null;
-};
-
-type OpenCodeTokenTotals = {
-  inputTokens: number;
-  outputTokens: number;
-  reasoningTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-};
-
-const openOpenCodeDatabase = (): Database.Database | null => {
-  const dbPath = getOpenCodeDatabasePath();
-  if (!fsSync.existsSync(dbPath)) {
-    return null;
-  }
-
-  return new Database(dbPath, { readonly: true, fileMustExist: true });
 };
 
 const formatToolContent = (value: unknown): string => {
@@ -84,119 +64,6 @@ const isUserTextEcho = (raw: AnyRecord): boolean => {
     || hasUserRole(raw.part);
 };
 
-const buildTokenUsage = (totals: OpenCodeTokenTotals | undefined): AnyRecord | undefined => {
-  if (!totals) {
-    return undefined;
-  }
-
-  const inputTokens = totals.inputTokens;
-  const displayInputTokens = inputTokens + totals.cacheReadTokens;
-  const outputTokens = totals.outputTokens;
-  const used = inputTokens
-    + outputTokens
-    + totals.reasoningTokens
-    + totals.cacheReadTokens
-    + totals.cacheWriteTokens;
-
-  if (used <= 0) {
-    return undefined;
-  }
-
-  return {
-    used,
-    inputTokens: displayInputTokens,
-    outputTokens,
-    breakdown: {
-      input: displayInputTokens,
-      output: outputTokens,
-    },
-  };
-};
-
-const readOpenCodeSessionColumnTokenUsage = (
-  db: Database.Database,
-  sessionId: string,
-): AnyRecord | undefined => {
-  const columns = db.prepare('PRAGMA table_info(session)').all() as { name: string }[];
-  const columnNames = new Set(columns.map((column) => column.name));
-  const requiredColumns = ['tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read', 'tokens_cache_write'];
-  if (!requiredColumns.every((column) => columnNames.has(column))) {
-    return undefined;
-  }
-
-  const row = db.prepare(`
-    SELECT
-      tokens_input AS inputTokens,
-      tokens_output AS outputTokens,
-      tokens_reasoning AS reasoningTokens,
-      tokens_cache_read AS cacheReadTokens,
-      tokens_cache_write AS cacheWriteTokens
-    FROM session
-    WHERE id = ?
-  `).get(sessionId) as OpenCodeTokenTotals | undefined;
-
-  if (!row) {
-    return undefined;
-  }
-
-  return buildTokenUsage({
-    inputTokens: Number(row.inputTokens ?? 0),
-    outputTokens: Number(row.outputTokens ?? 0),
-    reasoningTokens: Number(row.reasoningTokens ?? 0),
-    cacheReadTokens: Number(row.cacheReadTokens ?? 0),
-    cacheWriteTokens: Number(row.cacheWriteTokens ?? 0),
-  });
-};
-
-/**
- * OpenCode stores per-message token counts on assistant `message.data` objects
- * (see MessageV2.Assistant). Older DBs also had session-level counters; this
- * matches current `opencode.db` layouts that only persist message JSON.
- */
-const aggregateOpenCodeSessionTokenUsage = (
-  db: Database.Database,
-  sessionId: string,
-): AnyRecord | undefined => {
-  const sessionColumnUsage = readOpenCodeSessionColumnTokenUsage(db, sessionId);
-  if (sessionColumnUsage) {
-    return sessionColumnUsage;
-  }
-
-  const rows = db.prepare('SELECT data FROM message WHERE session_id = ?').all(sessionId) as { data: string }[];
-
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let reasoningTokens = 0;
-  let cacheReadTokens = 0;
-  let cacheWriteTokens = 0;
-
-  for (const row of rows) {
-    const info = readJsonRecord(row.data);
-    if (readOptionalString(info?.role) !== 'assistant') {
-      continue;
-    }
-
-    const tokens = readObjectRecord(info?.tokens);
-    if (!tokens) {
-      continue;
-    }
-
-    inputTokens += Number(tokens.input ?? 0);
-    outputTokens += Number(tokens.output ?? 0);
-    reasoningTokens += Number(tokens.reasoning ?? 0);
-    const cache = readObjectRecord(tokens.cache);
-    cacheReadTokens += Number(cache?.read ?? 0);
-    cacheWriteTokens += Number(cache?.write ?? 0);
-  }
-
-  return buildTokenUsage({
-    inputTokens,
-    outputTokens,
-    reasoningTokens,
-    cacheReadTokens,
-    cacheWriteTokens,
-  });
-};
 
 export class OpenCodeSessionsProvider implements IProviderSessions {
   /**

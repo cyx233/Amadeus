@@ -5,6 +5,7 @@ import path from "path";
 import express from "express";
 
 import { providerModelsService } from "../modules/providers/services/provider-models.service.js";
+import { sessionsService } from "../modules/providers/services/sessions.service.js";
 import { parseFrontMatter } from "../shared/frontmatter.js";
 import { findAppRoot, getModuleDir } from "../utils/runtime-paths.js";
 
@@ -252,63 +253,33 @@ Custom commands can be created in:
   "/models": executeModelsCommand,
 
   "/cost": async (args, context) => {
-    const tokenUsage = context?.tokenUsage || {};
     const provider = readModelProvider(context?.provider);
     const catalog = (await providerModelsService.getProviderModels(provider)).models;
     const model = await resolveCommandModel(provider, catalog, context?.sessionId);
 
-    const reportedUsed =
-      Number(
-        tokenUsage.used ?? tokenUsage.totalUsed ?? tokenUsage.total_tokens ?? 0,
-      ) || 0;
-    const total =
-      Number(
-        tokenUsage.total ??
-          tokenUsage.contextWindow ??
-          0,
-      ) || 0;
-    const normalizedInputValue =
-      tokenUsage.inputTokens ??
-      tokenUsage.input ??
-      tokenUsage.cumulativeInputTokens ??
-      tokenUsage.breakdown?.input ??
-      tokenUsage.promptTokens;
-    const directInputTokens =
-      Number(
-        normalizedInputValue ??
-          tokenUsage.input_tokens ??
-          0
-      ) || 0;
-    const cacheReadTokens =
-      Number(
-        tokenUsage.cacheReadTokens ??
-          tokenUsage.cache_read_input_tokens ??
-          tokenUsage.cacheReadInputTokens ??
-          0,
-      ) || 0;
-    const cacheCreationTokens =
-      Number(
-        tokenUsage.cacheCreationTokens ??
-          tokenUsage.cache_creation_input_tokens ??
-          tokenUsage.cacheCreationInputTokens ??
-          0,
-      ) || 0;
-    const inputTokens = normalizedInputValue == null
-      ? directInputTokens + cacheReadTokens + cacheCreationTokens
-      : directInputTokens;
-    const outputTokens =
-      Number(
-        tokenUsage.outputTokens ??
-          tokenUsage.output ??
-          tokenUsage.output_tokens ??
-          tokenUsage.cumulativeOutputTokens ??
-          tokenUsage.breakdown?.output ??
-          tokenUsage.completionTokens ??
-          0,
-      ) || 0;
+    // Ask the provider layer for the authoritative, canonical usage (same
+    // ProviderTokenUsage shape the /token-usage endpoint returns) instead of
+    // re-unwrapping the ~15 field aliases a frontend-supplied blob might carry.
+    // Fall back to whatever the client passed only when there's no resolvable
+    // session yet (e.g. /cost in a brand-new chat before the first turn).
+    let usage = null;
+    if (context?.sessionId) {
+      try {
+        usage = await sessionsService.getSessionTokenUsage(context.sessionId);
+      } catch {
+        // No provider transcript yet — fall through to the client blob.
+      }
+    }
+    if (!usage) {
+      usage = context?.tokenUsage || {};
+    }
+
+    const total = Number(usage.total ?? usage.contextWindow ?? 0) || 0;
+    const inputTokens = Number(usage.inputTokens ?? usage.breakdown?.input ?? 0) || 0;
+    const outputTokens = Number(usage.outputTokens ?? usage.breakdown?.output ?? 0) || 0;
     const computedUsed = inputTokens + outputTokens;
     const hasTokenBreakdown = computedUsed > 0;
-    const used = Math.max(reportedUsed, computedUsed);
+    const used = Math.max(Number(usage.used ?? 0) || 0, computedUsed);
 
     return {
       type: "builtin",
