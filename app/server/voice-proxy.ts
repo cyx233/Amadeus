@@ -10,7 +10,8 @@
 // falling back to server env defaults. Mounted at /api/voice behind authenticateToken.
 import { Readable } from 'node:stream';
 
-import express from 'express';
+import express, { type Request, type Response as ExpressResponse } from 'express';
+import type multer from 'multer';
 
 const ENV = {
   baseUrl: (process.env.VOICE_API_BASE_URL || '').replace(/\/$/, ''),
@@ -20,13 +21,20 @@ const ENV = {
   ttsVoice: process.env.VOICE_TTS_VOICE || 'alloy',
 };
 
+type VoiceConfig = {
+  baseUrl: string;
+  apiKey: string;
+  sttModel: string;
+  ttsModel: string;
+  ttsVoice: string;
+  ttsFormat: string;
+};
+
 /**
  * Resolve the voice backend config for a request. Client headers (set from the
  * user's in-app voice settings) take precedence over the server env defaults.
- * @param {import('express').Request} req
- * @returns {{baseUrl: string, apiKey: string, sttModel: string, ttsModel: string, ttsVoice: string, ttsFormat: string}}
  */
-function resolveConfig(req) {
+function resolveConfig(req: Request): VoiceConfig {
   const h = req.headers;
   return {
     // Security: do not allow clients to control the outbound backend host.
@@ -53,11 +61,8 @@ const VOICE_TIMEOUT_MS = Number.isFinite(_parsedTimeout) && _parsedTimeout > 0
 /**
  * fetch() with an AbortController timeout so a stalled backend can't hold the
  * request open indefinitely. Aborts after VOICE_TIMEOUT_MS.
- * @param {string} url
- * @param {RequestInit} [options]
- * @returns {Promise<Response>}
  */
-async function fetchWithTimeout(url, options = {}) {
+async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
   const parsed = new URL(url);
   if (!['http:', 'https:'].includes(parsed.protocol) || !isAllowedBackendUrl(parsed.origin)) {
     throw new Error('Blocked outbound voice backend URL');
@@ -74,16 +79,15 @@ async function fetchWithTimeout(url, options = {}) {
 /**
  * Turn a backend fetch failure into a clear, actionable client response:
  * 504 on timeout (AbortError), 502 otherwise.
- * @param {import('express').Response} res
- * @param {Error} e
  */
-function backendError(res, e) {
-  if (e && e.name === 'AbortError') {
+function backendError(res: ExpressResponse, e: unknown) {
+  const err = e as { name?: string; message?: string };
+  if (err && err.name === 'AbortError') {
     return res.status(504).json({
       error: `Voice backend timed out after ${Math.round(VOICE_TIMEOUT_MS / 1000)}s. Check your voice backend.`,
     });
   }
-  return res.status(502).json({ error: `Voice backend unreachable: ${e.message}` });
+  return res.status(502).json({ error: `Voice backend unreachable: ${err.message}` });
 }
 
 /**
@@ -91,11 +95,9 @@ function backendError(res, e) {
  * block the link-local / cloud-metadata range (169.254.x). localhost and private
  * ranges are allowed on purpose so users can point at a local voice server
  * (LocalAI, Speaches, Kokoro-FastAPI, etc.).
- * @param {string} raw
- * @returns {boolean}
  */
-function isAllowedBackendUrl(raw) {
-  let u;
+function isAllowedBackendUrl(raw: string): boolean {
+  let u: URL;
   try {
     u = new URL(raw);
   } catch {
@@ -109,27 +111,23 @@ function isAllowedBackendUrl(raw) {
 /**
  * Relay an upstream (backend) error to the client without making an upstream
  * 401/403 look like the user's own app login failed.
- * @param {import('express').Response} res
- * @param {number} status
- * @param {string} [text]
  */
-function upstreamError(res, status, text) {
+function upstreamError(res: ExpressResponse, status: number, text?: string) {
   if (status === 401 || status === 403) {
     return res.status(502).json({ error: 'Voice backend rejected the request (check the API key).' });
   }
   return res.status(status).json({ error: text || 'voice backend error' });
 }
 
-let _upload = null;
+let _upload: multer.Multer | null = null;
 /**
  * Lazily build a memory-storage multer instance (25 MB cap) for audio uploads,
  * so multer is only imported when the voice feature is actually used.
- * @returns {Promise<import('multer').Multer>}
  */
-async function getUpload() {
+async function getUpload(): Promise<multer.Multer> {
   if (!_upload) {
-    const multer = (await import('multer')).default;
-    _upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+    const multerModule = (await import('multer')).default;
+    _upload = multerModule({ storage: multerModule.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
   }
   return _upload;
 }
@@ -137,10 +135,8 @@ async function getUpload() {
 /**
  * Build the Authorization header for the backend, or an empty object when no
  * key is configured (e.g. a local server that needs none).
- * @param {string} apiKey
- * @returns {Record<string, string>}
  */
-function authHeader(apiKey) {
+function authHeader(apiKey: string): Record<string, string> {
   return apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
 }
 
@@ -160,8 +156,8 @@ router.post('/transcribe', async (req, res) => {
   if (!cfg.baseUrl) return res.status(503).json({ error: 'No voice backend configured' });
   if (!isAllowedBackendUrl(cfg.baseUrl)) return res.status(400).json({ error: 'Invalid voice backend URL.' });
   const upload = await getUpload();
-  upload.single('audio')(req, res, async (err) => {
-    if (err) return res.status(400).json({ error: err.message });
+  upload.single('audio')(req, res, async (err: unknown) => {
+    if (err) return res.status(400).json({ error: (err as Error).message });
     if (!req.file) return res.status(400).json({ error: 'No audio uploaded' });
     try {
       const fd = new FormData();
@@ -178,7 +174,7 @@ router.post('/transcribe', async (req, res) => {
       });
       const text = await r.text();
       if (!r.ok) return upstreamError(res, r.status, text);
-      let data;
+      let data: { text?: unknown };
       try { data = JSON.parse(text); } catch { data = { text }; }
       res.json({ text: data.text ?? '' });
     } catch (e) {
@@ -215,7 +211,7 @@ router.post('/tts', async (req, res) => {
     res.setHeader('Content-Type', r.headers.get('content-type') || 'audio/mpeg');
     res.setHeader('Cache-Control', 'no-store');
     if (!r.body) return res.end();
-    Readable.fromWeb(r.body).on('error', (error) => res.destroy(error)).pipe(res);
+    Readable.fromWeb(r.body as import('node:stream/web').ReadableStream).on('error', (error) => res.destroy(error)).pipe(res);
   } catch (e) {
     backendError(res, e);
   }
