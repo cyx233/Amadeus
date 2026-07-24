@@ -94,7 +94,7 @@ router.post('/register', async (req, res) => {
       const user = userDb.createUser(username, passwordHash);
 
       // Generate token
-      const token = generateToken(user);
+      const token = generateToken({ id: Number(user.id), username: user.username });
 
       db.prepare('COMMIT').run();
 

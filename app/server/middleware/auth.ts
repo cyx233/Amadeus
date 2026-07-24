@@ -1,6 +1,9 @@
 import jwt from 'jsonwebtoken';
+import type { NextFunction, Request, RequestHandler, Response } from 'express';
+
 import { userDb, appConfigDb } from '../modules/database/index.js';
 import { IS_PLATFORM } from '../constants/config.js';
+import type { AuthenticatedUser, AuthenticatedWebSocketUser } from '../shared/types.js';
 
 // Use env var if set, otherwise auto-generate a unique secret per installation.
 // In the multi-user gateway deployment, JWT_SECRET is injected via env so the
@@ -12,8 +15,16 @@ const JWT_SECRET = process.env.JWT_SECRET || appConfigDb.getOrCreateJwtSecret();
 // in localStorage are not available then).
 const AUTH_COOKIE_NAME = 'amadeus_token';
 
+// jwt.verify()'s declared return type is `Jwt | JwtPayload | string` since the
+// library supports arbitrary payloads, but `generateToken` below is the only
+// place this app ever signs a token, and it always embeds { userId, username }.
+// So any successfully verified token is guaranteed to carry this shape at
+// runtime, and every call site below is a direct cast rather than a guard —
+// asserting a fact this module itself enforces, not validating untrusted input.
+type JwtUserPayload = { userId: number; username: string; exp?: number; iat?: number };
+
 // Minimal cookie parser (avoids adding cookie-parser for one header).
-function readTokenFromCookie(cookieHeader) {
+function readTokenFromCookie(cookieHeader: string | undefined): string | null {
   if (!cookieHeader) return null;
   for (const part of cookieHeader.split(';')) {
     const eq = part.indexOf('=');
@@ -26,12 +37,12 @@ function readTokenFromCookie(cookieHeader) {
 }
 
 // Optional API key middleware
-const validateApiKey = (req, res, next) => {
+const validateApiKey: RequestHandler = (req, res, next) => {
   // Skip API key validation if not configured
   if (!process.env.API_KEY) {
     return next();
   }
-  
+
   const apiKey = req.headers['x-api-key'];
   if (apiKey !== process.env.API_KEY) {
     return res.status(401).json({ error: 'Invalid API key' });
@@ -40,7 +51,11 @@ const validateApiKey = (req, res, next) => {
 };
 
 // JWT authentication middleware
-const authenticateToken = async (req, res, next) => {
+const authenticateToken: RequestHandler = async (
+  req: Request & { user?: AuthenticatedUser },
+  res: Response,
+  next: NextFunction
+) => {
   // Platform mode:  use single database user
   if (IS_PLATFORM) {
     try {
@@ -58,11 +73,20 @@ const authenticateToken = async (req, res, next) => {
 
   // Normal OSS JWT validation
   const authHeader = req.headers['authorization'];
-  let token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  let token: string | null = (authHeader && authHeader.split(' ')[1]) || null; // Bearer TOKEN
 
-  // Also check query param for SSE endpoints (EventSource can't set headers)
+  // Also check query param for SSE endpoints (EventSource can't set headers).
+  // Express types this as string | ParsedQs | (string|ParsedQs)[] (a client
+  // can send `?token[]=a&token[]=b`), but jwt.verify (below) throws its own
+  // JsonWebTokenError for a non-string input and that throw is caught by the
+  // same try/catch either way — so asserting `string` here changes nothing
+  // observable, it just moves the "not a string" rejection from inside
+  // jwt.verify to the same place. A `typeof` guard instead would skip this
+  // assignment and fall through to the cookie check below, which is NOT what
+  // the original did (a truthy non-string query token was consumed here,
+  // full stop) — so this stays a cast, not a narrowing check.
   if (!token && req.query.token) {
-    token = req.query.token;
+    token = req.query.token as string;
   }
 
   // Also accept the gateway cookie so the auth entrypoint's /api/auth/user can
@@ -76,7 +100,7 @@ const authenticateToken = async (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtUserPayload;
 
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
@@ -103,7 +127,7 @@ const authenticateToken = async (req, res, next) => {
 };
 
 // Generate JWT token
-const generateToken = (user) => {
+const generateToken = (user: Pick<AuthenticatedUser, 'id' | 'username'>): string => {
   return jwt.sign(
     {
       userId: user.id,
@@ -115,7 +139,7 @@ const generateToken = (user) => {
 };
 
 // WebSocket authentication function
-const authenticateWebSocket = (token) => {
+const authenticateWebSocket = (token: string | null): AuthenticatedWebSocketUser | null => {
   // Platform mode: bypass token validation, return first user
   if (IS_PLATFORM) {
     try {
@@ -136,7 +160,7 @@ const authenticateWebSocket = (token) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtUserPayload;
     // Verify user actually exists in database (matches REST authenticateToken behavior)
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
