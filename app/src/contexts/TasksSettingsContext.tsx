@@ -1,14 +1,27 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+
 import { api } from '../utils/api';
 
-const TasksSettingsContext = createContext({
+interface TaskMasterInstallationStatus {
+  installation?: { isInstalled?: boolean };
+  isReady?: boolean;
+}
+
+interface TasksSettingsContextValue {
+  isTaskMasterInstalled: boolean | null;
+  isTaskMasterReady: boolean | null;
+  installationStatus: TaskMasterInstallationStatus | null;
+  isCheckingInstallation: boolean;
+}
+
+const TasksSettingsContext = createContext<TasksSettingsContextValue>({
   isTaskMasterInstalled: null,
   isTaskMasterReady: null,
   installationStatus: null,
   isCheckingInstallation: true
 });
 
-export const useTasksSettings = () => {
+export const useTasksSettings = (): TasksSettingsContextValue => {
   const context = useContext(TasksSettingsContext);
   if (!context) {
     throw new Error('useTasksSettings must be used within a TasksSettingsProvider');
@@ -16,12 +29,12 @@ export const useTasksSettings = () => {
   return context;
 };
 
-export const TasksSettingsProvider = ({ children }) => {
+export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => {
   // TaskMaster is a core feature (always on) — no enable/disable flag. Consumers
   // gate on installation readiness only.
-  const [isTaskMasterInstalled, setIsTaskMasterInstalled] = useState(null);
-  const [isTaskMasterReady, setIsTaskMasterReady] = useState(null);
-  const [installationStatus, setInstallationStatus] = useState(null);
+  const [isTaskMasterInstalled, setIsTaskMasterInstalled] = useState<boolean | null>(null);
+  const [isTaskMasterReady, setIsTaskMasterReady] = useState<boolean | null>(null);
+  const [installationStatus, setInstallationStatus] = useState<TaskMasterInstallationStatus | null>(null);
   const [isCheckingInstallation, setIsCheckingInstallation] = useState(true);
 
   // Check TaskMaster installation status asynchronously on component mount.
@@ -30,7 +43,7 @@ export const TasksSettingsProvider = ({ children }) => {
       try {
         const response = await api.get('/taskmaster/installation-status');
         if (response.ok) {
-          const data = await response.json();
+          const data: TaskMasterInstallationStatus = await response.json();
           setInstallationStatus(data);
           setIsTaskMasterInstalled(data.installation?.isInstalled || false);
           setIsTaskMasterReady(data.isReady || false);
