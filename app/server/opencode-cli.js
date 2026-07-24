@@ -1,15 +1,13 @@
-import fsSync from 'node:fs';
-
 import crossSpawn from 'cross-spawn';
-import Database from 'better-sqlite3';
 
 import { appendImagesInputTag } from './shared/image-attachments.js';
 import { resolveRuntimeEffort } from './shared/runtime-effort.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
+import { aggregateOpenCodeSessionTokenUsage, openOpenCodeDatabase } from './modules/providers/list/opencode/opencode-token-usage.js';
 import { notifyRunFailed, notifyRunStopped } from './services/notification-orchestrator.js';
-import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell, getOpenCodeDatabasePath } from './shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, flattenPromptForWindowsShell } from './shared/utils.js';
 
 // cross-spawn resolves .cmd shims/PATHEXT on Windows and delegates to
 // child_process.spawn everywhere else.
@@ -55,63 +53,23 @@ function readOpenCodeSessionId(event) {
   return event.sessionID || event.sessionId || null;
 }
 
-function readOpenCodeTokenUsage(sessionId) {
-  const dbPath = getOpenCodeDatabasePath();
-  if (!sessionId || !fsSync.existsSync(dbPath)) {
+// Live `token_budget` frame for a running OpenCode session. Reuses the SAME DB
+// aggregation as the sessions provider (opencode-token-usage) — the SQL was
+// byte-duplicated here before — so runtime and history telemetry can't drift.
+function readOpenCodeSessionTokenBudget(sessionId) {
+  if (!sessionId) {
     return null;
   }
-
-  let db = null;
+  const db = openOpenCodeDatabase();
+  if (!db) {
+    return null;
+  }
   try {
-    db = new Database(dbPath, { readonly: true, fileMustExist: true });
-    const columns = db.prepare('PRAGMA table_info(session)').all();
-    const columnNames = new Set(columns.map((column) => column.name));
-    const requiredColumns = ['tokens_input', 'tokens_output', 'tokens_reasoning', 'tokens_cache_read', 'tokens_cache_write'];
-    if (!requiredColumns.every((column) => columnNames.has(column))) {
-      return null;
-    }
-
-    const row = db.prepare(`
-      SELECT
-        tokens_input AS inputTokens,
-        tokens_output AS outputTokens,
-        tokens_reasoning AS reasoningTokens,
-        tokens_cache_read AS cacheReadTokens,
-        tokens_cache_write AS cacheWriteTokens
-      FROM session
-      WHERE id = ?
-    `).get(sessionId);
-
-    if (!row) {
-      return null;
-    }
-
-    const inputTokens = Number(row.inputTokens || 0) + Number(row.cacheReadTokens || 0);
-    const outputTokens = Number(row.outputTokens || 0);
-    const used = Number(row.inputTokens || 0)
-      + outputTokens
-      + Number(row.reasoningTokens || 0)
-      + Number(row.cacheReadTokens || 0)
-      + Number(row.cacheWriteTokens || 0);
-    if (used <= 0) {
-      return null;
-    }
-
-    return {
-      used,
-      inputTokens,
-      outputTokens,
-      breakdown: {
-        input: inputTokens,
-        output: outputTokens,
-      },
-    };
+    return aggregateOpenCodeSessionTokenUsage(db, sessionId) ?? null;
   } catch {
     return null;
   } finally {
-    if (db) {
-      db.close();
-    }
+    db.close();
   }
 }
 
@@ -306,7 +264,7 @@ async function spawnOpenCode(command, options = {}, ws) {
           stdoutLineBuffer = '';
         }
 
-        const tokenBudget = readOpenCodeTokenUsage(finalSessionId);
+        const tokenBudget = readOpenCodeSessionTokenBudget(finalSessionId);
         if (tokenBudget) {
           ws.send(createNormalizedMessage({
             kind: 'status',
