@@ -58,7 +58,18 @@ function createRequestId() {
 }
 
 function waitForToolApproval(requestId, options = {}) {
-  const { timeoutMs = TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel, metadata } = options;
+  const { timeoutMs = TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel, metadata, sessionId } = options;
+
+  // The SDK's per-turn `signal` aborts whenever its stream tears down — which
+  // includes a transient socket drop (tab reload), NOT just a real cancel. Our
+  // runs are designed to survive reconnect (the writer rebinds to the new
+  // socket), so treating every signal abort as "user cancelled" made a mid-run
+  // disconnect auto-DENY every subsequent tool ("AbortError: Stream closed"),
+  // a burst of spurious failures until the run happened to recover. Only a real
+  // chat.abort (which adds to abortedSessionIds) should cancel the wait; a bare
+  // stream teardown leaves the request pending so it resolves after reconnect
+  // (or via the non-interactive timeout).
+  const isRealAbort = () => Boolean(sessionId && abortedSessionIds.has(sessionId));
 
   return new Promise(resolve => {
     let settled = false;
@@ -89,12 +100,18 @@ function waitForToolApproval(requestId, options = {}) {
     }
 
     const abortHandler = () => {
+      // Transient stream teardown (socket drop) — keep waiting; the run survives
+      // reconnect and the approval will resolve then (or time out). Only cancel
+      // on a genuine chat.abort.
+      if (!isRealAbort()) {
+        return;
+      }
       onCancel?.('cancelled');
       finalize({ cancelled: true });
     };
 
     if (signal) {
-      if (signal.aborted) {
+      if (signal.aborted && isRealAbort()) {
         onCancel?.('cancelled');
         finalize({ cancelled: true });
         return;
@@ -597,6 +614,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       const decision = await waitForToolApproval(requestId, {
         timeoutMs: requiresInteraction ? 0 : undefined,
         signal: context?.signal,
+        sessionId: capturedSessionId || sessionId || null,
         metadata: {
           _sessionId: capturedSessionId || sessionId || null,
           _toolName: toolName,
@@ -813,6 +831,17 @@ async function abortClaudeSDKSession(sessionId) {
     // Mark before interrupting so the run loop knows not to emit its own
     // terminal complete (the abort handler sends the aborted one).
     abortedSessionIds.add(sessionId);
+
+    // Cancel any tool-approval waits for this session directly. waitForToolApproval
+    // no longer treats a bare stream teardown as a cancel (that made a mid-run
+    // socket drop auto-deny every tool), so a genuine abort must resolve them
+    // here rather than relying on the SDK signal listener still being attached.
+    for (const [requestId, resolver] of pendingToolApprovals.entries()) {
+      if (resolver._sessionId === sessionId) {
+        resolver({ cancelled: true });
+        pendingToolApprovals.delete(requestId);
+      }
+    }
 
     // Call interrupt() on the query instance
     await session.instance.interrupt();
