@@ -27,7 +27,16 @@ import type {
   PermissionMode,
   SessionEstablishedContext,
 } from '../types/types';
-import type { Project, ProjectSession, LLMProvider, ProviderModelsCacheInfo } from '../../../types/app';
+import type { Project, ProjectSession, LLMProvider } from '../../../types/app';
+import type {
+  BuiltinCommandResult,
+  CommandExecuteResponse,
+  CostCommandData,
+  CustomCommandResult,
+  HelpCommandData,
+  ModelCommandData,
+  StatusCommandData,
+} from '../../../../shared/command-types';
 import { escapeRegExp } from '../utils/chatFormatting';
 
 import { useFileMentions } from './useFileMentions';
@@ -74,70 +83,16 @@ interface MentionableFile {
   path: string;
 }
 
-interface CommandExecutionResult {
-  type: 'builtin' | 'custom';
-  action?: string;
-  data?: any;
-  content?: string;
-  hasBashCommands?: boolean;
-  hasFileIncludes?: boolean;
-}
-
-export type ModelCommandData = {
-  current?: {
-    provider?: string;
-    providerLabel?: string;
-    model?: string;
-  };
-  available?: Partial<Record<LLMProvider, string[]>>;
-  availableModels?: string[];
-  availableOptions?: Array<{
-    value: string;
-    label?: string;
-    description?: string;
-  }>;
-  defaultModel?: string;
-  cache?: ProviderModelsCacheInfo;
-};
-
-export type CostCommandData = {
-  tokenUsage?: {
-    used?: number;
-    total?: number;
-  };
-  tokenBreakdown?: {
-    input?: number;
-    output?: number;
-  };
-  provider?: string;
-  model?: string;
-};
-
-export type StatusCommandData = {
-  version?: string;
-  packageName?: string;
-  uptime?: string;
-  model?: string;
-  provider?: string;
-  nodeVersion?: string;
-  platform?: string;
-  pid?: number;
-  memoryUsage?: {
-    rssMb?: number;
-    heapUsedMb?: number;
-    heapTotalMb?: number;
-  };
-};
-
-export type HelpCommandData = {
-  content?: string;
-  format?: string;
-  commands?: Array<{
-    name: string;
-    description?: string;
-    namespace?: string;
-  }>;
-};
+// Command request/response shapes are shared with the backend (see
+// app/shared/command-types.ts) so the two can't drift. Re-exported here so the
+// existing consumers (CommandResultModal, etc.) keep importing from one place.
+export type {
+  CommandExecuteResponse,
+  ModelCommandData,
+  CostCommandData,
+  StatusCommandData,
+  HelpCommandData,
+} from '../../../../shared/command-types';
 
 export type CommandModalKind = 'help' | 'models' | 'cost' | 'status';
 
@@ -254,7 +209,7 @@ export function useChatComposerState({
   const queuedDraftSessionRef = useRef<string | null>(sessionKey);
 
   const handleBuiltInCommand = useCallback(
-    (result: CommandExecutionResult) => {
+    (result: BuiltinCommandResult) => {
       const { action, data } = result;
       switch (action) {
         case 'help':
@@ -300,7 +255,7 @@ export function useChatComposerState({
               content: `${data.message}\n\nPath: \`${data.path}\``,
               timestamp: Date.now(),
             });
-            if (data.exists && onFileOpen) {
+            if (data.exists && data.path && onFileOpen) {
               onFileOpen(data.path);
             }
           }
@@ -331,7 +286,7 @@ export function useChatComposerState({
     });
   }, []);
 
-  const handleCustomCommand = useCallback(async (result: CommandExecutionResult) => {
+  const handleCustomCommand = useCallback(async (result: CustomCommandResult) => {
     const { content, hasBashCommands } = result;
 
     if (hasBashCommands) {
@@ -413,7 +368,7 @@ export function useChatComposerState({
           throw new Error(errorMessage);
         }
 
-        const result = (await response.json()) as CommandExecutionResult;
+        const result = (await response.json()) as CommandExecuteResponse;
         if (result.type === 'builtin') {
           handleBuiltInCommand(result);
           if (!options?.preserveInput) {

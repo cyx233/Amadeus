@@ -4,6 +4,12 @@ import path from "path";
 
 import express from "express";
 
+import type {
+  BuiltinCommandResult,
+  CommandExecuteResponse,
+  CommandListResponse,
+  SlashCommandInfo,
+} from "../../shared/command-types.js";
 import { providerModelsService } from "../modules/providers/services/provider-models.service.js";
 import { sessionsService } from "../modules/providers/services/sessions.service.js";
 import { parseFrontMatter } from "../shared/frontmatter.js";
@@ -18,15 +24,8 @@ type CommandContext = {
   tokenUsage?: Record<string, unknown>;
 };
 
-/** A discovered command (built-in or custom). */
-type CommandInfo = {
-  name: string;
-  path?: string;
-  relativePath?: string;
-  description: string;
-  namespace: string;
-  metadata: Record<string, unknown>;
-};
+// A discovered command (built-in or custom) — the /list contract shape.
+type CommandInfo = SlashCommandInfo;
 
 const __dirname = getModuleDir(import.meta.url);
 // This route reads the top-level package.json for the status command, so it needs the real
@@ -79,7 +78,7 @@ const resolveCommandModel = async (provider: LLMProvider, catalog: { DEFAULT: st
   return currentActiveModel?.model || catalog.DEFAULT;
 };
 
-export const executeModelsCommand = async (args: string[], context?: CommandContext) => {
+export const executeModelsCommand = async (args: string[], context?: CommandContext): Promise<BuiltinCommandResult> => {
   const currentProvider = readModelProvider(context?.provider);
   const result = await providerModelsService.getProviderModels(currentProvider);
   const catalog = result.models;
@@ -232,7 +231,10 @@ const builtInCommands: CommandInfo[] = [
  * Built-in command handlers
  * Each handler returns { type: 'builtin', action: string, data: any }
  */
-const builtInHandlers = {
+const builtInHandlers: Record<
+  string,
+  (args: string[], context?: CommandContext) => Promise<BuiltinCommandResult>
+> = {
   "/help": async (args: string[], context?: CommandContext) => {
     const helpText = `# Claude Code Commands
 
@@ -478,11 +480,12 @@ router.post("/list", async (req, res) => {
     // Sort commands alphabetically by name
     customCommands.sort((a, b) => a.name.localeCompare(b.name));
 
-    res.json({
+    const response: CommandListResponse = {
       builtIn: builtInCommands,
       custom: customCommands,
       count: allCommands.length,
-    });
+    };
+    res.json(response);
   } catch (error) {
     console.error("Error listing commands:", error);
     res.status(500).json({
@@ -513,10 +516,11 @@ router.post("/execute", async (req, res) => {
     if (handler) {
       try {
         const result = await handler(args, context);
-        return res.json({
+        const response: CommandExecuteResponse = {
           ...result,
           command: commandName,
-        });
+        };
+        return res.json(response);
       } catch (error) {
         console.error(
           `Error executing built-in command ${commandName}:`,
@@ -577,14 +581,15 @@ router.post("/execute", async (req, res) => {
       );
     });
 
-    res.json({
+    const response: CommandExecuteResponse = {
       type: "custom",
       command: commandName,
       content: processedContent,
       metadata,
       hasFileIncludes: processedContent.includes("@"),
       hasBashCommands: processedContent.includes("!"),
-    });
+    };
+    res.json(response);
   } catch (error) {
     if (errorCode(error) === "ENOENT") {
       return res.status(404).json({
