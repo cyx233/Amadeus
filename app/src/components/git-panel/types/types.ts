@@ -1,4 +1,34 @@
 import type { Project } from '../../../types/app';
+// Git API response contracts are shared with the backend (see
+// app/shared/git-types.ts) so both sides can't drift. Imported for use below
+// and re-exported so the panel's many consumers keep importing from one place.
+import type {
+  GitApiErrorResponse,
+  GitStatusResponse,
+  GitRemoteStatus,
+  GitCommitSummary,
+  GitRepo,
+  GitDiffResponse,
+  GitBranchesResponse,
+  GitCommitsResponse,
+  GitOperationResponse,
+  GitGenerateMessageResponse,
+  GitFileWithDiffResponse,
+} from '../../../../shared/git-types';
+
+export type {
+  GitApiErrorResponse,
+  GitStatusResponse,
+  GitRemoteStatus,
+  GitCommitSummary,
+  GitRepo,
+  GitDiffResponse,
+  GitBranchesResponse,
+  GitCommitsResponse,
+  GitOperationResponse,
+  GitGenerateMessageResponse,
+  GitFileWithDiffResponse,
+};
 
 export type GitPanelView = 'changes' | 'history' | 'branches';
 export type FileStatusCode = 'M' | 'A' | 'D' | 'U';
@@ -18,45 +48,6 @@ export type GitPanelProps = {
   onFileOpen?: FileOpenHandler;
 };
 
-export type GitStatusResponse = {
-  branch?: string;
-  hasCommits?: boolean;
-  modified?: string[];
-  added?: string[];
-  deleted?: string[];
-  untracked?: string[];
-  /** Paths with index-side changes — mirrors the real git index. */
-  staged?: string[];
-  error?: string;
-  details?: string;
-};
-
-export type GitRemoteStatus = {
-  hasRemote?: boolean;
-  hasUpstream?: boolean;
-  branch?: string;
-  remoteBranch?: string;
-  remoteName?: string | null;
-  ahead?: number;
-  behind?: number;
-  isUpToDate?: boolean;
-  message?: string;
-  error?: string;
-};
-
-export type GitCommitSummary = {
-  hash: string;
-  author: string;
-  email?: string;
-  date: string;
-  message: string;
-  stats?: string;
-  /** Parent commit hashes — drives the History view commit graph. */
-  parents?: string[];
-  /** Ref decorations, e.g. "HEAD -> main", "origin/main", "tag: v1.0". */
-  refs?: string[];
-};
-
 export type GitDiffMap = Record<string, string>;
 
 export type GitStatusGroupEntry = {
@@ -68,15 +59,6 @@ export type ConfirmationRequest = {
   type: ConfirmActionType;
   message: string;
   onConfirm: () => Promise<void> | void;
-};
-
-export type GitRepo = {
-  /** Absolute path to the git repo; threaded to the backend as the `repo` param. */
-  path: string;
-  /** Relative subdir path, or '' for the project root. */
-  name: string;
-  isRoot: boolean;
-  branch: string | null;
 };
 
 export type UseGitPanelControllerOptions = {
@@ -125,37 +107,3 @@ export type GitPanelController = {
   openFile: (filePath: string) => Promise<void>;
 };
 
-export type GitApiErrorResponse = {
-  error?: string;
-  details?: string;
-};
-
-export type GitDiffResponse = GitApiErrorResponse & {
-  diff?: string;
-};
-
-export type GitBranchesResponse = GitApiErrorResponse & {
-  branches?: string[];
-  localBranches?: string[];
-  remoteBranches?: string[];
-};
-
-export type GitCommitsResponse = GitApiErrorResponse & {
-  commits?: GitCommitSummary[];
-};
-
-export type GitOperationResponse = GitApiErrorResponse & {
-  success?: boolean;
-  output?: string;
-};
-
-export type GitGenerateMessageResponse = GitApiErrorResponse & {
-  message?: string;
-};
-
-export type GitFileWithDiffResponse = GitApiErrorResponse & {
-  oldContent?: string;
-  currentContent?: string;
-  isDeleted?: boolean;
-  isUntracked?: boolean;
-};
