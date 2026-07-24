@@ -5,6 +5,11 @@ import path from 'node:path';
 
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import spawn from 'cross-spawn';
+// Type-only: playwright is an optionalDependency, loaded at runtime via
+// require() below (guarded by try/catch) so the app works without it
+// installed. `import type` is erased at compile time, so it carries no
+// runtime requirement that the package actually be present.
+import type * as playwrightTypes from 'playwright';
 
 import { appConfigDb } from '@/modules/database/index.js';
 import { providerMcpService } from '@/modules/providers/index.js';
@@ -50,17 +55,20 @@ type BrowserUseSession = {
 type PublicBrowserUseSession = Omit<BrowserUseSession, 'ownerId'>;
 
 type RuntimeHandle = {
-  browser?: any;
-  context?: any;
-  page?: any;
+  browser?: playwrightTypes.Browser;
+  context?: playwrightTypes.BrowserContext;
+  page?: playwrightTypes.Page;
 };
 
 type BrowserUseSettings = {
   enabled: boolean;
 };
 
+/** The playwright module namespace, as returned by require('playwright') — not a live browser handle. */
+type PlaywrightModule = typeof playwrightTypes;
+
 type RuntimeReadiness = {
-  playwright: any | null;
+  playwright: PlaywrightModule | null;
   playwrightInstalled: boolean;
   chromiumInstalled: boolean;
   chromiumExecutablePath: string | null;
@@ -141,7 +149,7 @@ function getSetupMessage(settings: BrowserUseSettings, readiness: RuntimeReadine
   return readiness.installMessage || 'Browser runtime is not ready.';
 }
 
-function getPlaywright(): any | null {
+function getPlaywright(): PlaywrightModule | null {
   try {
     return require('playwright');
   } catch {
@@ -380,7 +388,7 @@ async function expireStaleSessions(now = Date.now()): Promise<void> {
   }));
 }
 
-async function captureSession(session: BrowserUseSession, page: any): Promise<void> {
+async function captureSession(session: BrowserUseSession, page: playwrightTypes.Page): Promise<void> {
   const screenshot = await page.screenshot({ type: 'jpeg', quality: 72, fullPage: false });
   session.screenshotDataUrl = `data:image/jpeg;base64,${Buffer.from(screenshot).toString('base64')}`;
   session.title = await page.title().catch(() => null);
@@ -389,7 +397,7 @@ async function captureSession(session: BrowserUseSession, page: any): Promise<vo
   session.updatedAt = new Date().toISOString();
 }
 
-async function getActionPoint(page: any, input: { selector?: string; text?: string; x?: number; y?: number }) {
+async function getActionPoint(page: playwrightTypes.Page, input: { selector?: string; text?: string; x?: number; y?: number }) {
   if (typeof input.x === 'number' && typeof input.y === 'number') {
     return { x: input.x, y: input.y };
   }
@@ -538,14 +546,14 @@ export const browserUseService = {
       return publicSession(session);
     }
 
-    let browser: any | undefined;
-    let context: any | undefined;
-    let page: any;
-    const launchOptions = {
+    let browser: playwrightTypes.Browser | undefined;
+    let context: playwrightTypes.BrowserContext | undefined;
+    let page: playwrightTypes.Page;
+    const launchOptions: playwrightTypes.LaunchOptions = {
       headless: true,
       args: ['--disable-dev-shm-usage'],
     };
-    const contextOptions = {
+    const contextOptions: playwrightTypes.BrowserContextOptions = {
       viewport: { width: 1440, height: 900 },
       serviceWorkers: 'block',
     };
@@ -778,7 +786,7 @@ export const browserUseService = {
     await captureSession(session, updatedHandle?.page || handle.page);
     return {
       session: publicSession(session),
-      tabs: handle.context.pages().map((page: any, index: number) => ({
+      tabs: handle.context.pages().map((page, index) => ({
         index,
         url: page.url(),
         active: page === (updatedHandle?.page || handle.page),
