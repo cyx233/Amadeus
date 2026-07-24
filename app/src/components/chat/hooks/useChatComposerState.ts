@@ -1163,9 +1163,30 @@ export function useChatComposerState({
         });
       });
 
-      setPendingPermissionRequests((previous) =>
-        previous.filter((request) => !validIds.includes(request.requestId)),
-      );
+      // AskUserQuestion panels render their own "answer submitted" acknowledgement
+      // from local state, so keep those requests mounted a short beat before
+      // removing them (immediate removal unmounts the panel before it can show
+      // the choice — the UX gap this fixes). Other permission requests are
+      // removed immediately as before.
+      const removeIds = (ids: string[]) =>
+        setPendingPermissionRequests((previous) =>
+          previous.filter((request) => !ids.includes(request.requestId)),
+        );
+
+      setPendingPermissionRequests((previous) => {
+        const lingering: string[] = [];
+        const immediate: string[] = [];
+        for (const request of previous) {
+          if (!validIds.includes(request.requestId)) continue;
+          (request.toolName === 'AskUserQuestion' ? lingering : immediate).push(request.requestId);
+        }
+        if (lingering.length > 0) {
+          setTimeout(() => removeIds(lingering), 2000);
+        }
+        return immediate.length > 0
+          ? previous.filter((request) => !immediate.includes(request.requestId))
+          : previous;
+      });
     },
     [sendMessage, setPendingPermissionRequests],
   );

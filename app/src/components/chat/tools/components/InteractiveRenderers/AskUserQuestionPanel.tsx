@@ -21,6 +21,11 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   const [otherTexts, setOtherTexts] = useState<Map<number, string>>(() => new Map());
   const [otherActive, setOtherActive] = useState<Map<number, boolean>>(() => new Map());
   const [mounted, setMounted] = useState(false);
+  // Once the user submits/skips, keep the panel showing their choice (like the
+  // Claude CLI acknowledging the answer) instead of vanishing the instant it's
+  // clicked. `null` question value = skipped. The parent removes the request a
+  // beat later; this is the in-place confirmation for that window.
+  const [submitted, setSubmitted] = useState<Record<string, string> | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const otherInputRef = useRef<HTMLInputElement>(null);
@@ -88,10 +93,13 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   }, [questions, selections, otherActive, otherTexts]);
 
   const handleSubmit = useCallback(() => {
-    onDecision(request.requestId, { allow: true, updatedInput: { ...input, answers: buildAnswers() } });
+    const answers = buildAnswers();
+    setSubmitted(answers);
+    onDecision(request.requestId, { allow: true, updatedInput: { ...input, answers } });
   }, [onDecision, request.requestId, input, buildAnswers]);
 
   const handleSkip = useCallback(() => {
+    setSubmitted({});
     onDecision(request.requestId, { allow: true, updatedInput: { ...input, answers: {} } });
   }, [onDecision, request.requestId, input]);
 
@@ -138,6 +146,46 @@ export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   }, [currentStep, questions, toggleOption, toggleOther, handleSubmit, handleSkip]);
 
   if (questions.length === 0) return null;
+
+  // Resolved view: after submit/skip, show the chosen answer(s) in place so the
+  // user sees their selection was recorded, matching the Claude CLI.
+  if (submitted) {
+    const answered = Object.keys(submitted).length > 0;
+    return (
+      <div
+        className="w-full transition-all duration-300 ease-out"
+        data-slot="ask-user-question-resolved"
+      >
+        <div className="relative overflow-hidden rounded-2xl border border-emerald-200/70 bg-emerald-50/40 dark:border-emerald-800/40 dark:bg-emerald-900/15">
+          <div className="absolute left-0 right-0 top-0 h-[2px] bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400" />
+          <div className="px-4 py-3">
+            <div className="mb-1.5 flex items-center gap-2">
+              <svg className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.25}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+              <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-700/80 dark:text-emerald-400/80">
+                {answered ? 'Answer submitted' : 'Skipped'}
+              </span>
+            </div>
+            {answered && (
+              <div className="space-y-1.5 pl-6">
+                {questions.map((question) => {
+                  const answer = submitted[question.question];
+                  if (!answer) return null;
+                  return (
+                    <div key={question.question} className="text-[13px] leading-snug">
+                      <span className="text-gray-500 dark:text-gray-400">{question.question}</span>
+                      <span className="ml-1.5 font-medium text-gray-900 dark:text-gray-100">{answer}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const total = questions.length;
   const isSingle = total === 1;
