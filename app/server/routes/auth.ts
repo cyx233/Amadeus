@@ -1,8 +1,18 @@
-import express from 'express';
 import bcrypt from 'bcrypt';
-import { userDb } from '../modules/database/index.js';
+import express, { type Response } from 'express';
+
+import { getAuthUser } from '../shared/authed.js';
 import { getConnection } from '../modules/database/connection.js';
+import { userDb } from '../modules/database/index.js';
 import { generateToken, authenticateToken, AUTH_COOKIE_NAME } from '../middleware/auth.js';
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function errorCode(error: unknown): string | undefined {
+  return (error as { code?: string } | null)?.code;
+}
 
 // Multi-user gateway deployment: the auth entrypoint (used by scripts/user.sh)
 // accepts registrations for more than one account. Single-instance deployments
@@ -16,7 +26,7 @@ const ADMIN_TOKEN = process.env.AMADEUS_ADMIN_TOKEN || '';
 
 // Sets the gateway auth cookie so the nginx gateway can route by identity.
 // 7d matches the JWT lifetime; HttpOnly keeps it out of JS/XSS reach.
-function setAuthCookie(res, token) {
+function setAuthCookie(res: Response, token: string): void {
   res.cookie?.(AUTH_COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
@@ -89,7 +99,7 @@ router.post('/register', async (req, res) => {
       db.prepare('COMMIT').run();
 
       // Update last login (non-fatal, outside transaction)
-      userDb.updateLastLogin(user.id);
+      userDb.updateLastLogin(Number(user.id));
 
       setAuthCookie(res, token);
       res.json({
@@ -104,7 +114,7 @@ router.post('/register', async (req, res) => {
     
   } catch (error) {
     console.error('Registration error:', error);
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (errorCode(error) === 'SQLITE_CONSTRAINT_UNIQUE') {
       res.status(409).json({ error: 'Username already exists' });
     } else {
       res.status(500).json({ error: 'Internal server error' });
@@ -156,7 +166,7 @@ router.post('/login', async (req, res) => {
 // Get current user (protected route)
 router.get('/user', authenticateToken, (req, res) => {
   res.json({
-    user: req.user
+    user: getAuthUser(req)
   });
 });
 
@@ -175,7 +185,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
       });
     }
 
-    const account = userDb.getUserByUsername(req.user.username);
+    const account = userDb.getUserByUsername(getAuthUser(req).username);
     if (!account) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -199,7 +209,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
 // JWT from the amadeus_token cookie; on success we echo the username in a
 // response header so nginx can route the request to amadeus-<username>.
 router.get('/gateway-verify', authenticateToken, (req, res) => {
-  res.setHeader('X-Auth-User', req.user.username);
+  res.setHeader('X-Auth-User', getAuthUser(req).username);
   res.status(200).end();
 });
 
