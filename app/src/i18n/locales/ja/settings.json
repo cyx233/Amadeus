@@ -272,7 +272,6 @@
       "added": "追加日:",
       "confirmDelete": "このGitHubトークンを削除してもよろしいですか？"
     },
-    "apiDocsLink": "APIドキュメント",
     "documentation": {
       "title": "外部APIドキュメント",
       "description": "外部APIを使用してアプリケーションからClaude/Cursorセッションを起動する方法を学びます。",

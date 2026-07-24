@@ -272,7 +272,6 @@
       "added": "Добавлен:",
       "confirmDelete": "Вы уверены, что хотите удалить этот GitHub токен?"
     },
-    "apiDocsLink": "Документация API",
     "documentation": {
       "title": "Документация внешнего API",
       "description": "Узнайте, как использовать внешний API для запуска сеансов Claude/Cursor из ваших приложений.",

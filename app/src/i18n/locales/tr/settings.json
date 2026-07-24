@@ -273,7 +273,6 @@
       "added": "Eklendi:",
       "confirmDelete": "Bu GitHub token'ını silmek istediğinden emin misin?"
     },
-    "apiDocsLink": "API Dokümantasyonu",
     "documentation": {
       "title": "Harici API Dokümantasyonu",
       "description": "Uygulamalarından Claude/Cursor oturumları tetiklemek için harici API'nin nasıl kullanılacağını öğren.",

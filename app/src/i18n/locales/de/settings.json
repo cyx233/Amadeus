@@ -272,7 +272,6 @@
       "added": "Hinzugefügt:",
       "confirmDelete": "Möchtest du diesen GitHub-Token wirklich löschen?"
     },
-    "apiDocsLink": "API-Dokumentation",
     "documentation": {
       "title": "Externe API-Dokumentation",
       "description": "Erfahre, wie du die externe API nutzen kannst, um Claude/Cursor-Sitzungen aus deinen Anwendungen heraus zu starten.",
