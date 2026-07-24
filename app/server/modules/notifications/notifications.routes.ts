@@ -1,5 +1,7 @@
 import express from 'express';
 
+import { getAuthUser } from '@/shared/authed.js';
+import { AppError } from '@/shared/utils.js';
 import { notificationChannelEndpointsDb, notificationPreferencesDb } from '@/modules/database/index.js';
 
 const router = express.Router();
@@ -8,7 +10,9 @@ function readText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function sanitizeEndpoint(endpoint: any) {
+type NotificationEndpointRow = NonNullable<ReturnType<typeof notificationChannelEndpointsDb.getEndpoint>>;
+
+function sanitizeEndpoint(endpoint: NotificationEndpointRow) {
   return {
     id: endpoint.id,
     channel: endpoint.channel,
@@ -22,12 +26,25 @@ function sanitizeEndpoint(endpoint: any) {
   };
 }
 
+/**
+ * Same fail-closed guarantee as getAuthUser, narrowed to a positive integer
+ * id (the db layer's userId columns are all `number`, and endpoint ids are
+ * caller-controlled strings scoped by this id — a non-positive/non-integer
+ * value here must never silently resolve to "no user" instead of erroring).
+ */
 function readUserId(req: express.Request): number {
-  const userId = Number((req as any).user?.id);
+  const userId = Number(getAuthUser(req).id);
   if (!Number.isInteger(userId) || userId <= 0) {
-    throw new Error('Authenticated user is missing');
+    throw new AppError('Authenticated user is required', {
+      code: 'AUTHENTICATION_REQUIRED',
+      statusCode: 401,
+    });
   }
   return userId;
+}
+
+function resolveErrorStatus(error: unknown): number {
+  return error instanceof AppError ? error.statusCode : 500;
 }
 
 function updateChannelPreference(userId: number, channel: string): unknown {
@@ -53,7 +70,7 @@ router.get('/endpoints', (req, res) => {
     return res.json({ success: true, endpoints });
   } catch (error) {
     console.error('Error fetching notification endpoints:', error);
-    return res.status(500).json({ error: 'Failed to fetch notification endpoints' });
+    return res.status(resolveErrorStatus(error)).json({ error: 'Failed to fetch notification endpoints' });
   }
 });
 
@@ -80,7 +97,7 @@ router.post('/endpoints/current', (req, res) => {
     return res.json({ success: true, endpoint: sanitizeEndpoint(endpoint), preferences });
   } catch (error) {
     console.error('Error registering notification endpoint:', error);
-    return res.status(500).json({ error: 'Failed to register notification endpoint' });
+    return res.status(resolveErrorStatus(error)).json({ error: 'Failed to register notification endpoint' });
   }
 });
 
@@ -103,7 +120,7 @@ router.patch('/endpoints/:channel/:endpointId', (req, res) => {
     return res.json({ success: true, endpoint: endpoint ? sanitizeEndpoint(endpoint) : null, preferences });
   } catch (error) {
     console.error('Error updating notification endpoint:', error);
-    return res.status(500).json({ error: 'Failed to update notification endpoint' });
+    return res.status(resolveErrorStatus(error)).json({ error: 'Failed to update notification endpoint' });
   }
 });
 
@@ -120,7 +137,7 @@ router.delete('/endpoints/:channel/:endpointId', (req, res) => {
     return res.json({ success: true, preferences });
   } catch (error) {
     console.error('Error removing notification endpoint:', error);
-    return res.status(500).json({ error: 'Failed to remove notification endpoint' });
+    return res.status(resolveErrorStatus(error)).json({ error: 'Failed to remove notification endpoint' });
   }
 });
 
