@@ -2,6 +2,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 
 const __dirname = getModuleDir(import.meta.url);
@@ -22,7 +23,7 @@ try {
     }
   });
 } catch (e) {
-  console.error('No .env file found or error reading it:', e.message);
+  console.error('No .env file found or error reading it:', e instanceof Error ? e.message : String(e));
 }
 
 // Keep the default database in a stable user-level location so rebuilding dist-server
