@@ -6,6 +6,8 @@ dist-server/
 .desktop-build/
 .DS_Store
 *.local
+# Core dumps (e.g. from a crashed dev/test process)
+core.*
 .claude/
 .taskmaster/
 .mcp.json
