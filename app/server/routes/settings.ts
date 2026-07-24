@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request } from 'express';
 
 import {
   apiKeysDb,
@@ -12,6 +12,12 @@ import { syncGitCredentials } from '../utils/git-credentials.js';
 
 const router = express.Router();
 
+// The auth middleware attaches `user` to the request; Express's base Request
+// type doesn't know about it. Mirrors the cast used in the other TS routes
+// (projects.routes.ts, git.ts) — kept as one local helper here since every
+// handler needs the id.
+const userId = (req: Request): number => (req as Request & { user?: { id?: number } }).user?.id as number;
+
 // ===============================
 // API Keys Management
 // ===============================
@@ -19,7 +25,7 @@ const router = express.Router();
 // Get all API keys for the authenticated user
 router.get('/api-keys', async (req, res) => {
   try {
-    const apiKeys = apiKeysDb.getApiKeys(req.user.id);
+    const apiKeys = apiKeysDb.getApiKeys(userId(req));
     // Only the hash is stored, so we can't show the real key. Surface the saved
     // prefix (e.g. "ck_1234abcd") as a recognizable, non-sensitive hint.
     const sanitizedKeys = apiKeys.map(key => ({
@@ -42,7 +48,7 @@ router.post('/api-keys', async (req, res) => {
       return res.status(400).json({ error: 'Key name is required' });
     }
 
-    const result = apiKeysDb.createApiKey(req.user.id, keyName.trim());
+    const result = apiKeysDb.createApiKey(userId(req), keyName.trim());
     res.json({
       success: true,
       apiKey: result
@@ -57,7 +63,7 @@ router.post('/api-keys', async (req, res) => {
 router.delete('/api-keys/:keyId', async (req, res) => {
   try {
     const { keyId } = req.params;
-    const success = apiKeysDb.deleteApiKey(req.user.id, parseInt(keyId));
+    const success = apiKeysDb.deleteApiKey(userId(req), parseInt(keyId));
 
     if (success) {
       res.json({ success: true });
@@ -80,7 +86,7 @@ router.patch('/api-keys/:keyId/toggle', async (req, res) => {
       return res.status(400).json({ error: 'isActive must be a boolean' });
     }
 
-    const success = apiKeysDb.toggleApiKey(req.user.id, parseInt(keyId), isActive);
+    const success = apiKeysDb.toggleApiKey(userId(req), parseInt(keyId), isActive);
 
     if (success) {
       res.json({ success: true });
@@ -100,8 +106,8 @@ router.patch('/api-keys/:keyId/toggle', async (req, res) => {
 // Get all credentials for the authenticated user (optionally filtered by type)
 router.get('/credentials', async (req, res) => {
   try {
-    const { type } = req.query;
-    const credentials = credentialsDb.getCredentials(req.user.id, type || null);
+    const type = typeof req.query.type === 'string' ? req.query.type : null;
+    const credentials = credentialsDb.getCredentials(userId(req), type);
     // Don't send the actual credential values for security
     res.json({ credentials });
   } catch (error) {
@@ -128,7 +134,7 @@ router.post('/credentials', async (req, res) => {
     }
 
     const result = credentialsDb.createCredential(
-      req.user.id,
+      userId(req),
       credentialName.trim(),
       credentialType.trim(),
       credentialValue.trim(),
@@ -150,7 +156,7 @@ router.post('/credentials', async (req, res) => {
 router.delete('/credentials/:credentialId', async (req, res) => {
   try {
     const { credentialId } = req.params;
-    const success = credentialsDb.deleteCredential(req.user.id, parseInt(credentialId));
+    const success = credentialsDb.deleteCredential(userId(req), parseInt(credentialId));
 
     if (success) {
       res.json({ success: true });
@@ -174,7 +180,7 @@ router.patch('/credentials/:credentialId/toggle', async (req, res) => {
       return res.status(400).json({ error: 'isActive must be a boolean' });
     }
 
-    const success = credentialsDb.toggleCredential(req.user.id, parseInt(credentialId), isActive);
+    const success = credentialsDb.toggleCredential(userId(req), parseInt(credentialId), isActive);
 
     if (success) {
       res.json({ success: true });
@@ -194,7 +200,7 @@ router.patch('/credentials/:credentialId/toggle', async (req, res) => {
 
 router.get('/notification-preferences', async (req, res) => {
   try {
-    const preferences = notificationPreferencesDb.getPreferences(req.user.id);
+    const preferences = notificationPreferencesDb.getPreferences(userId(req));
     res.json({ success: true, preferences });
   } catch (error) {
     console.error('Error fetching notification preferences:', error);
@@ -204,7 +210,7 @@ router.get('/notification-preferences', async (req, res) => {
 
 router.put('/notification-preferences', async (req, res) => {
   try {
-    const preferences = notificationPreferencesDb.updatePreferences(req.user.id, req.body || {});
+    const preferences = notificationPreferencesDb.updatePreferences(userId(req), req.body || {});
     res.json({ success: true, preferences });
   } catch (error) {
     console.error('Error saving notification preferences:', error);
@@ -232,12 +238,12 @@ router.post('/push/subscribe', async (req, res) => {
     if (!endpoint || !keys?.p256dh || !keys?.auth) {
       return res.status(400).json({ error: 'Missing subscription fields' });
     }
-    pushSubscriptionsDb.saveSubscription(req.user.id, endpoint, keys.p256dh, keys.auth);
+    pushSubscriptionsDb.saveSubscription(userId(req), endpoint, keys.p256dh, keys.auth);
 
     // Enable webPush in preferences so the confirmation goes through the full pipeline
-    const currentPrefs = notificationPreferencesDb.getPreferences(req.user.id);
+    const currentPrefs = notificationPreferencesDb.getPreferences(userId(req));
     if (!currentPrefs?.channels?.webPush) {
-      notificationPreferencesDb.updatePreferences(req.user.id, {
+      notificationPreferencesDb.updatePreferences(userId(req), {
         ...currentPrefs,
         channels: { ...currentPrefs?.channels, webPush: true },
       });
@@ -253,7 +259,7 @@ router.post('/push/subscribe', async (req, res) => {
       meta: { message: 'Push notifications are now enabled!' },
       severity: 'info'
     });
-    notifyUserIfEnabled({ userId: req.user.id, event });
+    notifyUserIfEnabled({ userId: userId(req), event });
   } catch (error) {
     console.error('Error saving push subscription:', error);
     res.status(500).json({ error: 'Failed to save push subscription' });
@@ -269,9 +275,9 @@ router.post('/push/unsubscribe', async (req, res) => {
     pushSubscriptionsDb.removeSubscription(endpoint);
 
     // Disable webPush in preferences to match subscription state
-    const currentPrefs = notificationPreferencesDb.getPreferences(req.user.id);
+    const currentPrefs = notificationPreferencesDb.getPreferences(userId(req));
     if (currentPrefs?.channels?.webPush) {
-      notificationPreferencesDb.updatePreferences(req.user.id, {
+      notificationPreferencesDb.updatePreferences(userId(req), {
         ...currentPrefs,
         channels: { ...currentPrefs.channels, webPush: false },
       });
