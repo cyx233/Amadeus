@@ -15,7 +15,7 @@
  *
  * @param {WebSocket.Server} wss - WebSocket server instance
  * @param {string} projectId - DB id of the updated project
- * @param {Object} taskMasterData - Updated TaskMaster data
+ * @param {Object} [taskMasterData] - Updated TaskMaster data (optional; clients refetch on notify)
  */
 export function broadcastTaskMasterProjectUpdate(wss, projectId, taskMasterData) {
     if (!wss || !projectId) {
@@ -47,7 +47,7 @@ export function broadcastTaskMasterProjectUpdate(wss, projectId, taskMasterData)
  *
  * @param {WebSocket.Server} wss - WebSocket server instance
  * @param {string} projectId - DB id of the project with updated tasks
- * @param {Object} tasksData - Updated tasks data
+ * @param {Object} [tasksData] - Updated tasks data (optional; clients refetch on notify)
  */
 export function broadcastTaskMasterTasksUpdate(wss, projectId, tasksData) {
     if (!wss || !projectId) {

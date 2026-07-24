@@ -28,11 +28,12 @@ import { broadcastTaskMasterProjectUpdate, broadcastTaskMasterTasksUpdate } from
 // that global (not an env var), so it must be set in task-master's own runtime;
 // NODE_OPTIONS carries the `--import data:` across the npx -> node hop with no
 // preload file. Harmless for non-AI calls (which/--version) — they ignore it.
-function spawn(command, args, options = {}) {
+function spawn(command: string, args: string[], options: Record<string, unknown> = {}) {
   const preload = '--import data:text/javascript,globalThis.AI_SDK_LOG_WARNINGS=false';
+  const baseEnv = (options.env as NodeJS.ProcessEnv | undefined) ?? process.env;
   const env = {
-    ...(options.env ?? process.env),
-    NODE_OPTIONS: [(options.env ?? process.env).NODE_OPTIONS, preload].filter(Boolean).join(' '),
+    ...baseEnv,
+    NODE_OPTIONS: [baseEnv.NODE_OPTIONS, preload].filter(Boolean).join(' '),
   };
   return rawSpawn(command, args, { ...options, env });
 }
@@ -45,11 +46,22 @@ function spawn(command, args, options = {}) {
  * only identifier we accept is the primary key of the `projects` table, so
  * every handler calls this helper and 404s when the id is unknown.
  */
-async function resolveProjectPathFromId(projectId) {
+async function resolveProjectPathFromId(projectId: string): Promise<string | null> {
   if (!projectId) {
     return null;
   }
   return projectsDb.getProjectPathById(projectId);
+}
+
+/** Narrow an unknown catch binding to its message string. */
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+/** Narrow an unknown catch binding to its Node error code, if any. */
+function errorCode(error: unknown): string | undefined {
+  return (error as { code?: string } | null)?.code;
 }
 
 const router = express.Router();
@@ -58,39 +70,46 @@ const router = express.Router();
  * Check if TaskMaster CLI is installed globally
  * @returns {Promise<Object>} Installation status result
  */
-async function checkTaskMasterInstallation() {
-    return new Promise((resolve) => {
+type TaskMasterInstallation = {
+    isInstalled: boolean;
+    installPath: string | null;
+    version: string | null;
+    reason: string | null;
+};
+
+async function checkTaskMasterInstallation(): Promise<TaskMasterInstallation> {
+    return new Promise<TaskMasterInstallation>((resolve) => {
         // Check if task-master command is available
-        const child = spawn('which', ['task-master'], { 
+        const child = spawn('which', ['task-master'], {
             stdio: ['ignore', 'pipe', 'pipe'],
-            shell: true 
+            shell: true
         });
-        
+
         let output = '';
         let errorOutput = '';
-        
-        child.stdout.on('data', (data) => {
+
+        child.stdout?.on('data', (data) => {
             output += data.toString();
         });
-        
-        child.stderr.on('data', (data) => {
+
+        child.stderr?.on('data', (data) => {
             errorOutput += data.toString();
         });
-        
+
         child.on('close', (code) => {
             if (code === 0 && output.trim()) {
                 // TaskMaster is installed, get version
-                const versionChild = spawn('task-master', ['--version'], { 
+                const versionChild = spawn('task-master', ['--version'], {
                     stdio: ['ignore', 'pipe', 'pipe'],
-                    shell: true 
+                    shell: true
                 });
-                
+
                 let versionOutput = '';
-                
-                versionChild.stdout.on('data', (data) => {
+
+                versionChild.stdout?.on('data', (data) => {
                     versionOutput += data.toString();
                 });
-                
+
                 versionChild.on('close', (versionCode) => {
                     resolve({
                         isInstalled: true,
@@ -123,7 +142,7 @@ async function checkTaskMasterInstallation() {
                 isInstalled: false,
                 installPath: null,
                 version: null,
-                reason: `Error checking installation: ${error.message}`
+                reason: `Error checking installation: ${errorMessage(error)}`
             });
         });
     });
@@ -140,8 +159,8 @@ router.get('/installation-status', async (req, res) => {
         const installationStatus = await checkTaskMasterInstallation();
         
         // Also check for MCP server configuration
-        const mcpStatus = await detectTaskMasterMCPServer();
-        
+        const mcpStatus = await detectTaskMasterMCPServer() as { hasMCPServer?: boolean };
+
         res.json({
             success: true,
             installation: installationStatus,
@@ -155,11 +174,11 @@ router.get('/installation-status', async (req, res) => {
             error: 'Failed to check TaskMaster installation status',
             installation: {
                 isInstalled: false,
-                reason: `Server error: ${error.message}`
+                reason: `Server error: ${errorMessage(error)}`
             },
             mcpServer: {
                 hasMCPServer: false,
-                reason: `Server error: ${error.message}`
+                reason: `Server error: ${errorMessage(error)}`
             },
             isReady: false
         });
@@ -217,20 +236,23 @@ router.get('/tasks/:projectId', async (req, res) => {
                 ? req.query.tags.split(',').map(s => s.trim()).filter(Boolean)
                 : (requestedTag ? [requestedTag] : []);
 
-            let availableTags = [];
-            let selectedTags = [];
+            // tasksData is parsed from untrusted JSON on disk; treat task rows as
+            // loose records (TaskMaster owns the real schema).
+            type RawTask = Record<string, unknown>;
+            let availableTags: string[] = [];
+            let selectedTags: string[] = [];
             // Collected as {task, sourceTag} so we can stamp the source on merge.
-            let sourceTasks = [];
+            let sourceTasks: { task: RawTask; sourceTag: string }[] = [];
 
             // Handle both tagged and legacy formats
             if (Array.isArray(tasksData)) {
                 // Legacy format
                 selectedTags = ['master'];
-                sourceTasks = tasksData.map(task => ({ task, sourceTag: 'master' }));
+                sourceTasks = tasksData.map((task: RawTask) => ({ task, sourceTag: 'master' }));
             } else if (tasksData.tasks) {
                 // Simple format with tasks array
                 selectedTags = ['master'];
-                sourceTasks = tasksData.tasks.map(task => ({ task, sourceTag: 'master' }));
+                sourceTasks = tasksData.tasks.map((task: RawTask) => ({ task, sourceTag: 'master' }));
             } else {
                 // Tagged format: { <tag>: { tasks: [...] }, ... }
                 availableTags = Object.keys(tasksData).filter(key =>
@@ -244,7 +266,7 @@ router.get('/tasks/:projectId', async (req, res) => {
                 // Started") even though tasks exist under another tag.
                 selectedTags = requestedTags.filter(tagName => availableTags.includes(tagName));
                 if (selectedTags.length === 0) {
-                    const hasTasks = (tagName) => (tasksData[tagName]?.tasks?.length ?? 0) > 0;
+                    const hasTasks = (tagName: string) => (tasksData[tagName]?.tasks?.length ?? 0) > 0;
                     if (availableTags.includes('master') && hasTasks('master')) {
                         selectedTags = ['master'];
                     } else {
@@ -256,7 +278,7 @@ router.get('/tasks/:projectId', async (req, res) => {
                 }
 
                 sourceTasks = selectedTags.flatMap(tagName =>
-                    (tasksData[tagName]?.tasks ?? []).map(task => ({ task, sourceTag: tagName }))
+                    (tasksData[tagName]?.tasks ?? []).map((task: RawTask) => ({ task, sourceTag: tagName }))
                 );
             }
 
@@ -287,7 +309,7 @@ router.get('/tasks/:projectId', async (req, res) => {
                 try {
                     await mcpCallTool('use_tag', { name: selectedTags[0], projectRoot: projectPath });
                 } catch (syncError) {
-                    console.error('Failed to sync active tag for agent:', syncError.message);
+                    console.error('Failed to sync active tag for agent:', errorMessage(syncError));
                 }
             }
 
@@ -313,7 +335,7 @@ router.get('/tasks/:projectId', async (req, res) => {
             console.error('Failed to parse tasks.json:', parseError);
             return res.status(500).json({
                 error: 'Failed to parse tasks file',
-                message: parseError.message
+                message: errorMessage(parseError)
             });
         }
 
@@ -321,7 +343,7 @@ router.get('/tasks/:projectId', async (req, res) => {
         console.error('TaskMaster tasks loading error:', error);
         res.status(500).json({
             error: 'Failed to load TaskMaster tasks',
-            message: error.message
+            message: errorMessage(error)
         });
     }
 });
@@ -379,7 +401,7 @@ router.get('/prd/:projectId', async (req, res) => {
             res.json({
                 projectId,
                 projectPath,
-                prdFiles: prdFiles.sort((a, b) => new Date(b.modified) - new Date(a.modified)),
+                prdFiles: prdFiles.sort((a, b) => new Date(b.modified).getTime() - new Date(a.modified).getTime()),
                 timestamp: new Date().toISOString()
             });
 
@@ -387,7 +409,7 @@ router.get('/prd/:projectId', async (req, res) => {
             console.error('Error reading docs directory:', readError);
             return res.status(500).json({
                 error: 'Failed to read PRD files',
-                message: readError.message
+                message: errorMessage(readError)
             });
         }
 
@@ -395,7 +417,7 @@ router.get('/prd/:projectId', async (req, res) => {
         console.error('PRD list error:', error);
         res.status(500).json({
             error: 'Failed to list PRD files',
-            message: error.message
+            message: errorMessage(error)
         });
     }
 });
@@ -443,7 +465,7 @@ router.post('/prd/:projectId', async (req, res) => {
             console.error('Failed to create docs directory:', error);
             return res.status(500).json({
                 error: 'Failed to create directory',
-                message: error.message
+                message: errorMessage(error)
             });
         }
 
@@ -470,7 +492,7 @@ router.post('/prd/:projectId', async (req, res) => {
             console.error('Failed to write PRD file:', writeError);
             return res.status(500).json({
                 error: 'Failed to write PRD file',
-                message: writeError.message
+                message: errorMessage(writeError)
             });
         }
 
@@ -478,7 +500,7 @@ router.post('/prd/:projectId', async (req, res) => {
         console.error('PRD create/update error:', error);
         res.status(500).json({
             error: 'Failed to create/update PRD file',
-            message: error.message
+            message: errorMessage(error)
         });
     }
 });
@@ -532,7 +554,7 @@ router.get('/prd/:projectId/:fileName', async (req, res) => {
             console.error('Failed to read PRD file:', readError);
             return res.status(500).json({
                 error: 'Failed to read PRD file',
-                message: readError.message
+                message: errorMessage(readError)
             });
         }
 
@@ -540,7 +562,7 @@ router.get('/prd/:projectId/:fileName', async (req, res) => {
         console.error('PRD read error:', error);
         res.status(500).json({
             error: 'Failed to read PRD file',
-            message: error.message
+            message: errorMessage(error)
         });
     }
 });
@@ -571,7 +593,7 @@ router.delete('/prd/:projectId/:fileName', async (req, res) => {
         try {
             await fsPromises.unlink(filePath);
         } catch (unlinkError) {
-            if (unlinkError.code !== 'ENOENT') {
+            if (errorCode(unlinkError) !== 'ENOENT') {
                 throw unlinkError;
             }
             // File already gone — fall through so we still clean up the tag.
@@ -590,7 +612,7 @@ router.delete('/prd/:projectId/:fileName', async (req, res) => {
                     removedTag = true;
                 }
             } catch (tagError) {
-                if (tagError.code !== 'ENOENT') {
+                if (errorCode(tagError) !== 'ENOENT') {
                     console.error('Failed to remove tag from tasks.json:', tagError);
                 }
             }
@@ -610,7 +632,7 @@ router.delete('/prd/:projectId/:fileName', async (req, res) => {
         console.error('PRD delete error:', error);
         res.status(500).json({
             error: 'Failed to delete PRD file',
-            message: error.message
+            message: errorMessage(error)
         });
     }
 });
@@ -652,11 +674,11 @@ router.post('/init/:projectId', async (req, res) => {
         let stdout = '';
         let stderr = '';
 
-        initProcess.stdout.on('data', (data) => {
+        initProcess.stdout?.on('data', (data) => {
             stdout += data.toString();
         });
 
-        initProcess.stderr.on('data', (data) => {
+        initProcess.stderr?.on('data', (data) => {
             stderr += data.toString();
         });
 
@@ -691,14 +713,14 @@ router.post('/init/:projectId', async (req, res) => {
         });
 
         // Send 'yes' responses to automated prompts
-        initProcess.stdin.write('yes\n');
-        initProcess.stdin.end();
+        initProcess.stdin?.write('yes\n');
+        initProcess.stdin?.end();
 
     } catch (error) {
         console.error('TaskMaster init error:', error);
         res.status(500).json({
             error: 'Failed to initialize TaskMaster',
-            message: error.message
+            message: errorMessage(error)
         });
     }
 });
@@ -755,7 +777,7 @@ router.post('/add-task/:projectId', async (req, res) => {
         console.error('Add task error:', error);
         res.status(500).json({
             error: 'Failed to add task',
-            message: error.message
+            message: errorMessage(error)
         });
     }
 });
@@ -797,18 +819,18 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
         // remove individually via TaskMaster's structured dependency tools.
         if (Array.isArray(dependencies)) {
             const tasksFilePath = path.join(projectPath, '.taskmaster', 'tasks', 'tasks.json');
-            let currentDeps = [];
+            let currentDeps: string[] = [];
             try {
                 const data = JSON.parse(await fsPromises.readFile(tasksFilePath, 'utf8'));
                 const tagKey = tag || 'master';
-                const list = data[tagKey]?.tasks ?? data.tasks ?? [];
+                const list: Array<{ id?: unknown; dependencies?: unknown }> = data[tagKey]?.tasks ?? data.tasks ?? [];
                 const found = list.find((tk) => String(tk.id) === String(taskId));
                 currentDeps = Array.isArray(found?.dependencies) ? found.dependencies.map(String) : [];
             } catch (readError) {
                 console.error('Failed to read current dependencies:', readError);
             }
             const wanted = dependencies.map(String);
-            const toAdd = wanted.filter((d) => !currentDeps.includes(d));
+            const toAdd = wanted.filter((d: string) => !currentDeps.includes(d));
             const toRemove = currentDeps.filter((d) => !wanted.includes(d));
             for (const dep of toAdd) {
                 await mcpCallTool('add_dependency', { id: String(taskId), dependsOn: dep, projectRoot: projectPath, ...tagArg });
@@ -845,7 +867,7 @@ router.put('/update-task/:projectId/:taskId', async (req, res) => {
         console.error('Update task error:', error);
         res.status(500).json({
             error: 'Failed to update task',
-            message: error.message
+            message: errorMessage(error)
         });
     }
 });
@@ -877,7 +899,7 @@ router.delete('/task/:projectId/:taskId', async (req, res) => {
         res.json({ projectId, taskId, message: 'Task removed successfully', timestamp: new Date().toISOString() });
     } catch (error) {
         console.error('Remove task error:', error);
-        res.status(500).json({ error: 'Failed to remove task', message: error.message });
+        res.status(500).json({ error: 'Failed to remove task', message: errorMessage(error) });
     }
 });
 
@@ -944,11 +966,11 @@ router.post('/parse-prd/:projectId', async (req, res) => {
         let stdout = '';
         let stderr = '';
 
-        parsePRDProcess.stdout.on('data', (data) => {
+        parsePRDProcess.stdout?.on('data', (data) => {
             stdout += data.toString();
         });
 
-        parsePRDProcess.stderr.on('data', (data) => {
+        parsePRDProcess.stderr?.on('data', (data) => {
             stderr += data.toString();
         });
 
@@ -980,13 +1002,13 @@ router.post('/parse-prd/:projectId', async (req, res) => {
             }
         });
 
-        parsePRDProcess.stdin.end();
+        parsePRDProcess.stdin?.end();
 
     } catch (error) {
         console.error('Parse PRD error:', error);
         res.status(500).json({
             error: 'Failed to parse PRD',
-            message: error.message
+            message: errorMessage(error)
         });
     }
 });
@@ -1005,13 +1027,13 @@ router.get('/parse-prd-progress/:projectId', async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders?.();
 
-    const sendEvent = (type, data) => {
+    const sendEvent = (type: string, data: Record<string, unknown>) => {
         if (!res.writableEnded) {
             res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
         }
     };
 
-    let child = null;
+    let child: ReturnType<typeof spawn> | null = null;
     req.on('close', () => { child?.kill(); });
 
     try {
@@ -1058,7 +1080,7 @@ router.get('/parse-prd-progress/:projectId', async (req, res) => {
         child = spawn('npx', args, { cwd: projectPath, stdio: ['ignore', 'pipe', 'pipe'] });
         let tail = '';
 
-        const streamLines = (buf) => {
+        const streamLines = (buf: Buffer) => {
             const text = buf.toString();
             tail += text;
             // Emit on newlines; strip ANSI so the UI shows clean lines.
@@ -1069,8 +1091,8 @@ router.get('/parse-prd-progress/:projectId', async (req, res) => {
                 if (line) sendEvent('progress', { message: line });
             }
         };
-        child.stdout.on('data', streamLines);
-        child.stderr.on('data', streamLines);
+        child.stdout?.on('data', streamLines);
+        child.stderr?.on('data', streamLines);
 
         child.on('close', (code) => {
             if (code === 0) {
@@ -1085,12 +1107,12 @@ router.get('/parse-prd-progress/:projectId', async (req, res) => {
         });
 
         child.on('error', (err) => {
-            sendEvent('error', { message: err.message });
+            sendEvent('error', { message: errorMessage(err) });
             res.end();
         });
     } catch (error) {
         console.error('Parse PRD (SSE) error:', error);
-        sendEvent('error', { message: error instanceof Error ? error.message : 'Failed to parse PRD' });
+        sendEvent('error', { message: error instanceof Error ? errorMessage(error) : 'Failed to parse PRD' });
         res.end();
     }
 });
@@ -1536,7 +1558,7 @@ Description of the business problem, data sources, and expected insights.
         console.error('PRD templates error:', error);
         res.status(500).json({
             error: 'Failed to get PRD templates',
-            message: error.message
+            message: errorMessage(error)
         });
     }
 });
@@ -1582,7 +1604,7 @@ router.post('/apply-template/:projectId', async (req, res) => {
         // Replace placeholders with customizations
         for (const [key, value] of Object.entries(customizations)) {
             const placeholder = `[${key}]`;
-            content = content.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'), 'g'), value);
+            content = content.replace(new RegExp(placeholder.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'), 'g'), String(value));
         }
 
         // Ensure .taskmaster/docs directory exists
@@ -1614,7 +1636,7 @@ router.post('/apply-template/:projectId', async (req, res) => {
             console.error('Failed to write PRD template:', writeError);
             return res.status(500).json({
                 error: 'Failed to write PRD template',
-                message: writeError.message
+                message: errorMessage(writeError)
             });
         }
 
@@ -1622,7 +1644,7 @@ router.post('/apply-template/:projectId', async (req, res) => {
         console.error('Apply template error:', error);
         res.status(500).json({
             error: 'Failed to apply PRD template',
-            message: error.message
+            message: errorMessage(error)
         });
     }
 });
