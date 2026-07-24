@@ -162,14 +162,14 @@ export default tseslint.config(
             "server/shared/frontmatter.ts",
             "server/shared/claude-cli-path.ts",
             "server/shared/image-attachments.ts",
-            "server/shared/runtime-effort.js",
+            "server/shared/runtime-effort.ts",
             "server/shared/secret-crypto.ts",
             "server/shared/authed.ts",
             // Shared runtime helpers used by the legacy agent runtimes (e.g.
-            // claude-sdk.js) — not tied to any one provider module.
-            "server/services/notification-orchestrator.js",
-            "server/utils/todo-mcp.js",
-            "server/utils/todo-store.js",
+            // claude-sdk.ts) — not tied to any one provider module.
+            "server/services/notification-orchestrator.ts",
+            "server/utils/todo-mcp.ts",
+            "server/utils/todo-store.ts",
           ], // classify shared utility files so modules can depend on them explicitly
           mode: "file",
         },
@@ -177,14 +177,14 @@ export default tseslint.config(
           type: "backend-legacy-runtime", // legacy runtime persistence modules used while providers migrate into server/modules
           pattern: [
             "server/projects.js",
-            "server/utils/runtime-paths.js",
+            "server/utils/runtime-paths.ts",
             // Agent runtime entry points (one per provider). Still top-level
             // server files while providers migrate into server/modules; the
             // provider text-generation service dispatches to them.
-            "server/claude-sdk.js",
-            "server/cursor-cli.js",
-            "server/openai-codex.js",
-            "server/opencode-cli.js",
+            "server/claude-sdk.ts",
+            "server/cursor-cli.ts",
+            "server/openai-codex.ts",
+            "server/opencode-cli.ts",
           ],
           mode: "file",
         },
