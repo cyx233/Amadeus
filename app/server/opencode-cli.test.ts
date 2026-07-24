@@ -6,10 +6,10 @@ import test from 'node:test';
 
 import { resolveOpenCodePermissionOptions, spawnOpenCode } from './opencode-cli.js';
 
-const findEnvKey = (name) =>
+const findEnvKey = (name: string): string =>
   Object.keys(process.env).find((key) => key.toLowerCase() === name.toLowerCase()) || name;
 
-async function createFakeOpenCodeExecutable(binDir) {
+async function createFakeOpenCodeExecutable(binDir: string): Promise<void> {
   const scriptPath = path.join(binDir, 'opencode.js');
   await writeFile(scriptPath, `
 const capturePath = process.env.OPENCODE_ARGS_CAPTURE;
@@ -49,14 +49,14 @@ test('spawnOpenCode emits session_created before normalized live messages for ne
   const previousPath = process.env[pathKey];
   const previousPathExt = process.env[pathExtKey];
   const previousArgsCapture = process.env.OPENCODE_ARGS_CAPTURE;
-  const messages = [];
+  const messages: Array<Record<string, unknown>> = [];
   const writer = {
-    userId: null,
-    sessionId: null,
-    send(message) {
+    userId: null as string | number | null,
+    sessionId: null as string | null,
+    send(message: Record<string, unknown>) {
       messages.push(message);
     },
-    setSessionId(sessionId) {
+    setSessionId(sessionId: string) {
       this.sessionId = sessionId;
     },
   };
@@ -147,10 +147,10 @@ test('spawnOpenCode passes permission mode flags and env to the CLI', async () =
   const previousPathExt = process.env[pathExtKey];
   const previousArgsCapture = process.env.OPENCODE_ARGS_CAPTURE;
   const writer = {
-    userId: null,
-    sessionId: null,
+    userId: null as string | number | null,
+    sessionId: null as string | null,
     send() {},
-    setSessionId(sessionId) {
+    setSessionId(sessionId: string) {
       this.sessionId = sessionId;
     },
   };

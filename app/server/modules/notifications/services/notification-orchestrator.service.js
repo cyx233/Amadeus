@@ -246,6 +246,9 @@ function notifyUserIfEnabled({ userId, event }) {
   }
 }
 
+/**
+ * @param {{ userId: number|string|null, provider: string, sessionId?: string|null, stopReason?: string, sessionName?: string|null }} args
+ */
 function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed', sessionName = null }) {
   notifyUserIfEnabled({
     userId,
@@ -261,6 +264,9 @@ function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'co
   });
 }
 
+/**
+ * @param {{ userId: number|string|null, provider: string, sessionId?: string|null, error?: unknown, sessionName?: string|null }} args
+ */
 function notifyRunFailed({ userId, provider, sessionId = null, error, sessionName = null }) {
   const errorMessage = normalizeErrorMessage(error);
 

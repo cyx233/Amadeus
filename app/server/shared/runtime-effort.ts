@@ -11,7 +11,7 @@ type RuntimeEffortModelsDefinition = {
  * 'default' sentinel. Returns undefined ("let the provider decide") otherwise.
  */
 export function resolveRuntimeEffort(
-  model: string,
+  model: string | undefined,
   effort: unknown,
   modelsDefinition: RuntimeEffortModelsDefinition | undefined,
 ): string | undefined {
