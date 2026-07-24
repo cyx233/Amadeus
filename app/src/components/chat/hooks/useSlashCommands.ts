@@ -3,6 +3,7 @@ import type { Dispatch, KeyboardEvent, RefObject, SetStateAction } from 'react';
 
 import { authenticatedFetch } from '../../../utils/api';
 import { safeLocalStorage } from '../utils/chatStorage';
+import type { CommandListResponse } from '../../../../shared/command-types';
 import type { LLMProvider, Project } from '../../../types/app';
 
 const COMMAND_QUERY_DEBOUNCE_MS = 150;
@@ -193,7 +194,7 @@ export function useSlashCommands({
           throw new Error('Failed to fetch commands');
         }
 
-        const data = await response.json();
+        const data = (await response.json()) as CommandListResponse;
         const skillsParams = new URLSearchParams();
         if (workspacePath) {
           skillsParams.set('workspacePath', workspacePath);
@@ -208,12 +209,12 @@ export function useSlashCommands({
         const skillCommands = dedupeProviderSkills(skillsData?.data?.skills || [])
           .map(mapSkillToSlashCommand);
         const allCommands: SlashCommand[] = [
-          ...((data.builtIn || []) as SlashCommand[]).map((command) => ({
+          ...(data.builtIn || []).map((command) => ({
             ...command,
             type: 'built-in',
           })),
           ...skillCommands,
-          ...((data.custom || []) as SlashCommand[]).map((command) => ({
+          ...(data.custom || []).map((command) => ({
             ...command,
             type: 'custom',
           })),
