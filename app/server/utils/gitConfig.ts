@@ -1,11 +1,11 @@
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import spawn from 'cross-spawn';
 
-function spawnAsync(command, args) {
+function spawnAsync(command: string, args: string[]): Promise<{ stdout: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { shell: false });
     let stdout = '';
-    child.stdout.on('data', (data) => { stdout += data.toString(); });
+    child.stdout?.on('data', (data) => { stdout += data.toString(); });
     child.on('error', (error) => { reject(error); });
     child.on('close', (code) => {
       if (code === 0) { resolve({ stdout }); return; }
@@ -14,11 +14,8 @@ function spawnAsync(command, args) {
   });
 }
 
-/**
- * Read git configuration from system's global git config
- * @returns {Promise<{git_name: string|null, git_email: string|null}>}
- */
-export async function getSystemGitConfig() {
+/** Read git configuration from the system's global git config. */
+export async function getSystemGitConfig(): Promise<{ git_name: string | null; git_email: string | null }> {
   try {
     const [nameResult, emailResult] = await Promise.all([
       spawnAsync('git', ['config', '--global', 'user.name']).catch(() => ({ stdout: '' })),
@@ -29,7 +26,7 @@ export async function getSystemGitConfig() {
       git_name: nameResult.stdout.trim() || null,
       git_email: emailResult.stdout.trim() || null
     };
-  } catch (error) {
+  } catch {
     return { git_name: null, git_email: null };
   }
 }
