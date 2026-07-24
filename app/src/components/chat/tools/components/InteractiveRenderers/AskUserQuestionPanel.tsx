@@ -1,6 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import type { PermissionPanelProps } from '../../configs/permissionPanelRegistry';
-import type { Question } from '../../../types/types';
+import type { PendingPermissionRequest, Question } from '../../../types/types';
+
+type PermissionPanelProps = {
+  request: PendingPermissionRequest;
+  onDecision: (
+    requestIds: string | string[],
+    decision: { allow?: boolean; message?: string; updatedInput?: unknown },
+  ) => void;
+};
 
 export const AskUserQuestionPanel: React.FC<PermissionPanelProps> = ({
   request,
