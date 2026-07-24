@@ -3,19 +3,15 @@ import { IS_PLATFORM } from "../constants/config";
 // Only accept a refreshed token that has this app's issued JWT shape
 // (three base64url segments). An attacker-injected/malformed header value
 // must never overwrite the stored auth token.
-/**
- * @param {unknown} token
- * @returns {token is string}
- */
-export const isValidRefreshedToken = (token) =>
+export const isValidRefreshedToken = (token: unknown): token is string =>
   typeof token === 'string' &&
   /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
 
 // Utility function for authenticated API calls
-export const authenticatedFetch = (url, options = {}) => {
+export const authenticatedFetch = (url: string, options: RequestInit = {}): Promise<Response> => {
   const token = localStorage.getItem('auth-token');
 
-  const defaultHeaders = {};
+  const defaultHeaders: Record<string, string> = {};
 
   // Only set Content-Type for non-FormData requests
   if (!(options.body instanceof FormData)) {
@@ -46,12 +42,12 @@ export const api = {
   // Auth endpoints (no token required)
   auth: {
     status: () => fetch('/api/auth/status'),
-    login: (username, password) => fetch('/api/auth/login', {
+    login: (username: string, password: string) => fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     }),
-    register: (username, password) => fetch('/api/auth/register', {
+    register: (username: string, password: string) => fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -66,17 +62,17 @@ export const api = {
   // the DB-assigned `projectId`; parameter names reflect that for clarity.
   projects: () => authenticatedFetch('/api/projects'),
   archivedProjects: () => authenticatedFetch('/api/projects/archived'),
-  projectSessions: (projectId, { limit = 20, offset = 0 } = {}) => {
+  projectSessions: (projectId: string, { limit = 20, offset = 0 }: { limit?: number; offset?: number } = {}) => {
     const params = new URLSearchParams();
     params.set('limit', String(limit));
     params.set('offset', String(offset));
     return authenticatedFetch(`/api/projects/${encodeURIComponent(projectId)}/sessions?${params.toString()}`);
   },
-  projectTaskmaster: (projectId) =>
+  projectTaskmaster: (projectId: string) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectId)}/taskmaster`),
   // Unified endpoint for persisted session messages.
   // Provider/project metadata are resolved by the backend from sessionId.
-  unifiedSessionMessages: (sessionId, _provider = 'claude', { limit = null, offset = 0 } = {}) => {
+  unifiedSessionMessages: (sessionId: string, _provider = 'claude', { limit = null, offset = 0 }: { limit?: number | null; offset?: number } = {}) => {
     const params = new URLSearchParams();
     if (limit !== null) {
       params.append('limit', String(limit));
@@ -85,19 +81,19 @@ export const api = {
     const queryString = params.toString();
     return authenticatedFetch(`/api/providers/sessions/${encodeURIComponent(sessionId)}/messages${queryString ? `?${queryString}` : ''}`);
   },
-  renameProject: (projectId, displayName) =>
+  renameProject: (projectId: string, displayName: string) =>
     authenticatedFetch(`/api/projects/${projectId}/rename`, {
       method: 'PUT',
       body: JSON.stringify({ displayName }),
     }),
-  restoreProject: (projectId) =>
+  restoreProject: (projectId: string) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectId)}/restore`, {
       method: 'POST',
     }),
   // Session deletion now mirrors project deletion:
   // - default: archive only (`isArchived = 1`)
   // - hardDelete: remove the row and, by default, its persisted transcript file
-  deleteSession: (sessionId, hardDelete = false) => {
+  deleteSession: (sessionId: string, hardDelete = false) => {
     const params = new URLSearchParams();
     if (hardDelete) {
       params.set('force', 'true');
@@ -111,17 +107,17 @@ export const api = {
     authenticatedFetch('/api/providers/sessions/archived'),
   runningSessions: () =>
     authenticatedFetch('/api/providers/sessions/running'),
-  restoreSession: (sessionId) =>
+  restoreSession: (sessionId: string) =>
     authenticatedFetch(`/api/providers/sessions/${sessionId}/restore`, {
       method: 'POST',
     }),
-  renameSession: (sessionId, summary) =>
+  renameSession: (sessionId: string, summary: string) =>
     authenticatedFetch(`/api/providers/sessions/${sessionId}`, {
       method: 'PUT',
       body: JSON.stringify({ summary }),
     }),
   // `hardDelete` => server `?force=true` (remove DB row + Claude *.jsonl + sessions rows for path).
-  deleteProject: (projectId, hardDelete = false) => {
+  deleteProject: (projectId: string, hardDelete = false) => {
     const params = new URLSearchParams();
     if (hardDelete) params.set('force', 'true');
     const qs = params.toString();
@@ -131,71 +127,71 @@ export const api = {
   },
   // Browser-navigable download URL (token in query, since <a>/window.open can't
   // set an auth header) — used to export a project as .tar.gz before deleting.
-  downloadProjectUrl: (projectId) => {
+  downloadProjectUrl: (projectId: string) => {
     const token = localStorage.getItem('auth-token');
     const params = new URLSearchParams();
     if (token) params.set('token', token);
     const qs = params.toString();
     return `/api/projects/${encodeURIComponent(projectId)}/download${qs ? `?${qs}` : ''}`;
   },
-  searchConversationsUrl: (query, limit = 50) => {
+  searchConversationsUrl: (query: string, limit = 50) => {
     const token = localStorage.getItem('auth-token');
     const params = new URLSearchParams({ q: query, limit: String(limit) });
     if (token) params.set('token', token);
     return `/api/providers/search/sessions?${params.toString()}`;
   },
-  createProject: (projectData) =>
+  createProject: (projectData: unknown) =>
     authenticatedFetch('/api/projects/create-project', {
       method: 'POST',
       body: JSON.stringify(projectData),
     }),
-  migrateLegacyProjectStars: (projectIds) =>
+  migrateLegacyProjectStars: (projectIds: string[]) =>
     authenticatedFetch('/api/projects/migrate-legacy-stars', {
       method: 'POST',
       body: JSON.stringify({ projectIds }),
     }),
-  toggleProjectStar: (projectId) =>
+  toggleProjectStar: (projectId: string) =>
     authenticatedFetch(`/api/projects/${encodeURIComponent(projectId)}/toggle-star`, {
       method: 'POST',
     }),
-  readFile: (projectId, filePath) =>
+  readFile: (projectId: string, filePath: string) =>
     authenticatedFetch(`/api/projects/${projectId}/file?filePath=${encodeURIComponent(filePath)}`),
-  readFileBlob: (projectId, filePath) =>
+  readFileBlob: (projectId: string, filePath: string) =>
     authenticatedFetch(`/api/projects/${projectId}/files/content?path=${encodeURIComponent(filePath)}`),
-  downloadFolder: (projectId, folderPath) =>
+  downloadFolder: (projectId: string, folderPath: string) =>
     authenticatedFetch(`/api/projects/${projectId}/files/download-folder?path=${encodeURIComponent(folderPath)}`),
-  searchProject: (projectId, query, scopePath = '') =>
+  searchProject: (projectId: string, query: string, scopePath = '') =>
     authenticatedFetch(`/api/projects/${projectId}/search?q=${encodeURIComponent(query)}${scopePath ? `&path=${encodeURIComponent(scopePath)}` : ''}`),
-  saveFile: (projectId, filePath, content) =>
+  saveFile: (projectId: string, filePath: string, content: string) =>
     authenticatedFetch(`/api/projects/${projectId}/file`, {
       method: 'PUT',
       body: JSON.stringify({ filePath, content }),
     }),
-  getFiles: (projectId, options = {}) =>
+  getFiles: (projectId: string, options: RequestInit = {}) =>
     authenticatedFetch(`/api/projects/${projectId}/files`, options),
-  getDirChildren: (projectId, dirPath) =>
+  getDirChildren: (projectId: string, dirPath: string) =>
     authenticatedFetch(`/api/projects/${projectId}/files?path=${encodeURIComponent(dirPath)}`),
 
   // File operations
-  createFile: (projectId, { path, type, name }) =>
+  createFile: (projectId: string, { path, type, name }: { path: string; type: string; name: string }) =>
     authenticatedFetch(`/api/projects/${projectId}/files/create`, {
       method: 'POST',
       body: JSON.stringify({ path, type, name }),
     }),
 
-  renameFile: (projectId, { oldPath, newName }) =>
+  renameFile: (projectId: string, { oldPath, newName }: { oldPath: string; newName: string }) =>
     authenticatedFetch(`/api/projects/${projectId}/files/rename`, {
       method: 'PUT',
       body: JSON.stringify({ oldPath, newName }),
     }),
 
-  deleteFile: (projectId, { path, type }) =>
+  deleteFile: (projectId: string, { path, type }: { path: string; type: string }) =>
     authenticatedFetch(`/api/projects/${projectId}/files`, {
       method: 'DELETE',
       body: JSON.stringify({ path, type }),
     }),
 
-  uploadFiles: (projectId, formData) =>
+  uploadFiles: (projectId: string, formData: FormData) =>
     authenticatedFetch(`/api/projects/${projectId}/files/upload`, {
       method: 'POST',
       body: formData,
@@ -205,13 +201,13 @@ export const api = {
   // TaskMaster endpoints — all addressed by DB projectId post-migration.
   taskmaster: {
     // Initialize TaskMaster in a project
-    init: (projectId) =>
+    init: (projectId: string) =>
       authenticatedFetch(`/api/taskmaster/init/${projectId}`, {
         method: 'POST',
       }),
 
     // Add a new task. `tag` targets a per-PRD task set; omit for the default set.
-    addTask: (projectId, { prompt, title, description, priority, dependencies, tag }) =>
+    addTask: (projectId: string, { prompt, title, description, priority, dependencies, tag }: { prompt?: string; title?: string; description?: string; priority?: string; dependencies?: string; tag?: string }) =>
       authenticatedFetch(`/api/taskmaster/add-task/${projectId}`, {
         method: 'POST',
         body: JSON.stringify({ prompt, title, description, priority, dependencies, tag }),
@@ -219,7 +215,7 @@ export const api = {
 
     // Parse PRD to generate tasks. `tag` scopes the generated tasks to a
     // per-PRD task set (see prdNameToTag); omit for the default (master) set.
-    parsePRD: (projectId, { fileName, numTasks, append, tag }) =>
+    parsePRD: (projectId: string, { fileName, numTasks, append, tag }: { fileName?: string; numTasks?: number; append?: boolean; tag?: string }) =>
       authenticatedFetch(`/api/taskmaster/parse-prd/${projectId}`, {
         method: 'POST',
         body: JSON.stringify({ fileName, numTasks, append, tag }),
@@ -231,7 +227,7 @@ export const api = {
     // handles onProgress/onComplete/onError. token in query (EventSource can't
     // set headers). `append` adds to the tag; otherwise the server force-writes
     // (skips the interactive overwrite prompt) — scoped to this tag only.
-    parsePRDProgress: (projectId, { fileName, numTasks, tag, append } = {}) => {
+    parsePRDProgress: (projectId: string, { fileName, numTasks, tag, append }: { fileName?: string; numTasks?: number; tag?: string; append?: boolean } = {}) => {
       const token = localStorage.getItem('auth-token');
       const params = new URLSearchParams();
       if (fileName) params.set('fileName', fileName);
@@ -246,7 +242,7 @@ export const api = {
 
     // Delete a PRD file and drop its generated task set (`tag`). master is never
     // removed server-side even if passed.
-    deletePRD: (projectId, fileName, tag) => {
+    deletePRD: (projectId: string, fileName: string, tag?: string) => {
       const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
       return authenticatedFetch(
         `/api/taskmaster/prd/${encodeURIComponent(projectId)}/${encodeURIComponent(fileName)}${qs}`,
@@ -259,21 +255,21 @@ export const api = {
       authenticatedFetch('/api/taskmaster/prd-templates'),
 
     // Apply a PRD template
-    applyTemplate: (projectId, { templateId, fileName, customizations }) =>
+    applyTemplate: (projectId: string, { templateId, fileName, customizations }: { templateId?: string; fileName?: string; customizations?: unknown }) =>
       authenticatedFetch(`/api/taskmaster/apply-template/${projectId}`, {
         method: 'POST',
         body: JSON.stringify({ templateId, fileName, customizations }),
       }),
 
     // Update a task
-    updateTask: (projectId, taskId, updates) =>
+    updateTask: (projectId: string, taskId: string | number, updates: unknown) =>
       authenticatedFetch(`/api/taskmaster/update-task/${projectId}/${taskId}`, {
         method: 'PUT',
         body: JSON.stringify(updates),
       }),
 
     // Remove a task (or subtask). tag targets the task's own PRD set.
-    removeTask: (projectId, taskId, tag) => {
+    removeTask: (projectId: string, taskId: string | number, tag?: string) => {
       const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
       return authenticatedFetch(
         `/api/taskmaster/task/${encodeURIComponent(projectId)}/${encodeURIComponent(taskId)}${qs}`,
@@ -286,7 +282,7 @@ export const api = {
   // User endpoints
   user: {
     gitConfig: () => authenticatedFetch('/api/user/git-config'),
-    updateGitConfig: (gitName, gitEmail) =>
+    updateGitConfig: (gitName: string, gitEmail: string) =>
       authenticatedFetch('/api/user/git-config', {
         method: 'POST',
         body: JSON.stringify({ gitName, gitEmail }),
@@ -301,8 +297,7 @@ export const api = {
     getModels: (refresh = false) => authenticatedFetch(`/api/user/models${refresh ? '?refresh=1' : ''}`),
     // Single resolver: "what model should this feature/session use?" (session
     // model wins → preference default). Mirrors the backend resolveModel.
-    /** @param {{ feature?: string, provider?: string, sessionId?: string }} [opts] */
-    effectiveModel: (opts = {}) => {
+    effectiveModel: (opts: { feature?: string; provider?: string; sessionId?: string } = {}) => {
       const qs = new URLSearchParams({ feature: opts.feature || 'chat' });
       if (opts.provider) qs.set('provider', opts.provider);
       if (opts.sessionId) qs.set('sessionId', opts.sessionId);
@@ -310,14 +305,14 @@ export const api = {
     },
     // body is one of: {globalProvider} | {provider, model} | {feature, provider}
     // | {feature, provider, model}
-    updateModel: (body) =>
+    updateModel: (body: unknown) =>
       authenticatedFetch('/api/user/models', {
         method: 'PUT',
         body: JSON.stringify(body),
       }),
     // Routed to /api/auth (the auth-gateway) — it owns the shared user DB; the
     // per-user backend containers don't hold credentials.
-    changePassword: (currentPassword, newPassword) =>
+    changePassword: (currentPassword: string, newPassword: string) =>
       authenticatedFetch('/api/auth/change-password', {
         method: 'POST',
         body: JSON.stringify({ currentPassword, newPassword }),
@@ -325,22 +320,22 @@ export const api = {
   },
 
   // Generic GET method for any endpoint
-  get: (endpoint) => authenticatedFetch(`/api${endpoint}`),
+  get: (endpoint: string) => authenticatedFetch(`/api${endpoint}`),
 
   // Generic POST method for any endpoint
-  post: (endpoint, body) => authenticatedFetch(`/api${endpoint}`, {
+  post: (endpoint: string, body?: unknown) => authenticatedFetch(`/api${endpoint}`, {
     method: 'POST',
     ...(body instanceof FormData ? { body } : { body: JSON.stringify(body) }),
   }),
 
   // Generic PUT method for any endpoint
-  put: (endpoint, body) => authenticatedFetch(`/api${endpoint}`, {
+  put: (endpoint: string, body?: unknown) => authenticatedFetch(`/api${endpoint}`, {
     method: 'PUT',
     body: JSON.stringify(body),
   }),
 
   // Generic DELETE method for any endpoint
-  delete: (endpoint, options = {}) => authenticatedFetch(`/api${endpoint}`, {
+  delete: (endpoint: string, options: RequestInit = {}) => authenticatedFetch(`/api${endpoint}`, {
     method: 'DELETE',
     ...options,
   }),

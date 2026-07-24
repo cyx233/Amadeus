@@ -11,7 +11,6 @@
 
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-// eslint-disable-next-line import-x/order
 import LanguageDetector from 'i18next-browser-languagedetector';
 
 // Import translation resources
@@ -73,7 +72,6 @@ import trAuth from './locales/tr/auth.json';
 import trSidebar from './locales/tr/sidebar.json';
 import trChat from './locales/tr/chat.json';
 import trCodeEditor from './locales/tr/codeEditor.json';
-// eslint-disable-next-line import-x/order
 import trTasks from './locales/tr/tasks.json';
 import itCommon from './locales/it/common.json';
 import itSettings from './locales/it/settings.json';
@@ -94,14 +92,14 @@ import zhTWCodeEditor from './locales/zh-TW/codeEditor.json';
 import zhTWTasks from './locales/zh-TW/tasks.json';
 
 // Import supported languages configuration
-import { languages } from './languages.js';
+import { languages } from './languages';
 
 // Get saved language preference from localStorage
 const getSavedLanguage = () => {
   try {
     const saved = localStorage.getItem('userLanguage');
     // Validate that the saved language is supported
-    if (saved && languages.some(lang => lang.value === saved)) {
+    if (saved && languages.some((lang) => lang.value === saved)) {
       return saved;
     }
     return 'en';
@@ -246,7 +244,7 @@ i18n
   });
 
 // Save language preference when it changes
-i18n.on('languageChanged', (lng) => {
+i18n.on('languageChanged', (lng: string) => {
   try {
     localStorage.setItem('userLanguage', lng);
   } catch (error) {
