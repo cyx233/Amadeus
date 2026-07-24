@@ -69,6 +69,8 @@ RUN chmod +x /opt/entrypoint.sh
 USER agent
 
 WORKDIR /home/agent
-EXPOSE 3002
+# Documentation only (compose `expose:`/`ports:` govern). The prod/multi stack
+# listens on 3001 (SERVER_PORT default; nginx + healthchecks target :3001).
+EXPOSE 3001
 
 ENTRYPOINT ["/opt/entrypoint.sh"]
