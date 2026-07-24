@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
 import {
   createNormalizedMessage,
   generateMessageId,
@@ -422,6 +422,20 @@ export class CursorSessionsProvider implements IProviderSessions {
       console.warn(`[CursorProvider] Failed to load session ${sessionId}:`, message);
       return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
     }
+  }
+
+  // Cursor stores conversations in SQLite blobs with no token accounting, so
+  // there is nothing to report.
+  async getSessionTokenUsage(): Promise<ProviderTokenUsage> {
+    return {
+      used: 0,
+      total: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      breakdown: { input: 0, output: 0 },
+      unsupported: true,
+      message: 'Token usage tracking not available for Cursor sessions',
+    };
   }
 
   /**

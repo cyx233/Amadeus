@@ -4,7 +4,7 @@ import readline from 'node:readline';
 import { sessionsDb } from '@/modules/database/index.js';
 import { toImageAttachments } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
 
 const PROVIDER = 'codex';
@@ -609,6 +609,59 @@ export class CodexSessionsProvider implements IProviderSessions {
       offset: normalizedOffset,
       limit: normalizedLimit,
       tokenUsage,
+    };
+  }
+
+  async getSessionTokenUsage(sessionId: string): Promise<ProviderTokenUsage> {
+    const zero: ProviderTokenUsage = {
+      used: 0, total: 0, inputTokens: 0, outputTokens: 0, breakdown: { input: 0, output: 0 },
+    };
+    const transcript = sessionsDb.getSessionTranscript(sessionId);
+    if (!transcript) {
+      return { ...zero, unsupported: true, message: 'Codex session file not found' };
+    }
+
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let totalTokens = 0;
+    let contextWindow = 200000; // Codex/OpenAI default when the run didn't report one.
+    try {
+      const rl = readline.createInterface({
+        input: fsSync.createReadStream(transcript.jsonlPath),
+        crlfDelay: Infinity,
+      });
+      // Codex records cumulative usage in event_msg { type: 'token_count' }.
+      // The last such event holds the run total, so keep overwriting.
+      for await (const line of rl) {
+        if (!line.trim()) continue;
+        try {
+          const entry = JSON.parse(line) as AnyRecord;
+          if (entry.type === 'event_msg' && entry.payload?.type === 'token_count' && entry.payload?.info) {
+            const info = entry.payload.info as AnyRecord;
+            const usage = info.total_token_usage as AnyRecord | undefined;
+            if (usage) {
+              inputTokens = Number(usage.input_tokens ?? 0);
+              outputTokens = Number(usage.output_tokens ?? 0);
+              totalTokens = Number(usage.total_tokens ?? inputTokens + outputTokens);
+            }
+            if (info.model_context_window) {
+              contextWindow = Number(info.model_context_window);
+            }
+          }
+        } catch {
+          // Skip malformed JSONL lines.
+        }
+      }
+    } catch {
+      return { ...zero, unsupported: true, message: 'Codex session file not readable' };
+    }
+
+    return {
+      used: totalTokens,
+      total: contextWindow,
+      inputTokens,
+      outputTokens,
+      breakdown: { input: inputTokens, output: outputTokens },
     };
   }
 }

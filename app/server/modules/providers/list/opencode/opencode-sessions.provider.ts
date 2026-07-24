@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 
 import { parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
 import {
   createNormalizedMessage,
   generateMessageId,
@@ -358,6 +358,42 @@ export class OpenCodeSessionsProvider implements IProviderSessions {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[OpenCodeProvider] Failed to load session ${sessionId}:`, message);
       return { messages: [], total: 0, hasMore: false, offset: 0, limit: null };
+    } finally {
+      db.close();
+    }
+  }
+
+  async getSessionTokenUsage(
+    sessionId: string,
+    options: FetchHistoryOptions = {},
+  ): Promise<ProviderTokenUsage> {
+    const providerSessionId = options.providerSessionId ?? sessionId;
+    // Reuse the same aggregation fetchHistory uses (session-column totals, else
+    // per-message scan). OpenCode reports no context window, so total = 0.
+    const zero: ProviderTokenUsage = {
+      used: 0, total: 0, inputTokens: 0, outputTokens: 0, breakdown: { input: 0, output: 0 },
+    };
+    const db = openOpenCodeDatabase();
+    if (!db) {
+      return { ...zero, unsupported: true, message: 'OpenCode database not found' };
+    }
+    try {
+      const usage = aggregateOpenCodeSessionTokenUsage(db, providerSessionId) as
+        | { used?: number; inputTokens?: number; outputTokens?: number; breakdown?: { input?: number; output?: number } }
+        | undefined;
+      if (!usage) {
+        return { ...zero, unsupported: true, message: 'Token usage not available for this OpenCode session' };
+      }
+      return {
+        used: Number(usage.used ?? 0),
+        total: 0,
+        inputTokens: Number(usage.inputTokens ?? 0),
+        outputTokens: Number(usage.outputTokens ?? 0),
+        breakdown: {
+          input: Number(usage.breakdown?.input ?? usage.inputTokens ?? 0),
+          output: Number(usage.breakdown?.output ?? usage.outputTokens ?? 0),
+        },
+      };
     } finally {
       db.close();
     }

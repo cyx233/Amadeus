@@ -4,9 +4,10 @@ import path from 'node:path';
 import readline from 'node:readline';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage } from '@/shared/types.js';
+import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
 import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
+import { readProviderSessionActiveModelChange } from '@/shared/utils.js';
 
 const PROVIDER = 'claude';
 
@@ -671,6 +672,92 @@ export class ClaudeSessionsProvider implements IProviderSessions {
       hasMore,
       offset: normalizedOffset,
       limit: normalizedLimit,
+    };
+  }
+
+  async getSessionTokenUsage(sessionId: string): Promise<ProviderTokenUsage> {
+    const num = (value: unknown): number => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const zero: ProviderTokenUsage = {
+      used: 0, total: 0, inputTokens: 0, outputTokens: 0,
+      cacheReadTokens: 0, cacheCreationTokens: 0, cacheTokens: 0,
+      breakdown: { input: 0, output: 0 },
+    };
+
+    const transcript = sessionsDb.getSessionTranscript(sessionId);
+    if (!transcript) {
+      return { ...zero, unsupported: true, message: 'Claude session file not found' };
+    }
+
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cacheReadTokens = 0;
+    let cacheCreationTokens = 0;
+    // Prefer the run's own reported ceiling (modelUsage[*].contextWindow, present
+    // on result-style entries); streaming runs omit it, so we fall back below.
+    let contextWindowFromRun = 0;
+    try {
+      const lines = (await fsp.readFile(transcript.jsonlPath, 'utf8'))
+        .split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i -= 1) {
+        try {
+          const entry = JSON.parse(lines[i]) as AnyRecord;
+          if (!contextWindowFromRun && entry.modelUsage && typeof entry.modelUsage === 'object') {
+            for (const usageEntry of Object.values(entry.modelUsage as Record<string, AnyRecord>)) {
+              const cw = num(usageEntry?.contextWindow);
+              if (cw > 0) { contextWindowFromRun = cw; break; }
+            }
+          }
+          if (entry.type === 'assistant' && entry.message?.usage) {
+            const usage = entry.message.usage as AnyRecord;
+            cacheReadTokens = num(usage.cache_read_input_tokens ?? usage.cacheReadInputTokens ?? usage.cacheReadTokens);
+            cacheCreationTokens = num(usage.cache_creation_input_tokens ?? usage.cacheCreationInputTokens ?? usage.cacheCreationTokens);
+            inputTokens = num(usage.input_tokens ?? usage.inputTokens) + cacheReadTokens + cacheCreationTokens;
+            outputTokens = num(usage.output_tokens ?? usage.outputTokens);
+            break; // Latest assistant message only.
+          }
+        } catch {
+          // Skip malformed JSONL lines.
+        }
+      }
+    } catch {
+      return { ...zero, unsupported: true, message: 'Claude session file not readable' };
+    }
+
+    // When the run didn't persist a context window, derive it from the session's
+    // in-session model override (the `/model` picker writes it keyed by the app
+    // id, user-independent) — a [1m] model ⇒ 1M window. Read the override file
+    // directly (a leaf util) rather than through providerModelsService, which
+    // would import the provider registry and close an import cycle back to here.
+    // The transcript's message.model can't be used: it's stripped of the [1m] suffix.
+    let contextWindow = contextWindowFromRun;
+    if (!contextWindow) {
+      let overrideModel = '';
+      try {
+        const change = await readProviderSessionActiveModelChange('claude', sessionId);
+        if (change.supported && change.changed && change.model?.trim()) {
+          overrideModel = change.model.trim();
+        }
+      } catch {
+        // Best-effort: fall through to env/default.
+      }
+      const envWindow = parseInt(process.env.CONTEXT_WINDOW ?? '', 10);
+      contextWindow = overrideModel.includes('[1m]')
+        ? 1_000_000
+        : (Number.isFinite(envWindow) ? envWindow : 200_000);
+    }
+
+    return {
+      used: inputTokens + outputTokens,
+      total: contextWindow,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+      cacheTokens: cacheReadTokens + cacheCreationTokens,
+      breakdown: { input: inputTokens, output: outputTokens },
     };
   }
 }
