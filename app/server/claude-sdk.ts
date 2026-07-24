@@ -17,6 +17,7 @@ import { promises as fs } from 'fs';
 import os from 'os';
 import path from 'path';
 
+import type { Options as ClaudeSdkOptions, Query } from '@anthropic-ai/claude-agent-sdk';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
 import { buildClaudeUserContent, normalizeImageDescriptors } from './shared/image-attachments.js';
@@ -35,29 +36,75 @@ import { providerAuthService } from './modules/providers/services/provider-auth.
 import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
 import { todoMcpServer } from './utils/todo-mcp.js';
 
-const activeSessions = new Map();
-const pendingToolApprovals = new Map();
+/** The websocket-side writer every provider runtime sends normalized messages through. */
+type ClaudeWriter = {
+  send: (message: unknown) => void;
+  setSessionId?: (sessionId: string) => void;
+  userId?: number | string | null;
+};
+
+type ActiveSession = {
+  instance: Query;
+  startTime: number;
+  status: 'active' | 'aborted';
+  writer: ClaudeWriter | null;
+};
+
+/**
+ * The resolver settled by `resolveToolApproval`. It doubles as a metadata
+ * bag (`Object.assign(resolver, metadata)` in `waitForToolApproval`) so
+ * `getPendingApprovalsForSession` can read back which tool/session/input a
+ * still-pending request belongs to.
+ */
+type ToolApprovalResolver = {
+  (decision: ToolApprovalDecision | null): void;
+  _sessionId?: string | null;
+  _toolName?: string;
+  /** Never actually set by waitForToolApproval's metadata bag — always undefined at read time (getPendingApprovalsForSession). */
+  _context?: unknown;
+  _input?: unknown;
+  _receivedAt?: Date;
+};
+
+type ToolApprovalDecision = {
+  cancelled?: boolean;
+  allow?: boolean;
+  updatedInput?: Record<string, unknown>;
+  rememberEntry?: string;
+  message?: string;
+};
+
+const activeSessions = new Map<string, ActiveSession>();
+const pendingToolApprovals = new Map<string, ToolApprovalResolver>();
 // Sessions cancelled via abort-session. The abort handler already sent the
 // terminal `complete` (aborted: true) to the client, so the run loop must not
 // emit a second one when its generator winds down.
-const abortedSessionIds = new Set();
+const abortedSessionIds = new Set<string>();
 
-const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS, 10) || 55000;
+const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEOUT_MS || '', 10) || 55000;
 
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
-function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_FALLBACK_MODELS) {
+function resolveClaudeEffort(model: string | undefined, effort: unknown, modelsDefinition = CLAUDE_FALLBACK_MODELS) {
   return resolveRuntimeEffort(model, effort, modelsDefinition);
 }
 
-function createRequestId() {
+function createRequestId(): string {
   if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
   return crypto.randomBytes(16).toString('hex');
 }
 
-function waitForToolApproval(requestId, options = {}) {
+type WaitForToolApprovalOptions = {
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  onCancel?: (reason: 'timeout' | 'cancelled') => void;
+  metadata?: Record<string, unknown>;
+  sessionId?: string | null;
+};
+
+function waitForToolApproval(requestId: string, options: WaitForToolApprovalOptions = {}): Promise<ToolApprovalDecision | null> {
   const { timeoutMs = TOOL_APPROVAL_TIMEOUT_MS, signal, onCancel, metadata, sessionId } = options;
 
   // The SDK's per-turn `signal` aborts whenever its stream tears down — which
@@ -71,17 +118,17 @@ function waitForToolApproval(requestId, options = {}) {
   // (or via the non-interactive timeout).
   const isRealAbort = () => Boolean(sessionId && abortedSessionIds.has(sessionId));
 
-  return new Promise(resolve => {
+  return new Promise<ToolApprovalDecision | null>(resolve => {
     let settled = false;
 
-    const finalize = (decision) => {
+    const finalize = (decision: ToolApprovalDecision | null) => {
       if (settled) return;
       settled = true;
       cleanup();
       resolve(decision);
     };
 
-    let timeout;
+    let timeout: NodeJS.Timeout | undefined;
 
     const cleanup = () => {
       pendingToolApprovals.delete(requestId);
@@ -119,7 +166,7 @@ function waitForToolApproval(requestId, options = {}) {
       signal.addEventListener('abort', abortHandler, { once: true });
     }
 
-    const resolver = (decision) => {
+    const resolver: ToolApprovalResolver = (decision) => {
       finalize(decision);
     };
     // Attach metadata for getPendingApprovalsForSession lookup
@@ -130,7 +177,7 @@ function waitForToolApproval(requestId, options = {}) {
   });
 }
 
-function resolveToolApproval(requestId, decision) {
+function resolveToolApproval(requestId: string, decision: ToolApprovalDecision | null): void {
   const resolver = pendingToolApprovals.get(requestId);
   if (resolver) {
     resolver(decision);
@@ -141,7 +188,7 @@ function resolveToolApproval(requestId, decision) {
 // This only supports exact tool names and the Bash(command:*) shorthand
 // used by the UI; it intentionally does not implement full glob semantics,
 // introduced to stay consistent with the UI's "Allow rule" format.
-function matchesToolPermission(entry, toolName, input) {
+function matchesToolPermission(entry: string, toolName: string, input: unknown): boolean {
   if (!entry || !toolName) {
     return false;
   }
@@ -157,8 +204,8 @@ function matchesToolPermission(entry, toolName, input) {
 
     if (typeof input === 'string') {
       command = input.trim();
-    } else if (input && typeof input === 'object' && typeof input.command === 'string') {
-      command = input.command.trim();
+    } else if (input && typeof input === 'object' && typeof (input as { command?: unknown }).command === 'string') {
+      command = (input as { command: string }).command.trim();
     }
 
     if (!command) {
@@ -171,10 +218,24 @@ function matchesToolPermission(entry, toolName, input) {
   return false;
 }
 
-function mapCliOptionsToSDK(options = {}) {
+type SpawnClaudeOptions = {
+  sessionId?: string | null;
+  sessionSummary?: string;
+  cwd?: string;
+  toolsSettings?: { allowedTools?: string[]; disallowedTools?: string[]; skipPermissions?: boolean };
+  permissionMode?: string;
+  effort?: string;
+  model?: string;
+  effortModels?: typeof CLAUDE_FALLBACK_MODELS;
+  images?: unknown;
+  resume?: boolean;
+  _resumeRetried?: boolean;
+};
+
+function mapCliOptionsToSDK(options: SpawnClaudeOptions = {}): ClaudeSdkOptions {
   const { sessionId, cwd, toolsSettings, permissionMode, effort } = options;
 
-  const sdkOptions = {};
+  const sdkOptions: ClaudeSdkOptions = {};
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
@@ -189,7 +250,7 @@ function mapCliOptionsToSDK(options = {}) {
   }
 
   if (permissionMode && permissionMode !== 'default') {
-    sdkOptions.permissionMode = permissionMode;
+    sdkOptions.permissionMode = permissionMode as ClaudeSdkOptions['permissionMode'];
   }
 
   const settings = toolsSettings || {
@@ -230,7 +291,7 @@ function mapCliOptionsToSDK(options = {}) {
     options.effortModels || CLAUDE_FALLBACK_MODELS,
   );
   if (resolvedEffort) {
-    sdkOptions.effort = resolvedEffort;
+    sdkOptions.effort = resolvedEffort as ClaudeSdkOptions['effort'];
   }
 
   sdkOptions.systemPrompt = {
@@ -260,7 +321,7 @@ function mapCliOptionsToSDK(options = {}) {
  * @param {Object} queryInstance - SDK query instance
  * @param {Object} writer - WebSocket writer for reconnect support
  */
-function addSession(sessionId, queryInstance, writer = null) {
+function addSession(sessionId: string, queryInstance: Query, writer: ClaudeWriter | null = null): void {
   activeSessions.set(sessionId, {
     instance: queryInstance,
     startTime: Date.now(),
@@ -269,29 +330,26 @@ function addSession(sessionId, queryInstance, writer = null) {
   });
 }
 
-/**
- * Removes a session from the active sessions map
- * @param {string} sessionId - Session identifier
- */
-function removeSession(sessionId) {
+/** Removes a session from the active sessions map. */
+function removeSession(sessionId: string): void {
   activeSessions.delete(sessionId);
 }
 
-/**
- * Gets a session from the active sessions map
- * @param {string} sessionId - Session identifier
- * @returns {Object|undefined} Session data or undefined
- */
-function getSession(sessionId) {
+/** Gets a session from the active sessions map. */
+function getSession(sessionId: string): ActiveSession | undefined {
   return activeSessions.get(sessionId);
 }
 
 /**
- * Transforms SDK messages to WebSocket format expected by frontend
- * @param {Object} sdkMessage - SDK message object
- * @returns {Object} Transformed message ready for WebSocket
+ * Transforms SDK messages to WebSocket format expected by frontend. `sdkMessage`
+ * stays loosely typed (Record<string, unknown>-shaped, read defensively) rather
+ * than pinned to the SDK's 25-member SDKMessage union: this and the functions
+ * below it only ever probe a handful of fields common across several members
+ * (session_id, parent_tool_use_id, type, usage, modelUsage), never exhaustively
+ * switch on it, so the union would add casts at every access without adding
+ * real safety.
  */
-function transformMessage(sdkMessage) {
+function transformMessage(sdkMessage: any): any {
   // Extract parent_tool_use_id for subagent tool grouping
   if (sdkMessage.parent_tool_use_id) {
     return {
@@ -302,7 +360,7 @@ function transformMessage(sdkMessage) {
   return sdkMessage;
 }
 
-function readNumber(value) {
+function readNumber(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
@@ -322,10 +380,10 @@ function readNumber(value) {
 // until the final result landed (or forever if the socket dropped first). The
 // model string is authoritative for the ceiling, so derive it: a `[1m]` suffix
 // means a 1M window. Only then fall back to CONTEXT_WINDOW / 200K.
-function resolveContextWindow(sdkMessage, model) {
+function resolveContextWindow(sdkMessage: any, model: unknown): number {
   const modelUsage = sdkMessage?.modelUsage;
   if (modelUsage && typeof modelUsage === 'object') {
-    for (const entry of Object.values(modelUsage)) {
+    for (const entry of Object.values<any>(modelUsage)) {
       const cw = readNumber(entry?.contextWindow);
       if (cw > 0) {
         return cw;
@@ -335,10 +393,10 @@ function resolveContextWindow(sdkMessage, model) {
   if (typeof model === 'string' && model.includes('[1m]')) {
     return 1_000_000;
   }
-  return parseInt(process.env.CONTEXT_WINDOW, 10) || 200_000;
+  return parseInt(process.env.CONTEXT_WINDOW || '', 10) || 200_000;
 }
 
-function extractTokenBudget(sdkMessage, model) {
+function extractTokenBudget(sdkMessage: any, model: unknown) {
   if (!sdkMessage || typeof sdkMessage !== 'object') {
     return null;
   }
@@ -354,7 +412,7 @@ function extractTokenBudget(sdkMessage, model) {
     let outputTokens = 0;
     let cacheReadTokens = 0;
     let cacheCreationTokens = 0;
-    for (const entry of Object.values(modelUsage)) {
+    for (const entry of Object.values<any>(modelUsage)) {
       if (!entry || typeof entry !== 'object') continue;
       const directInput = readNumber(entry.inputTokens ?? entry.cumulativeInputTokens);
       cacheReadTokens += readNumber(entry.cacheReadInputTokens ?? entry.cacheReadTokens);
@@ -415,12 +473,14 @@ function extractTokenBudget(sdkMessage, model) {
  * whose content carries the prompt text plus one base64 `image` block per
  * attachment (read from the global `~/.cloudcli/assets` folder).
  *
- * @param {string} command - User prompt
- * @param {Array} images - Image descriptors ({ path, name?, mimeType? })
- * @param {string} cwd - Project working directory image paths resolve against
- * @returns {Promise<string|AsyncIterable>} SDK prompt payload
+ * @returns SDK prompt payload: a plain string, or (when images are attached)
+ *   an async generator of one streaming-input SDKUserMessage. Cast at the
+ *   `yield`, not threaded through as a real SDKUserMessage/MessageParam
+ *   type — `content` comes from `buildClaudeUserContent`'s own shape
+ *   (string, or an image-attachment content-block array), which this
+ *   function doesn't otherwise need to model in detail.
  */
-async function buildPromptPayload(command, images, cwd) {
+async function buildPromptPayload(command: string, images: unknown, cwd: string | undefined): Promise<string | AsyncGenerator<any>> {
   // Always use streaming-input mode (an async generator), even for plain text.
   // query.interrupt() (used by chat.abort) only works in streaming-input mode;
   // a bare string prompt makes abort a silent no-op, so the agent can't be
@@ -447,31 +507,31 @@ async function buildPromptPayload(command, images, cwd) {
  * @param {string} cwd - Current working directory for project-specific configs
  * @returns {Object|null} MCP servers object or null if none found
  */
-async function loadMcpConfig(cwd) {
+async function loadMcpConfig(cwd: string | undefined): Promise<Record<string, unknown> | null> {
   try {
     const claudeConfigPath = path.join(os.homedir(), '.claude.json');
 
     // Check if config file exists
     try {
       await fs.access(claudeConfigPath);
-    } catch (error) {
+    } catch {
       // File doesn't exist, return null
       // No config file
       return null;
     }
 
     // Read and parse config file
-    let claudeConfig;
+    let claudeConfig: any;
     try {
       const configContent = await fs.readFile(claudeConfigPath, 'utf8');
       claudeConfig = JSON.parse(configContent);
     } catch (error) {
-      console.error('Failed to parse ~/.claude.json:', error.message);
+      console.error('Failed to parse ~/.claude.json:', error instanceof Error ? error.message : String(error));
       return null;
     }
 
     // Extract MCP servers (merge global and project-specific)
-    let mcpServers = {};
+    let mcpServers: Record<string, unknown> = {};
 
     // Add global MCP servers
     if (claudeConfig.mcpServers && typeof claudeConfig.mcpServers === 'object') {
@@ -494,27 +554,24 @@ async function loadMcpConfig(cwd) {
     }
     return mcpServers;
   } catch (error) {
-    console.error('Error loading MCP config:', error.message);
+    console.error('Error loading MCP config:', error instanceof Error ? error.message : String(error));
     return null;
   }
 }
 
-/**
- * Executes a Claude query using the SDK
- * @param {string} command - User prompt/command
- * @param {Object} options - Query options
- * @param {Object} ws - WebSocket connection
- * @returns {Promise<void>}
- */
-async function queryClaudeSDK(command, options = {}, ws) {
+/** Executes a Claude query using the SDK. */
+async function queryClaudeSDK(command: string, options: SpawnClaudeOptions = {}, ws: ClaudeWriter): Promise<void> {
   const { sessionId, sessionSummary } = options;
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
 
-  const emitNotification = (event) => {
+  const emitNotification = (event: unknown) => {
+    // `notifyUserIfEnabled` destructures only { userId, event } — a `writer`
+    // field here was never read (verified against its definition in
+    // notification-orchestrator.service.js), so it's dropped rather than
+    // widening that function's signature for a dead parameter.
     notifyUserIfEnabled({
       userId: ws?.userId || null,
-      writer: ws,
       event
     });
   };
@@ -553,7 +610,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
       Notification: [{
         matcher: '',
         hooks: [async (input) => {
-          const message = typeof input?.message === 'string' ? input.message : 'Claude requires your attention.';
+          // The callback's declared param type is the full 28-member HookInput
+          // union (HookCallback isn't generic over which event key it's
+          // registered under), but this hook is only ever invoked for
+          // 'Notification', whose HookInput variant has `message: string`.
+          const notificationInput = input as { message?: unknown };
+          const message = typeof notificationInput?.message === 'string' ? notificationInput.message : 'Claude requires your attention.';
           emitNotification(createNotificationEvent({
             provider: 'claude',
             sessionId: capturedSessionId || sessionId || null,
@@ -635,6 +697,10 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
       if (decision.allow) {
         if (decision.rememberEntry && typeof decision.rememberEntry === 'string') {
+          // mapCliOptionsToSDK always sets allowedTools to a real array; the
+          // `?? []` only guards the type checker, which can't see that
+          // cross-function guarantee.
+          sdkOptions.allowedTools ??= [];
           if (!sdkOptions.allowedTools.includes(decision.rememberEntry)) {
             sdkOptions.allowedTools.push(decision.rememberEntry);
           }
@@ -652,19 +718,20 @@ async function queryClaudeSDK(command, options = {}, ws) {
     const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
     process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = '300000';
 
-    let queryInstance;
+    let queryInstance: Query;
     try {
       queryInstance = query({
-        prompt: await createPrompt(),
+        prompt: await createPrompt() as string | AsyncIterable<any>,
         options: sdkOptions
       });
     } catch (hookError) {
       // Older/newer SDK versions may not accept hook shapes yet.
       // Keep notification behavior operational via runtime events even if hook registration fails.
-      console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookError?.message || hookError);
+      const hookErrorMessage = hookError instanceof Error ? hookError.message : hookError;
+      console.warn('Failed to initialize Claude query with hooks, retrying without hooks:', hookErrorMessage);
       delete sdkOptions.hooks;
       queryInstance = query({
-        prompt: await createPrompt(),
+        prompt: await createPrompt() as string | AsyncIterable<any>,
         options: sdkOptions
       });
     }
@@ -763,6 +830,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
   } catch (error) {
     console.error('SDK query error:', error);
+    const errObj = error as { message?: string } | null;
 
     // Clean up session on error
     if (capturedSessionId) {
@@ -781,14 +849,15 @@ async function queryClaudeSDK(command, options = {}, ws) {
     // JSONL was written). Every later message then fails "No conversation found".
     // Detect that, drop the phantom mapping, and retry once as a fresh session so
     // the user isn't permanently stuck. Guard with _resumeRetried to avoid loops.
-    const isMissingConversation = /No conversation found with session ID/i.test(error?.message || '');
+    const isMissingConversation = /No conversation found with session ID/i.test(errObj?.message || '');
     if (isMissingConversation && options.resume && sessionId && !options._resumeRetried) {
       console.warn(`[Claude SDK] Resume target ${sessionId} not found; clearing phantom mapping and retrying fresh.`);
       try {
         const { sessionsDb } = await import('./modules/database/index.js');
         sessionsDb.clearProviderSessionId?.(sessionId);
       } catch (e) {
-        console.warn('[Claude SDK] Failed to clear phantom provider_session_id:', e?.message || e);
+        const eObj = e as { message?: string } | null;
+        console.warn('[Claude SDK] Failed to clear phantom provider_session_id:', eObj?.message || e);
       }
       return queryClaudeSDK(command, { ...options, resume: false, sessionId: undefined, _resumeRetried: true }, ws);
     }
@@ -797,7 +866,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
     const installed = await providerAuthService.isProviderInstalled('claude');
     const errorContent = !installed
       ? 'Claude Code is not installed. Please install it first: https://docs.anthropic.com/en/docs/claude-code'
-      : error.message;
+      : errObj?.message;
 
     // Send error to WebSocket, then the terminal complete
     ws.send(createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
@@ -812,12 +881,8 @@ async function queryClaudeSDK(command, options = {}, ws) {
   }
 }
 
-/**
- * Aborts an active SDK session
- * @param {string} sessionId - Session identifier
- * @returns {boolean} True if session was aborted, false if not found
- */
-async function abortClaudeSDKSession(sessionId) {
+/** Aborts an active SDK session. Returns true if aborted, false if not found. */
+async function abortClaudeSDKSession(sessionId: string): Promise<boolean> {
   const session = getSession(sessionId);
 
   if (!session) {
@@ -866,17 +931,13 @@ async function abortClaudeSDKSession(sessionId) {
  * @param {string} sessionId - Session identifier
  * @returns {boolean} True if session is active
  */
-function isClaudeSDKSessionActive(sessionId) {
+function isClaudeSDKSessionActive(sessionId: string): boolean {
   const session = getSession(sessionId);
-  return session && session.status === 'active';
+  return Boolean(session && session.status === 'active');
 }
 
-/**
- * Get pending tool approvals for a specific session.
- * @param {string} sessionId - The session ID
- * @returns {Array} Array of pending permission request objects
- */
-function getPendingApprovalsForSession(sessionId) {
+/** Get pending tool approvals for a specific session. */
+function getPendingApprovalsForSession(sessionId: string) {
   const pending = [];
   for (const [requestId, resolver] of pendingToolApprovals.entries()) {
     if (resolver._sessionId === sessionId) {

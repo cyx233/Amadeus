@@ -45,6 +45,9 @@ function isDuplicate(event) {
   return false;
 }
 
+/**
+ * @param {{ provider: string, sessionId?: string|null, kind?: string, code?: string, meta?: Record<string, unknown>, severity?: string, dedupeKey?: string|null, requiresUserAction?: boolean }} args
+ */
 function createNotificationEvent({
   provider,
   sessionId = null,
