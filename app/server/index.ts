@@ -9,7 +9,7 @@ import http from 'http';
 // cross-spawn is a drop-in for child_process.spawn that resolves .cmd
 // shims/PATHEXT on Windows and delegates to the native spawn elsewhere.
 import spawn from 'cross-spawn';
-import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
+import express, { type ErrorRequestHandler, type Request, type Response } from 'express';
 import cors from 'cors';
 import mime from 'mime-types';
 
@@ -917,8 +917,11 @@ app.delete('/api/projects/:projectId/files', authenticateToken, async (req, res)
 });
 
 // POST /api/projects/:projectId/files/upload - Upload files
-// Dynamic import of multer for file uploads
-const uploadFilesHandler: RequestHandler<any> = async (req, res) => {
+// Dynamic import of multer for file uploads. Declared with a concrete params
+// type (not a generic, unlike middleware/auth.ts's authenticateToken/
+// validateApiKey) since this standalone handler is only ever mounted on the
+// one route below — no call-site inference to defer to.
+const uploadFilesHandler = async (req: Request<{ projectId: string }>, res: Response) => {
     // Dynamic import of multer
     const multer = (await import('multer')).default;
 

@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import type { NextFunction, ParamsDictionary, Request, Response } from 'express-serve-static-core';
 
 import { userDb, appConfigDb } from '../modules/database/index.js';
 import { IS_PLATFORM } from '../constants/config.js';
@@ -36,48 +36,57 @@ function readTokenFromCookie(cookieHeader: string | undefined): string | null {
   return null;
 }
 
-// `RequestHandler<any>` (not bare `RequestHandler`, which defaults its params
-// generic to `ParamsDictionary`): app.get/put/etc. resolve each route's params
-// type from the literal path string (e.g. `:projectId` -> `{ projectId:
-// string }`), but only when every handler in that call shares a compatible
-// params generic. A bare `RequestHandler` pins a concrete `ParamsDictionary`
-// (whose values are `string | string[]`), which — mixed into the same
-// handler array as the path-derived, plain-`string` narrowed type — widens
-// the route handler's `req.params.*` back to `string | string[]` everywhere
-// this middleware is chained. `any` here defers to whatever the adjacent
-// handler infers, instead of overriding it.
-const validateApiKey: RequestHandler<any> = (req, res, next) => {
+// Generic over `P` (Express's route-params shape) rather than typed as a
+// bare `RequestHandler`: app.get/put/etc. infer each route's params type
+// from the literal path string (e.g. `:projectId` -> `{ projectId: string
+// }`) whenever every handler passed to that call shares a compatible
+// params generic. A bare `RequestHandler` pins a concrete `P =
+// ParamsDictionary` (whose values are `string | string[]`), which —
+// mixed into the same handler array as the route's own inferred, narrower
+// `{ projectId: string }` — widens `req.params.*` back to `string |
+// string[]` for every route this middleware is chained onto. Leaving `P`
+// generic (default `ParamsDictionary`, same as Express's own default) lets
+// each call site's inference win instead of overriding it — and, unlike
+// `RequestHandler<any>`, still catches a typo'd param name at the call site
+// (verified: `req.params.projectIdTypo` on a route with no such param is a
+// real type error here, but silently `any` under the old annotation).
+function validateApiKey<P = ParamsDictionary>(req: Request<P>, res: Response, next: NextFunction): void {
   // Skip API key validation if not configured
   if (!process.env.API_KEY) {
-    return next();
+    next();
+    return;
   }
 
   const apiKey = req.headers['x-api-key'];
   if (apiKey !== process.env.API_KEY) {
-    return res.status(401).json({ error: 'Invalid API key' });
+    res.status(401).json({ error: 'Invalid API key' });
+    return;
   }
   next();
-};
+}
 
-// JWT authentication middleware. `RequestHandler<any>` for the same reason as
+// JWT authentication middleware. Generic over `P` for the same reason as
 // validateApiKey above — see that comment.
-const authenticateToken: RequestHandler<any> = async (
-  req: Request & { user?: AuthenticatedUser },
+async function authenticateToken<P = ParamsDictionary>(
+  req: Request<P> & { user?: AuthenticatedUser },
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> {
   // Platform mode:  use single database user
   if (IS_PLATFORM) {
     try {
       const user = userDb.getFirstUser();
       if (!user) {
-        return res.status(500).json({ error: 'Platform mode: No user found in database' });
+        res.status(500).json({ error: 'Platform mode: No user found in database' });
+        return;
       }
       req.user = user;
-      return next();
+      next();
+      return;
     } catch (error) {
       console.error('Platform mode error:', error);
-      return res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
+      res.status(500).json({ error: 'Platform mode: Failed to fetch user' });
+      return;
     }
   }
 
@@ -106,7 +115,8 @@ const authenticateToken: RequestHandler<any> = async (
   }
 
   if (!token) {
-    return res.status(401).json({ error: 'Access denied. No token provided.' });
+    res.status(401).json({ error: 'Access denied. No token provided.' });
+    return;
   }
 
   try {
@@ -115,7 +125,8 @@ const authenticateToken: RequestHandler<any> = async (
     // Verify user still exists and is active
     const user = userDb.getUserById(decoded.userId);
     if (!user) {
-      return res.status(401).json({ error: 'Invalid token. User not found.' });
+      res.status(401).json({ error: 'Invalid token. User not found.' });
+      return;
     }
 
     // Auto-refresh: if token is past halfway through its lifetime, issue a new one
@@ -132,9 +143,10 @@ const authenticateToken: RequestHandler<any> = async (
     next();
   } catch (error) {
     console.error('Token verification error:', error);
-    return res.status(403).json({ error: 'Invalid token' });
+    res.status(403).json({ error: 'Invalid token' });
+    return;
   }
-};
+}
 
 // Generate JWT token
 const generateToken = (user: Pick<AuthenticatedUser, 'id' | 'username'>): string => {
