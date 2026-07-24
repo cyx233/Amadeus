@@ -96,9 +96,10 @@ export function sendDesktopNotification(userId: unknown, payload: unknown): { at
       .map((endpoint) => endpoint.endpoint_id)
   );
 
+  const payloadTag = (payload as { data?: { tag?: unknown } } | null)?.data?.tag;
   const message = JSON.stringify({
     type: 'notification',
-    id: typeof (payload as any)?.data?.tag === 'string' ? (payload as any).data.tag : `${Date.now()}`,
+    id: typeof payloadTag === 'string' ? payloadTag : `${Date.now()}`,
     payload,
   });
 

@@ -490,8 +490,8 @@ export const runMigrations = (db: Database) => {
     db.exec('CREATE INDEX IF NOT EXISTS idx_trajectory_session_id ON trajectory(session_id)');
 
     console.log('Database migrations completed successfully');
-  } catch (error: any) {
-    console.error('Error running migrations:', error.message);
+  } catch (error) {
+    console.error('Error running migrations:', (error as { message?: unknown })?.message);
     throw error;
   }
 };

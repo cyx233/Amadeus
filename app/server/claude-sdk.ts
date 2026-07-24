@@ -33,7 +33,7 @@ import {
 } from './services/notification-orchestrator.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
-import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
+import { createCompleteMessage, createNormalizedMessage, readObjectRecord } from './shared/utils.js';
 import { todoMcpServer } from './utils/todo-mcp.js';
 
 /** The websocket-side writer every provider runtime sends normalized messages through. */
@@ -347,17 +347,20 @@ function getSession(sessionId: string): ActiveSession | undefined {
  * below it only ever probe a handful of fields common across several members
  * (session_id, parent_tool_use_id, type, usage, modelUsage), never exhaustively
  * switch on it, so the union would add casts at every access without adding
- * real safety.
+ * real safety. The `unknown` parameter keeps the outward contract honest —
+ * every access below goes through the `sdk` local, cast once, rather than
+ * `any` silencing checks on the parameter itself.
  */
-function transformMessage(sdkMessage: any): any {
+function transformMessage(sdkMessage: unknown): Record<string, unknown> {
+  const sdk = sdkMessage as Record<string, unknown>;
   // Extract parent_tool_use_id for subagent tool grouping
-  if (sdkMessage.parent_tool_use_id) {
+  if (sdk.parent_tool_use_id) {
     return {
-      ...sdkMessage,
-      parentToolUseId: sdkMessage.parent_tool_use_id
+      ...sdk,
+      parentToolUseId: sdk.parent_tool_use_id
     };
   }
-  return sdkMessage;
+  return sdk;
 }
 
 function readNumber(value: unknown): number {
@@ -380,11 +383,12 @@ function readNumber(value: unknown): number {
 // until the final result landed (or forever if the socket dropped first). The
 // model string is authoritative for the ceiling, so derive it: a `[1m]` suffix
 // means a 1M window. Only then fall back to CONTEXT_WINDOW / 200K.
-function resolveContextWindow(sdkMessage: any, model: unknown): number {
-  const modelUsage = sdkMessage?.modelUsage;
+function resolveContextWindow(sdkMessage: unknown, model: unknown): number {
+  const sdk = sdkMessage as Record<string, unknown> | null | undefined;
+  const modelUsage = sdk?.modelUsage;
   if (modelUsage && typeof modelUsage === 'object') {
-    for (const entry of Object.values<any>(modelUsage)) {
-      const cw = readNumber(entry?.contextWindow);
+    for (const entry of Object.values(modelUsage)) {
+      const cw = readNumber((entry as { contextWindow?: unknown } | null)?.contextWindow);
       if (cw > 0) {
         return cw;
       }
@@ -396,24 +400,26 @@ function resolveContextWindow(sdkMessage: any, model: unknown): number {
   return parseInt(process.env.CONTEXT_WINDOW || '', 10) || 200_000;
 }
 
-function extractTokenBudget(sdkMessage: any, model: unknown) {
+function extractTokenBudget(sdkMessage: unknown, model: unknown) {
   if (!sdkMessage || typeof sdkMessage !== 'object') {
     return null;
   }
+  const sdk = sdkMessage as Record<string, any>;
 
   // Prefer `modelUsage` (on the terminal `result`): it carries the whole run's
   // CUMULATIVE input/output across every agentic step, plus the model's real
   // context window. `message.usage` only reports the LAST step, so an agentic
   // run with tool calls under-reported output (e.g. showing 176 for the final
   // step instead of the sum). Sum across models in case a run switched models.
-  const modelUsage = sdkMessage.modelUsage;
+  const modelUsage = sdk.modelUsage;
   if (modelUsage && typeof modelUsage === 'object' && Object.keys(modelUsage).length > 0) {
     let inputTokens = 0;
     let outputTokens = 0;
     let cacheReadTokens = 0;
     let cacheCreationTokens = 0;
-    for (const entry of Object.values<any>(modelUsage)) {
-      if (!entry || typeof entry !== 'object') continue;
+    for (const rawEntry of Object.values(modelUsage)) {
+      if (!rawEntry || typeof rawEntry !== 'object') continue;
+      const entry = rawEntry as Record<string, unknown>;
       const directInput = readNumber(entry.inputTokens ?? entry.cumulativeInputTokens);
       cacheReadTokens += readNumber(entry.cacheReadInputTokens ?? entry.cacheReadTokens);
       cacheCreationTokens += readNumber(entry.cacheCreationInputTokens ?? entry.cacheCreationTokens);
@@ -437,7 +443,7 @@ function extractTokenBudget(sdkMessage: any, model: unknown) {
   // Fallback: single-step `message.usage` (no modelUsage present, e.g. an
   // intermediate assistant message). This is the last step only, not the run
   // total, but it's the best available until the `result` arrives.
-  const messageUsage = sdkMessage.message?.usage || sdkMessage.usage;
+  const messageUsage = sdk.message?.usage || sdk.usage;
   if (messageUsage && typeof messageUsage === 'object') {
     const directInputTokens = readNumber(messageUsage.input_tokens ?? messageUsage.inputTokens);
     const cacheCreationTokens = readNumber(messageUsage.cache_creation_input_tokens ?? messageUsage.cacheCreationInputTokens ?? messageUsage.cacheCreationTokens);
@@ -521,10 +527,10 @@ async function loadMcpConfig(cwd: string | undefined): Promise<Record<string, un
     }
 
     // Read and parse config file
-    let claudeConfig: any;
+    let claudeConfig: Record<string, unknown> | null;
     try {
       const configContent = await fs.readFile(claudeConfigPath, 'utf8');
-      claudeConfig = JSON.parse(configContent);
+      claudeConfig = readObjectRecord(JSON.parse(configContent));
     } catch (error) {
       console.error('Failed to parse ~/.claude.json:', error instanceof Error ? error.message : String(error));
       return null;
@@ -534,16 +540,19 @@ async function loadMcpConfig(cwd: string | undefined): Promise<Record<string, un
     let mcpServers: Record<string, unknown> = {};
 
     // Add global MCP servers
-    if (claudeConfig.mcpServers && typeof claudeConfig.mcpServers === 'object') {
-      mcpServers = { ...claudeConfig.mcpServers };
+    const globalMcpServers = readObjectRecord(claudeConfig?.mcpServers);
+    if (globalMcpServers) {
+      mcpServers = { ...globalMcpServers };
       // Global MCP servers loaded
     }
 
     // Add/override with project-specific MCP servers
-    if (claudeConfig.claudeProjects && cwd) {
-      const projectConfig = claudeConfig.claudeProjects[cwd];
-      if (projectConfig && projectConfig.mcpServers && typeof projectConfig.mcpServers === 'object') {
-        mcpServers = { ...mcpServers, ...projectConfig.mcpServers };
+    const claudeProjects = readObjectRecord(claudeConfig?.claudeProjects);
+    if (claudeProjects && cwd) {
+      const projectConfig = readObjectRecord(claudeProjects[cwd]);
+      const projectMcpServers = readObjectRecord(projectConfig?.mcpServers);
+      if (projectMcpServers) {
+        mcpServers = { ...mcpServers, ...projectMcpServers };
         // Project MCP servers merged
       }
     }

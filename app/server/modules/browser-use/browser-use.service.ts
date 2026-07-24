@@ -100,8 +100,8 @@ function readSettings(): BrowserUseSettings {
     return {
       enabled: parsed.enabled === true,
     };
-  } catch (error: any) {
-    console.warn('[Browser] Failed to read settings:', error?.message || error);
+  } catch (error) {
+    console.warn('[Browser] Failed to read settings:', (error as { message?: string })?.message || error);
     return DEFAULT_SETTINGS;
   }
 }

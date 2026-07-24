@@ -453,7 +453,7 @@ export function sliceTailPage<T>(
  * treat the returned value as a JSON-style object map without repeating the same
  * defensive shape checks at every config read site.
  */
-export const readObjectRecord = (value: any): AnyRecord | null => {
+export const readObjectRecord = (value: unknown): AnyRecord | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
   }

@@ -228,8 +228,8 @@ const builtInCommands: CommandInfo[] = [
 ];
 
 /**
- * Built-in command handlers
- * Each handler returns { type: 'builtin', action: string, data: any }
+ * Built-in command handlers. Each handler returns a BuiltinCommandResult
+ * (see shared/command-types.ts) — a discriminated union keyed by `action`.
  */
 const builtInHandlers: Record<
   string,

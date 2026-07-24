@@ -10,10 +10,11 @@
  * `getConnection()` to obtain the shared singleton.
  */
 
-import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+import Database from 'better-sqlite3';
 
 import { APP_CONFIG_TABLE_SCHEMA_SQL } from '@/modules/database/schema.js';
 
@@ -82,8 +83,8 @@ function migrateLegacyDatabase(targetPath: string): void {
         fs.copyFileSync(src, targetPath + suffix);
       }
     }
-  } catch (err: any) {
-    console.error('Could not migrate legacy database', { error: err.message });
+  } catch (err) {
+    console.error('Could not migrate legacy database', { error: (err as { message?: unknown })?.message });
   }
 }
 
