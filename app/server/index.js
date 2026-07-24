@@ -15,7 +15,7 @@ import mime from 'mime-types';
 import Database from 'better-sqlite3';
 
 import { AppError, dataDir, getOpenCodeDatabasePath } from '@/shared/utils.js';
-import { closeSessionsWatcher, initializeSessionsWatcher } from '@/modules/providers/index.js';
+import { closeSessionsWatcher, initializeSessionsWatcher, resolveEffectiveModel } from '@/modules/providers/index.js';
 import { createWebSocketServer } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
@@ -1310,17 +1310,32 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
         }
         const lines = fileContent.trim().split('\n');
 
-        const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
-        const contextWindow = Number.isFinite(parsedContextWindow) ? parsedContextWindow : 160000;
         let inputTokens = 0;
         let outputTokens = 0;
         let cacheReadTokens = 0;
         let cacheCreationTokens = 0;
+        // Context window comes from the run itself, not a fixed default: the SDK
+        // records the real ceiling in modelUsage[model].contextWindow (1M for a
+        // [1m] model, 200K otherwise). Scan for it; else derive from the last
+        // assistant's model string ([1m] ⇒ 1M); else the CONTEXT_WINDOW env; else
+        // a 200K floor. A hardcoded 160K here was the "Context window 160,000"
+        // bug — it ignored the model entirely.
+        let contextWindowFromRun = 0;
+        let lastModel = '';
 
         // Find the latest assistant message with usage data (scan from end)
         for (let i = lines.length - 1; i >= 0; i--) {
             try {
                 const entry = JSON.parse(lines[i]);
+
+                // Capture the real context window from any modelUsage we can find
+                // (present on result-style entries), newest first.
+                if (!contextWindowFromRun && entry.modelUsage && typeof entry.modelUsage === 'object') {
+                    for (const usageEntry of Object.values(entry.modelUsage)) {
+                        const cw = readUsageNumber(usageEntry?.contextWindow);
+                        if (cw > 0) { contextWindowFromRun = cw; break; }
+                    }
+                }
 
                 // Only count assistant messages which have usage data
                 if (entry.type === 'assistant' && entry.message?.usage) {
@@ -1332,6 +1347,9 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                     cacheCreationTokens = readUsageNumber(usage.cache_creation_input_tokens ?? usage.cacheCreationInputTokens ?? usage.cacheCreationTokens);
                     inputTokens = directInputTokens + cacheReadTokens + cacheCreationTokens;
                     outputTokens = readUsageNumber(usage.output_tokens ?? usage.outputTokens);
+                    if (!lastModel && typeof entry.message.model === 'string') {
+                        lastModel = entry.message.model;
+                    }
 
                     break; // Stop after finding the latest assistant message
                 }
@@ -1340,6 +1358,26 @@ app.get('/api/projects/:projectId/sessions/:sessionId/token-usage', authenticate
                 continue;
             }
         }
+
+        // Prefer the run's own reported window (modelUsage.contextWindow). When
+        // absent — streaming runs don't persist it, and the transcript's
+        // message.model is stripped of the [1m] suffix — fall back to the model
+        // this session is actually configured to use, resolved the SAME way the
+        // run resolves it (override → preference), which DOES carry [1m].
+        let resolvedModelForWindow = lastModel;
+        try {
+            const effective = await resolveEffectiveModel(req.user?.id ?? null, 'chat', {
+                provider: 'claude',
+                sessionId: safeSessionId,
+            });
+            if (effective?.model) resolvedModelForWindow = effective.model;
+        } catch {
+            // Best-effort: keep the transcript model.
+        }
+        const parsedContextWindow = parseInt(process.env.CONTEXT_WINDOW, 10);
+        const contextWindow = contextWindowFromRun
+            || (resolvedModelForWindow.includes('[1m]') ? 1_000_000 : 0)
+            || (Number.isFinite(parsedContextWindow) ? parsedContextWindow : 200_000);
 
         const totalUsed = inputTokens + outputTokens;
         const cacheTokens = cacheReadTokens + cacheCreationTokens;
