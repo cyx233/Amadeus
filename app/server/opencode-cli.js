@@ -4,6 +4,7 @@ import crossSpawn from 'cross-spawn';
 import Database from 'better-sqlite3';
 
 import { appendImagesInputTag } from './shared/image-attachments.js';
+import { resolveRuntimeEffort } from './shared/runtime-effort.js';
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
@@ -44,14 +45,6 @@ export function resolveOpenCodePermissionOptions(permissionMode) {
     default:
       return { args: [], env: {} };
   }
-}
-
-function resolveOpenCodeEffort(model, effort, modelsDefinition) {
-  const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model);
-  const allowedEfforts = selectedModel?.effort?.values?.map((value) => value.value) || [];
-  return typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
-    ? effort
-    : undefined;
 }
 
 function readOpenCodeSessionId(event) {
@@ -240,7 +233,7 @@ async function spawnOpenCode(command, options = {}, ws) {
         console.warn('[OpenCode] Unable to load provider models for effort validation:', error);
       }
 
-      const resolvedEffort = resolveOpenCodeEffort(resolvedModel, effort, effortModels);
+      const resolvedEffort = resolveRuntimeEffort(resolvedModel, effort, effortModels);
       const args = ['run', '--format', 'json'];
       // OpenCode's `run` command owns workspace selection through `--dir`.
       // Relying on the child-process cwd alone is not enough on Linux, where
@@ -394,13 +387,8 @@ function isOpenCodeSessionActive(sessionId) {
   return activeOpenCodeProcesses.has(sessionId);
 }
 
-function getActiveOpenCodeSessions() {
-  return Array.from(activeOpenCodeProcesses.keys());
-}
-
 export {
   spawnOpenCode,
   abortOpenCodeSession,
   isOpenCodeSessionActive,
-  getActiveOpenCodeSessions,
 };

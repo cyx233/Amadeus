@@ -130,8 +130,8 @@ test('provider models are cached for the three-day ttl', async () => {
   }
 });
 
-test('claude provider models are always loaded directly from the provider', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-claude-direct-'));
+test('claude provider models are cached like every other provider', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-cache-claude-'));
   let loadCount = 0;
 
   try {
@@ -149,13 +149,23 @@ test('claude provider models are always loaded directly from the provider', asyn
       }),
     });
 
+    // Claude used to be force-uncached (it returned a static list for free), but
+    // it now spawns a CLI query() per load, so it caches like the rest — the
+    // second call is a memory hit, not a re-load. A fresh list is available via
+    // bypassCache (the "Refresh models" UI).
     const first = await service.getProviderModels('claude');
     const second = await service.getProviderModels('claude');
 
-    assert.equal(loadCount, 2);
+    assert.equal(loadCount, 1);
     assert.equal(first.models.DEFAULT, 'claude-1');
-    assert.equal(second.models.DEFAULT, 'claude-2');
-    assert.equal(second.cache.source, 'fresh');
+    assert.equal(second.models.DEFAULT, 'claude-1');
+    assert.equal(second.cache.source, 'memory');
+
+    // bypassCache forces a fresh load past the cache.
+    const refreshed = await service.getProviderModels('claude', { bypassCache: true });
+    assert.equal(loadCount, 2);
+    assert.equal(refreshed.models.DEFAULT, 'claude-2');
+    assert.equal(refreshed.cache.source, 'fresh');
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }
@@ -348,7 +358,7 @@ test('resolveSessionModel returns the in-session override, ignoring the requeste
   }
 });
 
-test('resolveSessionModel returns undefined for a session with no override (falls back to preference)', async () => {
+test('resolveSessionModel falls back to the requested model for a session with no override', async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'provider-model-nochange-'));
   const activeModelChangesPath = path.join(tempRoot, 'session-model-changes.json');
 
@@ -358,16 +368,24 @@ test('resolveSessionModel returns undefined for a session with no override (fall
       resolveProvider: (provider) => ({
         models: {
           getSupportedModels: async () => createModels(`${provider}-models`),
-          // A transcript model exists, but with no override we must NOT read it —
-          // the caller falls back to the Model Preference default instead.
+          // A transcript model exists, but with no override we must NOT read it.
           getCurrentActiveModel: async () => createCurrentActiveModel(`${provider}-active`),
           changeActiveModel: async (input) => createSessionActiveModelChange(provider, input),
         },
       }),
     });
 
-    const model = await service.resolveSessionModel('cursor', 'session-no-override', 'composer-2-fast');
-    assert.equal(model, undefined);
+    // No override, but the send carried a requested model (the composer's model
+    // picker updates in-memory state and sends it WITHOUT writing an override).
+    // requested must win over falling through to the preference default — else
+    // a picked model + send would silently keep the old one (codex/cursor use
+    // this return value directly, with no `|| requested` fallback of their own).
+    const requested = await service.resolveSessionModel('cursor', 'session-no-override', 'composer-2-fast');
+    assert.equal(requested, 'composer-2-fast');
+
+    // No override AND no requested → undefined, so the caller uses the preference.
+    const neither = await service.resolveSessionModel('cursor', 'session-no-override');
+    assert.equal(neither, undefined);
   } finally {
     await rm(tempRoot, { recursive: true, force: true });
   }

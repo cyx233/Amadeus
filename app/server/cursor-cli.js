@@ -342,13 +342,8 @@ function isCursorSessionActive(sessionId) {
   return activeCursorProcesses.has(sessionId);
 }
 
-function getActiveCursorSessions() {
-  return Array.from(activeCursorProcesses.keys());
-}
-
 export {
   spawnCursor,
   abortCursorSession,
   isCursorSessionActive,
-  getActiveCursorSessions
 };
