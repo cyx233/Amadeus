@@ -1,11 +1,14 @@
+/** @param {string} host */
 export function isWildcardHost(host) {
   return host === '0.0.0.0' || host === '::';
 }
 
+/** @param {string} host */
 export function isLoopbackHost(host) {
   return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
 }
 
+/** @param {string} host */
 export function normalizeLoopbackHost(host) {
   if (!host) {
     return host;
@@ -14,6 +17,7 @@ export function normalizeLoopbackHost(host) {
 }
 
 // Use localhost for connectable loopback and wildcard addresses in browser-facing URLs.
+/** @param {string} host */
 export function getConnectableHost(host) {
   if (!host) {
     return 'localhost';

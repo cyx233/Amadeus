@@ -9,13 +9,13 @@ import http from 'http';
 // cross-spawn is a drop-in for child_process.spawn that resolves .cmd
 // shims/PATHEXT on Windows and delegates to the native spawn elsewhere.
 import spawn from 'cross-spawn';
-import express from 'express';
+import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
 import cors from 'cors';
 import mime from 'mime-types';
 
 import { AppError, dataDir } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher, sessionsService } from '@/modules/providers/index.js';
-import { createWebSocketServer } from '@/modules/websocket/index.js';
+import { createWebSocketServer, type ProviderSpawnFn } from '@/modules/websocket/index.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
 
@@ -96,6 +96,14 @@ const MAX_FILE_UPLOAD_SIZE_MB = 200;
 const MAX_FILE_UPLOAD_SIZE_BYTES = MAX_FILE_UPLOAD_SIZE_MB * 1024 * 1024;
 const MAX_FILE_UPLOAD_COUNT = 20;
 
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+function errorCode(error: unknown): string | undefined {
+    return (error as { code?: string } | null)?.code;
+}
+
 console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 
 const app = express();
@@ -108,11 +116,15 @@ const wss = createWebSocketServer(server, {
         authenticateWebSocket,
     },
     chat: {
+        // Each runtime's real writer parameter is narrower than ProviderSpawnFn's
+        // `writer: unknown` (same variance every runtime hits — see
+        // provider-runtime.service.ts, which casts identically for the one-shot
+        // generation dispatch path).
         spawnFns: {
-            claude: queryClaudeSDK,
-            cursor: spawnCursor,
-            codex: queryCodex,
-            opencode: spawnOpenCode,
+            claude: queryClaudeSDK as ProviderSpawnFn,
+            cursor: spawnCursor as ProviderSpawnFn,
+            codex: queryCodex as ProviderSpawnFn,
+            opencode: spawnOpenCode as ProviderSpawnFn,
         },
         abortFns: {
             claude: abortClaudeSDKSession,
@@ -273,13 +285,13 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
         let output = '';
         let errorOutput = '';
 
-        child.stdout.on('data', (data) => {
+        child.stdout?.on('data', (data) => {
             const text = data.toString();
             output += text;
             console.log('Update output:', text);
         });
 
-        child.stderr.on('data', (data) => {
+        child.stderr?.on('data', (data) => {
             const text = data.toString();
             errorOutput += text;
             console.error('Update error:', text);
@@ -314,7 +326,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
         console.error('System update error:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: errorMessage(error)
         });
     }
 });
@@ -323,7 +335,7 @@ app.post('/api/system/update', authenticateToken, async (req, res) => {
 app.get('/api/projects/:projectId/file', authenticateToken, async (req, res) => {
     try {
         const { projectId } = req.params;
-        const { filePath } = req.query;
+        const filePath = typeof req.query.filePath === 'string' ? req.query.filePath : '';
 
 
         // Security: ensure the requested path is inside the project root
@@ -351,12 +363,12 @@ app.get('/api/projects/:projectId/file', authenticateToken, async (req, res) => 
         res.json({ content, path: resolved });
     } catch (error) {
         console.error('Error reading file:', error);
-        if (error.code === 'ENOENT') {
+        if (errorCode(error) === 'ENOENT') {
             res.status(404).json({ error: 'File not found' });
-        } else if (error.code === 'EACCES') {
+        } else if (errorCode(error) === 'EACCES') {
             res.status(403).json({ error: 'Permission denied' });
         } else {
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: errorMessage(error) });
         }
     }
 });
@@ -365,7 +377,7 @@ app.get('/api/projects/:projectId/file', authenticateToken, async (req, res) => 
 app.get('/api/projects/:projectId/files/content', authenticateToken, async (req, res) => {
     try {
         const { projectId } = req.params;
-        const { path: filePath } = req.query;
+        const filePath = typeof req.query.path === 'string' ? req.query.path : '';
 
 
         // Security: ensure the requested path is inside the project root
@@ -414,7 +426,7 @@ app.get('/api/projects/:projectId/files/content', authenticateToken, async (req,
     } catch (error) {
         console.error('Error serving binary file:', error);
         if (!res.headersSent) {
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: errorMessage(error) });
         }
     }
 });
@@ -424,7 +436,7 @@ app.get('/api/projects/:projectId/files/download', authenticateToken, async (req
     try {
         const projectRoot = await projectsDb.getProjectPathById(req.params.projectId);
         if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
-        const filePath = req.query.path;
+        const filePath = typeof req.query.path === 'string' ? req.query.path : '';
         if (!filePath) return res.status(400).json({ error: 'path required' });
         const resolved = path.isAbsolute(filePath) ? path.resolve(filePath) : path.resolve(projectRoot, filePath);
         if (!resolved.startsWith(path.resolve(projectRoot) + path.sep)) return res.status(403).json({ error: 'Forbidden' });
@@ -507,7 +519,7 @@ app.get('/api/projects/:projectId/files/download-folder', authenticateToken, asy
     try {
         const projectRoot = await projectsDb.getProjectPathById(req.params.projectId);
         if (!projectRoot) return res.status(404).json({ error: 'Project not found' });
-        const dirPath = req.query.path;
+        const dirPath = typeof req.query.path === 'string' ? req.query.path : '';
         if (!dirPath) return res.status(400).json({ error: 'path required' });
 
         const root = path.resolve(projectRoot);
@@ -588,12 +600,12 @@ app.put('/api/projects/:projectId/file', authenticateToken, async (req, res) => 
         });
     } catch (error) {
         console.error('Error saving file:', error);
-        if (error.code === 'ENOENT') {
+        if (errorCode(error) === 'ENOENT') {
             res.status(404).json({ error: 'File or directory not found' });
-        } else if (error.code === 'EACCES') {
+        } else if (errorCode(error) === 'EACCES') {
             res.status(403).json({ error: 'Permission denied' });
         } else {
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: errorMessage(error) });
         }
     }
 });
@@ -634,8 +646,8 @@ app.get('/api/projects/:projectId/files', authenticateToken, async (req, res) =>
         const files = await getFileTree(target, 1, 0, true);
         res.json(files);
     } catch (error) {
-        console.error('[ERROR] File tree error:', error.message);
-        res.status(500).json({ error: error.message });
+        console.error('[ERROR] File tree error:', errorMessage(error));
+        res.status(500).json({ error: errorMessage(error) });
     }
 });
 
@@ -643,13 +655,14 @@ app.get('/api/projects/:projectId/files', authenticateToken, async (req, res) =>
 // FILE OPERATIONS API ENDPOINTS
 // ============================================================================
 
+type PathValidationResult =
+    | { valid: true; resolved: string }
+    | { valid: false; error: string };
+
 /**
  * Validate that a path is within the project root
- * @param {string} projectRoot - The project root path
- * @param {string} targetPath - The path to validate
- * @returns {{ valid: boolean, resolved?: string, error?: string }}
  */
-function validatePathInProject(projectRoot, targetPath) {
+function validatePathInProject(projectRoot: string, targetPath: string): PathValidationResult {
     const resolved = path.isAbsolute(targetPath)
         ? path.resolve(targetPath)
         : path.resolve(projectRoot, targetPath);
@@ -662,10 +675,8 @@ function validatePathInProject(projectRoot, targetPath) {
 
 /**
  * Validate filename - check for invalid characters
- * @param {string} name - The filename to validate
- * @returns {{ valid: boolean, error?: string }}
  */
-function validateFilename(name) {
+function validateFilename(name: string): { valid: boolean; error?: string } {
     if (!name || !name.trim()) {
         return { valid: false, error: 'Filename cannot be empty' };
     }
@@ -753,12 +764,12 @@ app.post('/api/projects/:projectId/files/create', authenticateToken, async (req,
         });
     } catch (error) {
         console.error('Error creating file/directory:', error);
-        if (error.code === 'EACCES') {
+        if (errorCode(error) === 'EACCES') {
             res.status(403).json({ error: 'Permission denied' });
-        } else if (error.code === 'ENOENT') {
+        } else if (errorCode(error) === 'ENOENT') {
             res.status(404).json({ error: 'Parent directory not found' });
         } else {
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: errorMessage(error) });
         }
     }
 });
@@ -828,14 +839,14 @@ app.put('/api/projects/:projectId/files/rename', authenticateToken, async (req, 
         });
     } catch (error) {
         console.error('Error renaming file/directory:', error);
-        if (error.code === 'EACCES') {
+        if (errorCode(error) === 'EACCES') {
             res.status(403).json({ error: 'Permission denied' });
-        } else if (error.code === 'ENOENT') {
+        } else if (errorCode(error) === 'ENOENT') {
             res.status(404).json({ error: 'File or directory not found' });
-        } else if (error.code === 'EXDEV') {
+        } else if (errorCode(error) === 'EXDEV') {
             res.status(400).json({ error: 'Cannot move across different filesystems' });
         } else {
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: errorMessage(error) });
         }
     }
 });
@@ -893,21 +904,21 @@ app.delete('/api/projects/:projectId/files', authenticateToken, async (req, res)
         });
     } catch (error) {
         console.error('Error deleting file/directory:', error);
-        if (error.code === 'EACCES') {
+        if (errorCode(error) === 'EACCES') {
             res.status(403).json({ error: 'Permission denied' });
-        } else if (error.code === 'ENOENT') {
+        } else if (errorCode(error) === 'ENOENT') {
             res.status(404).json({ error: 'File or directory not found' });
-        } else if (error.code === 'ENOTEMPTY') {
+        } else if (errorCode(error) === 'ENOTEMPTY') {
             res.status(400).json({ error: 'Directory is not empty' });
         } else {
-            res.status(500).json({ error: error.message });
+            res.status(500).json({ error: errorMessage(error) });
         }
     }
 });
 
 // POST /api/projects/:projectId/files/upload - Upload files
 // Dynamic import of multer for file uploads
-const uploadFilesHandler = async (req, res) => {
+const uploadFilesHandler: RequestHandler<any> = async (req, res) => {
     // Dynamic import of multer
     const multer = (await import('multer')).default;
 
@@ -965,7 +976,10 @@ const uploadFilesHandler = async (req, res) => {
                 relativePaths: filePaths
             });
 
-            if (!req.files || req.files.length === 0) {
+            // This route's multer instance always uses .array('files', ...), so
+            // req.files is always the File[] form (never the per-field-name map
+            // shape multer's types also allow for .fields()).
+            if (!Array.isArray(req.files) || req.files.length === 0) {
                 return res.status(400).json({ error: 'No files provided' });
             }
 
@@ -1060,15 +1074,15 @@ const uploadFilesHandler = async (req, res) => {
         } catch (error) {
             console.error('Error uploading files:', error);
             // Clean up any remaining temp files
-            if (req.files) {
+            if (Array.isArray(req.files)) {
                 for (const file of req.files) {
                     await fsPromises.unlink(file.path).catch(() => {});
                 }
             }
-            if (error.code === 'EACCES') {
+            if (errorCode(error) === 'EACCES') {
                 res.status(403).json({ error: 'Permission denied' });
             } else {
-                res.status(500).json({ error: error.message });
+                res.status(500).json({ error: errorMessage(error) });
             }
         }
     });
@@ -1134,7 +1148,7 @@ app.get('*', (req, res) => {
 });
 
 // global error middleware must be last
-app.use((err, req, res, next) => {
+const handleAppError: ErrorRequestHandler = (err, req, res, next) => {
   if (err instanceof AppError) {
     return res.status(err.statusCode).json({
       success: false,
@@ -1155,10 +1169,11 @@ app.use((err, req, res, next) => {
       message: 'Internal server error',
     },
   });
-});
+};
+app.use(handleAppError);
 
 // Helper function to convert permissions to rwx format
-function permToRwx(perm) {
+function permToRwx(perm: number): string {
     const r = perm & 4 ? 'r' : '-';
     const w = perm & 2 ? 'w' : '-';
     const x = perm & 1 ? 'x' : '-';
@@ -1188,20 +1203,20 @@ const FS_CONCURRENCY = Number.isFinite(parsedFsConcurrency) && parsedFsConcurren
     ? parsedFsConcurrency
     : DEFAULT_FS_CONCURRENCY;
 let activeFsOperations = 0;
-const pendingFsOperations = [];
+const pendingFsOperations: Array<() => void> = [];
 
-async function acquire() {
+async function acquire(): Promise<void> {
     if (activeFsOperations < FS_CONCURRENCY) {
         activeFsOperations += 1;
         return;
     }
 
-    await new Promise((resolve) => {
+    await new Promise<void>((resolve) => {
         pendingFsOperations.push(resolve);
     });
 }
 
-function release() {
+function release(): void {
     const next = pendingFsOperations.shift();
     if (next) {
         next();
@@ -1211,7 +1226,20 @@ function release() {
     activeFsOperations = Math.max(0, activeFsOperations - 1);
 }
 
-async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden = true) {
+type FileTreeItem = {
+    name: string;
+    path: string;
+    type: 'directory' | 'file';
+    size?: number;
+    modified?: string | null;
+    isSymlink?: boolean;
+    permissions?: string;
+    permissionsRwx?: string;
+    children?: FileTreeItem[];
+    hasChildren?: boolean;
+};
+
+async function getFileTree(dirPath: string, maxDepth = 3, currentDepth = 0, showHidden = true): Promise<FileTreeItem[]> {
     // Using fsPromises from import
     let entries;
     try {
@@ -1223,7 +1251,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
         }
     } catch (error) {
         // Only log non-permission errors to avoid spam
-        if (error.code !== 'EACCES' && error.code !== 'EPERM') {
+        if (errorCode(error) !== 'EACCES' && errorCode(error) !== 'EPERM') {
             console.error('Error reading directory:', error);
         }
         return [];
@@ -1236,7 +1264,7 @@ async function getFileTree(dirPath, maxDepth = 3, currentDepth = 0, showHidden =
     // the kernel pipeline the round-trips and the recursive calls overlap too.
     const items = await Promise.all(filteredEntries.map(async (entry) => {
         const itemPath = path.join(dirPath, entry.name);
-        const item = {
+        const item: FileTreeItem = {
             name: entry.name,
             path: itemPath,
             type: entry.isDirectory() ? 'directory' : 'file'
@@ -1346,14 +1374,14 @@ async function removeLocalServerMarker() {
         const marker = JSON.parse(raw);
         if (marker.pid && marker.pid !== process.pid) return;
     } catch (error) {
-        if (error.code === 'ENOENT') return;
+        if (errorCode(error) === 'ENOENT') return;
     }
 
     try {
         await fsPromises.unlink(LOCAL_SERVER_MARKER_PATH);
     } catch (error) {
-        if (error.code !== 'ENOENT') {
-            console.warn('[WARN] Could not remove local server marker:', error.message);
+        if (errorCode(error) !== 'ENOENT') {
+            console.warn('[WARN] Could not remove local server marker:', errorMessage(error));
         }
     }
 }
@@ -1396,7 +1424,7 @@ async function startServer() {
 
         console.log(`${c.info('[INFO]')} To run in development mode with hot-module replacement, go to http://${DISPLAY_HOST}:${VITE_PORT}`);
    
-        server.listen(SERVER_PORT, HOST, async () => {
+        server.listen(Number.parseInt(String(SERVER_PORT), 10), HOST, async () => {
             const appInstallPath = APP_ROOT;
             await writeLocalServerMarker().catch((error) => {
                 console.warn('[WARN] Could not write local server marker:', error.message);
@@ -1421,17 +1449,17 @@ async function startServer() {
             try {
                 await browserUseService.stopAllSessions();
             } catch (err) {
-                console.error('[Browser] Error stopping sessions during shutdown:', err?.message || err);
+                console.error('[Browser] Error stopping sessions during shutdown:', errorMessage(err));
             }
             try {
                 await shutdownTaskmasterMcp();
             } catch (err) {
-                console.error('[TaskMaster MCP] Error stopping resident process during shutdown:', err?.message || err);
+                console.error('[TaskMaster MCP] Error stopping resident process during shutdown:', errorMessage(err));
             }
             try {
                 await removeLocalServerMarker();
             } catch (err) {
-                console.error('[Local Server] Error removing server marker during shutdown:', err?.message || err);
+                console.error('[Local Server] Error removing server marker during shutdown:', errorMessage(err));
             }
             process.exit(0);
         };

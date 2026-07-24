@@ -36,8 +36,17 @@ function readTokenFromCookie(cookieHeader: string | undefined): string | null {
   return null;
 }
 
-// Optional API key middleware
-const validateApiKey: RequestHandler = (req, res, next) => {
+// `RequestHandler<any>` (not bare `RequestHandler`, which defaults its params
+// generic to `ParamsDictionary`): app.get/put/etc. resolve each route's params
+// type from the literal path string (e.g. `:projectId` -> `{ projectId:
+// string }`), but only when every handler in that call shares a compatible
+// params generic. A bare `RequestHandler` pins a concrete `ParamsDictionary`
+// (whose values are `string | string[]`), which — mixed into the same
+// handler array as the path-derived, plain-`string` narrowed type — widens
+// the route handler's `req.params.*` back to `string | string[]` everywhere
+// this middleware is chained. `any` here defers to whatever the adjacent
+// handler infers, instead of overriding it.
+const validateApiKey: RequestHandler<any> = (req, res, next) => {
   // Skip API key validation if not configured
   if (!process.env.API_KEY) {
     return next();
@@ -50,8 +59,9 @@ const validateApiKey: RequestHandler = (req, res, next) => {
   next();
 };
 
-// JWT authentication middleware
-const authenticateToken: RequestHandler = async (
+// JWT authentication middleware. `RequestHandler<any>` for the same reason as
+// validateApiKey above — see that comment.
+const authenticateToken: RequestHandler<any> = async (
   req: Request & { user?: AuthenticatedUser },
   res: Response,
   next: NextFunction

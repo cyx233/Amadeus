@@ -2,6 +2,7 @@ import path from 'node:path';
 
 import type { WebSocket } from 'ws';
 
+import type { ToolApprovalDecision } from '@/claude-sdk.js';
 import { sessionsDb } from '@/modules/database/index.js';
 import { resolveEffectiveModel } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
@@ -48,9 +49,11 @@ export function filterImagesToUploadStore(images: unknown, assetsRootOverride?: 
 /**
  * One provider runtime entry point. All five runtimes share this signature,
  * which lets the chat handler dispatch through a provider-keyed map instead
- * of provider-specific branches.
+ * of provider-specific branches. Exported so index.ts can cast each concrete
+ * runtime (queryClaudeSDK, spawnCursor, ...) to this common shape when
+ * building the spawnFns map it hands to createWebSocketServer.
  */
-type ProviderSpawnFn = (
+export type ProviderSpawnFn = (
   command: string,
   options: AnyRecord,
   writer: unknown
@@ -72,15 +75,7 @@ type ChatWebSocketDependencies = {
    * catch) is reported idle so the client stops spinning without a manual refresh.
    */
   isActiveFns: Record<LLMProvider, (providerSessionId: string) => boolean>;
-  resolveToolApproval: (
-    requestId: string,
-    payload: {
-      allow: boolean;
-      updatedInput?: unknown;
-      message?: string;
-      rememberEntry?: unknown;
-    }
-  ) => void;
+  resolveToolApproval: (requestId: string, payload: ToolApprovalDecision) => void;
   /** Claude-only today: pending tool approvals included in `chat_subscribed`. */
   getPendingApprovalsForSession: (providerSessionId: string) => unknown[];
 };
@@ -372,9 +367,9 @@ function handlePermissionResponse(data: AnyRecord, dependencies: ChatWebSocketDe
 
   dependencies.resolveToolApproval(data.requestId, {
     allow: Boolean(data.allow),
-    updatedInput: data.updatedInput,
+    updatedInput: data.updatedInput && typeof data.updatedInput === 'object' ? data.updatedInput : undefined,
     message: typeof data.message === 'string' ? data.message : undefined,
-    rememberEntry: data.rememberEntry,
+    rememberEntry: typeof data.rememberEntry === 'string' ? data.rememberEntry : undefined,
   });
 }
 

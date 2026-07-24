@@ -66,7 +66,7 @@ type ToolApprovalResolver = {
   _receivedAt?: Date;
 };
 
-type ToolApprovalDecision = {
+export type ToolApprovalDecision = {
   cancelled?: boolean;
   allow?: boolean;
   updatedInput?: Record<string, unknown>;
