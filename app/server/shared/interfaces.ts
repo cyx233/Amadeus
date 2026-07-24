@@ -14,6 +14,7 @@ import type {
   ProviderSessionActiveModelChange,
   ProviderSkillCreateInput,
   ProviderSkillRemoveInput,
+  ProviderTokenUsage,
   UpsertProviderMcpServerInput,
 } from '@/shared/types.js';
 
@@ -146,6 +147,13 @@ export interface IProviderMcp {
 export interface IProviderSessions {
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
   fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
+  /**
+   * Token-usage summary for one session. `sessionId` is the APP-facing id;
+   * implementations resolve the provider-native id + on-disk artifacts the same
+   * way fetchHistory does. Providers that don't track usage return
+   * `{ ...zeros, unsupported: true }`.
+   */
+  getSessionTokenUsage(sessionId: string, options?: FetchHistoryOptions): Promise<ProviderTokenUsage>;
 }
 
 // ---------------------------

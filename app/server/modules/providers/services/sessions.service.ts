@@ -10,6 +10,7 @@ import type {
   FetchHistoryResult,
   LLMProvider,
   NormalizedMessage,
+  ProviderTokenUsage,
 } from '@/shared/types.js';
 import { AppError } from '@/shared/utils.js';
 
@@ -187,6 +188,30 @@ export const sessionsService = {
         sessionId,
       })),
     };
+  },
+
+  /**
+   * Token-usage summary for one session, dispatched to the owning provider
+   * (each provider reads its own on-disk artifacts). Resolves the app→provider
+   * id mapping here, like fetchHistory, so providers key their reads correctly.
+   */
+  async getSessionTokenUsage(sessionId: string): Promise<ProviderTokenUsage> {
+    const session = sessionsDb.getSessionById(sessionId);
+    if (!session) {
+      throw new AppError(`Session "${sessionId}" was not found.`, {
+        code: 'SESSION_NOT_FOUND',
+        statusCode: 404,
+      });
+    }
+
+    // No provider transcript yet (e.g. first message still streaming) → nothing
+    // to report, but the session's model still fixes the context window, so let
+    // the provider resolve it (Claude reads the override) rather than zeroing.
+    const provider = session.provider as LLMProvider;
+    return providerRegistry.resolveProvider(provider).sessions.getSessionTokenUsage(sessionId, {
+      projectPath: session.project_path ?? '',
+      providerSessionId: session.provider_session_id ?? undefined,
+    });
   },
 
   /**

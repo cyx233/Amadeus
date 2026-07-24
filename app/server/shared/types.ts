@@ -305,6 +305,27 @@ export type FetchHistoryResult = {
   tokenUsage?: unknown;
 };
 
+/**
+ * Normalized token-usage summary for one session, returned by
+ * IProviderSessions.getSessionTokenUsage. `total` is the context window
+ * (0 when the provider has no ceiling to report); `used` is the run's token
+ * total. `unsupported` marks providers that don't track usage (e.g. Cursor).
+ * The field set matches the /token-usage endpoint's long-standing response
+ * contract that the frontend (TokenUsageSummary) reads.
+ */
+export type ProviderTokenUsage = {
+  used: number;
+  total: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  cacheTokens?: number;
+  breakdown: { input: number; output: number };
+  unsupported?: boolean;
+  message?: string;
+};
+
 // ---------------------------
 //----------------- PROVIDER SKILL TYPES ------------
 /**
