@@ -1,8 +1,9 @@
 /**
  * Provider runtime dispatch — the single source for "given a provider, which
- * agent runtime runs it". Both chat sends (routes/agent.js) and one-shot
- * generation (text-generation.service.js) resolve the runner here instead of
- * each hand-writing an `if provider === 'claude' … else if …` switch.
+ * agent runtime runs it". One-shot generation (text-generation.service.js)
+ * resolves the runner here instead of hand-writing an
+ * `if provider === 'claude' … else if …` switch. (Interactive chat wires the
+ * same runners in directly as websocket spawnFns; see server/index.js.)
  *
  * Every runner shares the same shape: fn(message, options, writer), where
  * options carries { projectPath, cwd, sessionId, model, effort, permissionMode,

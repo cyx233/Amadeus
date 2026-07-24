@@ -273,7 +273,6 @@
       "added": "添加时间：",
       "confirmDelete": "确定要删除此 GitHub 令牌吗？"
     },
-    "apiDocsLink": "API 文档",
     "documentation": {
       "title": "外部 API 文档",
       "description": "了解如何使用外部 API 从您的应用程序触发 Claude/Cursor 会话。",
