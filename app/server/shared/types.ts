@@ -556,6 +556,25 @@ export type CreateCredentialResult = {
 // ---------------------------
 //----------------- TRAJECTORY MEMORY TYPES ------------
 /**
+ * Trajectory metadata pulled from a single normalized tool-call event.
+ *
+ * - `tool` — the tool name (present whenever the event carries one).
+ * - `files` — every file path the tool touched; empty when the tool does not
+ *   operate on files, or for providers that only surface tool names.
+ * - `script` — a shell command, present only for command-running tools.
+ *
+ * Reading a provider's native tool-input shape is squarely the provider shim's
+ * job, so this is produced by `IProviderSessions.extractToolTrajectory`
+ * alongside `normalizeMessage`. The capture seam merges these per-event results
+ * into the per-turn accumulator it flushes as one `TrajectoryRow`.
+ */
+export type ExtractedToolMetadata = {
+  tool?: string;
+  files?: string[];
+  script?: string;
+};
+
+/**
  * One captured turn of "trajectory memory": a lightweight record of which
  * tools ran, which files were touched, and which shell commands executed
  * during a single agent turn. The pull-only recall tool uses these rows to

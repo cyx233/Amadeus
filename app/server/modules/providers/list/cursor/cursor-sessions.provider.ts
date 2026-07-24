@@ -2,9 +2,10 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
+import { toolNameOnlyTrajectory } from '@/modules/providers/shared/trajectory/tool-trajectory.js';
 import { parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
+import type { AnyRecord, ExtractedToolMetadata, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
 import {
   createNormalizedMessage,
   generateMessageId,
@@ -219,6 +220,14 @@ function normalizeCursorToolInput(toolName: string, rawInput: unknown): unknown 
 }
 
 export class CursorSessionsProvider implements IProviderSessions {
+  /**
+   * Cursor doesn't decode file paths from tool input yet, so trajectory capture
+   * records tool names only (empty files) and degrades gracefully at recall.
+   */
+  extractToolTrajectory(event: NormalizedMessage): ExtractedToolMetadata | null {
+    return toolNameOnlyTrajectory(event);
+  }
+
   /**
    * Loads Cursor's SQLite blob DAG and returns message blobs in conversation
    * order. Cursor history is stored as content-addressed blobs rather than JSONL.
