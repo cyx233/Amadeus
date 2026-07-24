@@ -7,7 +7,26 @@ import express from "express";
 import { providerModelsService } from "../modules/providers/services/provider-models.service.js";
 import { sessionsService } from "../modules/providers/services/sessions.service.js";
 import { parseFrontMatter } from "../shared/frontmatter.js";
+import type { LLMProvider } from "../shared/types.js";
 import { findAppRoot, getModuleDir } from "../utils/runtime-paths.js";
+
+/** Context a command handler receives (all fields optional; client-supplied). */
+type CommandContext = {
+  provider?: string;
+  sessionId?: string;
+  projectPath?: string;
+  tokenUsage?: Record<string, unknown>;
+};
+
+/** A discovered command (built-in or custom). */
+type CommandInfo = {
+  name: string;
+  path?: string;
+  relativePath?: string;
+  description: string;
+  namespace: string;
+  metadata: Record<string, unknown>;
+};
 
 const __dirname = getModuleDir(import.meta.url);
 // This route reads the top-level package.json for the status command, so it needs the real
@@ -16,28 +35,39 @@ const APP_ROOT = findAppRoot(__dirname);
 
 const router = express.Router();
 
-const MODEL_PROVIDERS = ["claude", "cursor", "codex", "opencode"];
+/** Narrow an unknown catch binding to its message string. */
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
 
-const MODEL_PROVIDER_LABELS = {
+/** Narrow an unknown catch binding to its Node error code, if any. */
+function errorCode(error: unknown): string | undefined {
+  return (error as { code?: string } | null)?.code;
+}
+
+const MODEL_PROVIDERS: LLMProvider[] = ["claude", "cursor", "codex", "opencode"];
+
+const MODEL_PROVIDER_LABELS: Record<LLMProvider, string> = {
   claude: "Claude",
   cursor: "Cursor",
   codex: "Codex",
   opencode: "OpenCode",
 };
 
-const readModelProvider = (value) => {
+const readModelProvider = (value: unknown): LLMProvider => {
   if (typeof value !== "string") {
     return "claude";
   }
 
-  const normalized = value.trim().toLowerCase();
+  const normalized = value.trim().toLowerCase() as LLMProvider;
   return MODEL_PROVIDERS.includes(normalized) ? normalized : "claude";
 };
 
-const hasConcreteSessionId = (value) =>
+const hasConcreteSessionId = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 
-const resolveCommandModel = async (provider, catalog, sessionId) => {
+const resolveCommandModel = async (provider: LLMProvider, catalog: { DEFAULT: string }, sessionId: unknown) => {
   if (!hasConcreteSessionId(sessionId)) {
     return catalog.DEFAULT;
   }
@@ -49,7 +79,7 @@ const resolveCommandModel = async (provider, catalog, sessionId) => {
   return currentActiveModel?.model || catalog.DEFAULT;
 };
 
-export const executeModelsCommand = async (args, context) => {
+export const executeModelsCommand = async (args: string[], context?: CommandContext) => {
   const currentProvider = readModelProvider(context?.provider);
   const result = await providerModelsService.getProviderModels(currentProvider);
   const catalog = result.models;
@@ -93,8 +123,8 @@ export const executeModelsCommand = async (args, context) => {
  * @param {string} namespace - Namespace for commands (e.g., 'project', 'user')
  * @returns {Promise<Array>} Array of command objects
  */
-async function scanCommandsDirectory(dir, baseDir, namespace) {
-  const commands = [];
+async function scanCommandsDirectory(dir: string, baseDir: string, namespace: string): Promise<CommandInfo[]> {
+  const commands: CommandInfo[] = [];
 
   try {
     // Check if directory exists
@@ -142,14 +172,14 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
             metadata: frontmatter,
           });
         } catch (err) {
-          console.error(`Error parsing command file ${fullPath}:`, err.message);
+          console.error(`Error parsing command file ${fullPath}:`, errorMessage(err));
         }
       }
     }
   } catch (err) {
     // Directory doesn't exist or can't be accessed - this is okay
-    if (err.code !== "ENOENT" && err.code !== "EACCES") {
-      console.error(`Error scanning directory ${dir}:`, err.message);
+    if (errorCode(err) !== "ENOENT" && errorCode(err) !== "EACCES") {
+      console.error(`Error scanning directory ${dir}:`, errorMessage(err));
     }
   }
 
@@ -159,7 +189,7 @@ async function scanCommandsDirectory(dir, baseDir, namespace) {
 /**
  * Built-in commands that are always available
  */
-const builtInCommands = [
+const builtInCommands: CommandInfo[] = [
   {
     name: "/help",
     description: "Show help documentation for Claude Code",
@@ -203,7 +233,7 @@ const builtInCommands = [
  * Each handler returns { type: 'builtin', action: string, data: any }
  */
 const builtInHandlers = {
-  "/help": async (args, context) => {
+  "/help": async (args: string[], context?: CommandContext) => {
     const helpText = `# Claude Code Commands
 
 ## Built-in Commands
@@ -252,7 +282,7 @@ Custom commands can be created in:
 
   "/models": executeModelsCommand,
 
-  "/cost": async (args, context) => {
+  "/cost": async (args: string[], context?: CommandContext) => {
     const provider = readModelProvider(context?.provider);
     const catalog = (await providerModelsService.getProviderModels(provider)).models;
     const model = await resolveCommandModel(provider, catalog, context?.sessionId);
@@ -274,12 +304,19 @@ Custom commands can be created in:
       usage = context?.tokenUsage || {};
     }
 
-    const total = Number(usage.total ?? usage.contextWindow ?? 0) || 0;
-    const inputTokens = Number(usage.inputTokens ?? usage.breakdown?.input ?? 0) || 0;
-    const outputTokens = Number(usage.outputTokens ?? usage.breakdown?.output ?? 0) || 0;
+    // usage may be the canonical ProviderTokenUsage or a loose client blob;
+    // read the union of possible fields through a permissive view.
+    const u = usage as {
+      total?: unknown; contextWindow?: unknown; inputTokens?: unknown;
+      outputTokens?: unknown; used?: unknown;
+      breakdown?: { input?: unknown; output?: unknown };
+    };
+    const total = Number(u.total ?? u.contextWindow ?? 0) || 0;
+    const inputTokens = Number(u.inputTokens ?? u.breakdown?.input ?? 0) || 0;
+    const outputTokens = Number(u.outputTokens ?? u.breakdown?.output ?? 0) || 0;
     const computedUsed = inputTokens + outputTokens;
     const hasTokenBreakdown = computedUsed > 0;
-    const used = Math.max(Number(usage.used ?? 0) || 0, computedUsed);
+    const used = Math.max(Number(u.used ?? 0) || 0, computedUsed);
 
     return {
       type: "builtin",
@@ -303,7 +340,7 @@ Custom commands can be created in:
     };
   },
 
-  "/status": async (args, context) => {
+  "/status": async (args: string[], context?: CommandContext) => {
     // Read version from package.json
     const packageJsonPath = path.join(APP_ROOT, "package.json");
     let version = "unknown";
@@ -354,7 +391,7 @@ Custom commands can be created in:
     };
   },
 
-  "/memory": async (args, context) => {
+  "/memory": async (args: string[], context?: CommandContext) => {
     const projectPath = context?.projectPath;
 
     if (!projectPath) {
@@ -392,7 +429,7 @@ Custom commands can be created in:
     };
   },
 
-  "/config": async (args, context) => {
+  "/config": async (args: string[], context?: CommandContext) => {
     return {
       type: "builtin",
       action: "config",
@@ -450,7 +487,7 @@ router.post("/list", async (req, res) => {
     console.error("Error listing commands:", error);
     res.status(500).json({
       error: "Failed to list commands",
-      message: error.message,
+      message: errorMessage(error),
     });
   }
 });
@@ -472,7 +509,7 @@ router.post("/execute", async (req, res) => {
     }
 
     // Handle built-in commands
-    const handler = builtInHandlers[commandName];
+    const handler = builtInHandlers[commandName as keyof typeof builtInHandlers];
     if (handler) {
       try {
         const result = await handler(args, context);
@@ -487,7 +524,7 @@ router.post("/execute", async (req, res) => {
         );
         return res.status(500).json({
           error: "Command execution failed",
-          message: error.message,
+          message: errorMessage(error),
           command: commandName,
         });
       }
@@ -510,7 +547,7 @@ router.post("/execute", async (req, res) => {
       const projectBase = context?.projectPath
         ? path.resolve(path.join(context.projectPath, ".claude", "commands"))
         : null;
-      const isUnder = (base) => {
+      const isUnder = (base: string) => {
         const rel = path.relative(base, resolvedPath);
         return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
       };
@@ -532,7 +569,7 @@ router.post("/execute", async (req, res) => {
     processedContent = processedContent.replace(/\$ARGUMENTS/g, argsString);
 
     // Replace $1, $2, etc. with positional arguments
-    args.forEach((arg, index) => {
+    args.forEach((arg: string, index: number) => {
       const placeholder = `$${index + 1}`;
       processedContent = processedContent.replace(
         new RegExp(`\\${placeholder}\\b`, "g"),
@@ -549,7 +586,7 @@ router.post("/execute", async (req, res) => {
       hasBashCommands: processedContent.includes("!"),
     });
   } catch (error) {
-    if (error.code === "ENOENT") {
+    if (errorCode(error) === "ENOENT") {
       return res.status(404).json({
         error: "Command not found",
         message: `Command file not found: ${req.body.commandPath}`,
@@ -559,7 +596,7 @@ router.post("/execute", async (req, res) => {
     console.error("Error executing command:", error);
     res.status(500).json({
       error: "Failed to execute command",
-      message: error.message,
+      message: errorMessage(error),
     });
   }
 });
