@@ -5,9 +5,8 @@ import readline from 'node:readline';
 
 import type { IProviderSessions } from '@/shared/interfaces.js';
 import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
-import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
+import { createNormalizedMessage, generateMessageId, readObjectRecord, readProviderSessionActiveModelChange, sliceTailPage } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
-import { readProviderSessionActiveModelChange } from '@/shared/utils.js';
 
 const PROVIDER = 'claude';
 
@@ -698,6 +697,15 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     // Prefer the run's own reported ceiling (modelUsage[*].contextWindow, present
     // on result-style entries); streaming runs omit it, so we fall back below.
     let contextWindowFromRun = 0;
+    // Input vs output are accumulated differently on purpose:
+    //   - OUTPUT is new text per step → SUM across every assistant message. The
+    //     last step alone is tiny (e.g. 631) even when the session produced
+    //     200k+ output over its turns; showing only the last step under-reported
+    //     "output tokens used" by orders of magnitude.
+    //   - INPUT/cache already carry the full accumulated context on EACH step
+    //     (cache_read grows as the conversation does), so the NEWEST step's input
+    //     is the current context occupancy; summing it would double-count wildly.
+    let sawLatestInput = false;
     try {
       const lines = (await fsp.readFile(transcript.jsonlPath, 'utf8'))
         .split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -712,11 +720,14 @@ export class ClaudeSessionsProvider implements IProviderSessions {
           }
           if (entry.type === 'assistant' && entry.message?.usage) {
             const usage = entry.message.usage as AnyRecord;
-            cacheReadTokens = num(usage.cache_read_input_tokens ?? usage.cacheReadInputTokens ?? usage.cacheReadTokens);
-            cacheCreationTokens = num(usage.cache_creation_input_tokens ?? usage.cacheCreationInputTokens ?? usage.cacheCreationTokens);
-            inputTokens = num(usage.input_tokens ?? usage.inputTokens) + cacheReadTokens + cacheCreationTokens;
-            outputTokens = num(usage.output_tokens ?? usage.outputTokens);
-            break; // Latest assistant message only.
+            outputTokens += num(usage.output_tokens ?? usage.outputTokens);
+            // First hit scanning from the end = newest step → context occupancy.
+            if (!sawLatestInput) {
+              cacheReadTokens = num(usage.cache_read_input_tokens ?? usage.cacheReadInputTokens ?? usage.cacheReadTokens);
+              cacheCreationTokens = num(usage.cache_creation_input_tokens ?? usage.cacheCreationInputTokens ?? usage.cacheCreationTokens);
+              inputTokens = num(usage.input_tokens ?? usage.inputTokens) + cacheReadTokens + cacheCreationTokens;
+              sawLatestInput = true;
+            }
           }
         } catch {
           // Skip malformed JSONL lines.
