@@ -3,11 +3,11 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import readline from 'node:readline';
 
+import { extractClaudeToolTrajectory } from '@/modules/providers/list/claude/claude-trajectory.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
-import { createNormalizedMessage, generateMessageId, readObjectRecord, sliceTailPage } from '@/shared/utils.js';
+import type { AnyRecord, ExtractedToolMetadata, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
+import { createNormalizedMessage, generateMessageId, readObjectRecord, readProviderSessionActiveModelChange, sliceTailPage } from '@/shared/utils.js';
 import { sessionsDb } from '@/modules/database/index.js';
-import { readProviderSessionActiveModelChange } from '@/shared/utils.js';
 
 const PROVIDER = 'claude';
 
@@ -591,6 +591,17 @@ export class ClaudeSessionsProvider implements IProviderSessions {
     }
 
     return messages;
+  }
+
+  /**
+   * Pulls trajectory metadata from a normalized Claude `tool_use` event.
+   *
+   * Thin shim over `extractClaudeToolTrajectory` — the decoding logic lives in
+   * `claude-trajectory.ts` so this class stays a wiring layer for the
+   * `IProviderSessions` contract, symmetric with the other providers.
+   */
+  extractToolTrajectory(event: NormalizedMessage): ExtractedToolMetadata | null {
+    return extractClaudeToolTrajectory(event);
   }
 
   /**

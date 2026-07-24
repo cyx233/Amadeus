@@ -1,4 +1,5 @@
 import type {
+  ExtractedToolMetadata,
   FetchHistoryOptions,
   FetchHistoryResult,
   LLMProvider,
@@ -146,6 +147,18 @@ export interface IProviderMcp {
  */
 export interface IProviderSessions {
   normalizeMessage(raw: unknown, sessionId: string | null): NormalizedMessage[];
+  /**
+   * Pulls trajectory metadata (`{tool, files, script}`) from one normalized
+   * `tool_use` event. Reading a provider's native tool-input shape is the shim's
+   * job, so this lives beside `normalizeMessage` rather than in a separate
+   * registry.
+   *
+   * Returns `null` for events that carry no tool name (nothing to record).
+   * Providers that don't yet decode file paths still return the tool name with
+   * empty `files`, so capture degrades gracefully rather than failing. Must
+   * never throw on missing or malformed input — return `null` or empty fields.
+   */
+  extractToolTrajectory(event: NormalizedMessage): ExtractedToolMetadata | null;
   fetchHistory(sessionId: string, options?: FetchHistoryOptions): Promise<FetchHistoryResult>;
   /**
    * Token-usage summary for one session. `sessionId` is the APP-facing id;

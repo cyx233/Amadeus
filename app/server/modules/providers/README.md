@@ -64,7 +64,7 @@ The existing provider folders are `claude`, `codex`, `cursor`, and `opencode`.
 | `auth` | Report install/auth state for the provider runtime | `IProviderAuth` -> `providerAuthService` |
 | `mcp` | Read, list, write, and remove provider-native MCP config | `McpProvider` -> `providerMcpService` |
 | `skills` | Discover provider-native skill markdown files | `SkillsProvider` -> `providerSkillsService` |
-| `sessions` | Normalize live events and fetch session history | `IProviderSessions` -> `sessionsService` |
+| `sessions` | Normalize live events, fetch session history, extract per-turn trajectory metadata | `IProviderSessions` -> `sessionsService` |
 | `sessionSynchronizer` | Scan transcript artifacts and upsert session metadata | `IProviderSessionSynchronizer` -> `sessionSynchronizerService` |
 
 `sessions` and `sessionSynchronizer` are separate concerns:
@@ -153,7 +153,8 @@ Command forms currently used by the providers are:
 
 6. Implement sessions.
 
-- Implement `normalizeMessage(raw, sessionId)` and `fetchHistory(sessionId, options)`.
+- Implement `normalizeMessage(raw, sessionId)`, `fetchHistory(sessionId, options)`,
+  and `extractToolTrajectory(event)`.
 - Use `createNormalizedMessage(...)` and `generateMessageId(...)` for emitted messages.
 - Keep normalized message ids unique. If one raw event produces multiple text
   parts, append a discriminator so ids do not collide.
@@ -163,6 +164,25 @@ Command forms currently used by the providers are:
   - always return `total`, `hasMore`, `offset`, and `limit` when paginating.
 - Sanitize any filesystem-derived ids before using them in file or database paths.
 - Do not assume a provider's history format matches another provider's format.
+
+**Trajectory extraction (`extractToolTrajectory`).** Decoding a `tool_use`
+event's native tool-input shape into `{ tool, files, script }` is the shim's
+job, so it lives beside `normalizeMessage` rather than in a separate registry.
+Keep the provider class a thin wiring layer — the real decoding is a pure
+function it delegates to:
+
+- Providers that don't decode file paths yet delegate to the shared
+  `toolNameOnlyTrajectory` (in `shared/trajectory/tool-trajectory.ts`). It
+  reports the tool name with empty `files`, so capture still records which tools
+  ran and recall degrades gracefully (overlap score 0) rather than failing.
+  Codex, Cursor, and OpenCode use this today.
+- Providers with real decoding put the logic in a co-located pure module
+  (`list/<provider>/<provider>-trajectory.ts`), unit-tested without constructing
+  a provider, and the class body is a one-line delegate. Claude is the reference:
+  `claude-trajectory.ts` reads paths from `toolInput` (Claude lands raw tool
+  `input` there) via the shared `collectToolPaths`.
+- Never throw on missing or malformed input — return `null` (no tool name) or
+  empty `files`. Capture must never break a turn.
 
 7. Implement session synchronization.
 
@@ -326,6 +346,8 @@ Useful tests in this repo:
 - `server/modules/providers/tests/mcp.test.ts`
 - `server/modules/providers/tests/skills.test.ts`
 - `server/modules/providers/tests/opencode-sessions.test.ts`
+- `server/modules/providers/tests/trajectory-extraction.test.ts` (per-provider `extractToolTrajectory` wiring + graceful degradation)
+- `server/modules/providers/list/claude/tests/claude-trajectory.test.ts` (Claude's pure decoding logic)
 
 If you touch sessions or session synchronization, add or update focused tests
 alongside the implementation.
@@ -338,6 +360,9 @@ alongside the implementation.
   provider constants.
 - Omitting `skills` or `sessionSynchronizer` from the wrapper.
 - Returning duplicate normalized message ids for split content.
+- Inlining trajectory decoding into the sessions class instead of a co-located
+  pure `<provider>-trajectory.ts`, or letting `extractToolTrajectory` throw on
+  malformed input instead of returning `null` / empty `files`.
 - Treating `limit === 0` as unbounded history.
 - Building file paths from raw session ids without validation.
 - Hardcoding a skill root without checking the provider's actual discovery rules.

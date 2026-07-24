@@ -1,6 +1,7 @@
+import { toolNameOnlyTrajectory } from '@/modules/providers/shared/trajectory/tool-trajectory.js';
 import { parseImagesInputTag } from '@/shared/image-attachments.js';
 import type { IProviderSessions } from '@/shared/interfaces.js';
-import type { AnyRecord, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
+import type { AnyRecord, ExtractedToolMetadata, FetchHistoryOptions, FetchHistoryResult, NormalizedMessage, ProviderTokenUsage } from '@/shared/types.js';
 import {
   createNormalizedMessage,
   generateMessageId,
@@ -66,6 +67,15 @@ const isUserTextEcho = (raw: AnyRecord): boolean => {
 
 
 export class OpenCodeSessionsProvider implements IProviderSessions {
+  /**
+   * OpenCode doesn't decode file paths from tool input yet, so trajectory
+   * capture records tool names only (empty files) and degrades gracefully at
+   * recall.
+   */
+  extractToolTrajectory(event: NormalizedMessage): ExtractedToolMetadata | null {
+    return toolNameOnlyTrajectory(event);
+  }
+
   /**
    * Normalizes live `opencode run --format json` events into frontend messages.
    */
