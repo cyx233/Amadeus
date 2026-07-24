@@ -1,5 +1,6 @@
 import express, { type Request } from 'express';
 
+import { getAuthUser } from '../shared/authed.js';
 import {
   apiKeysDb,
   credentialsDb,
@@ -12,11 +13,10 @@ import { syncGitCredentials } from '../utils/git-credentials.js';
 
 const router = express.Router();
 
-// The auth middleware attaches `user` to the request; Express's base Request
-// type doesn't know about it. Mirrors the cast used in the other TS routes
-// (projects.routes.ts, git.ts) — kept as one local helper here since every
-// handler needs the id.
-const userId = (req: Request): number => (req as Request & { user?: { id?: number } }).user?.id as number;
+// Fail-closed id resolution for these authenticateToken-guarded routes:
+// getAuthUser throws a 401 if `user` is somehow absent, so no undefined id
+// ever reaches the DB layer.
+const userId = (req: Request): number => getAuthUser(req).id;
 
 // ===============================
 // API Keys Management
