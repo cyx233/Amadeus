@@ -3,23 +3,60 @@ import webPush from 'web-push';
 import { notificationPreferencesDb, pushSubscriptionsDb, sessionsDb } from '@/modules/database/index.js';
 import { sendDesktopNotification as sendDesktopNotificationToClients } from '@/modules/notifications/services/desktop-notification-clients.service.js';
 
-const KIND_TO_PREF_KEY = {
+/**
+ * Notification provider label — 'system' covers app-level events with no
+ * specific agent (e.g. push.enabled). PROVIDER_LABELS below has no
+ * 'opencode' entry (a pre-existing gap, not introduced by this migration —
+ * the original .js object was missing it too), so opencode notifications
+ * fall through to buildNotificationPayload's `|| 'Assistant'` label.
+ */
+type NotificationProvider = 'claude' | 'cursor' | 'codex' | 'opencode' | 'system';
+type NotificationKind = 'action_required' | 'stop' | 'error' | 'info';
+type NotificationSeverity = 'info' | 'warning' | 'error';
+type NotificationCode =
+  | 'permission.required'
+  | 'run.stopped'
+  | 'run.failed'
+  | 'agent.notification'
+  | 'push.enabled';
+
+type NotificationEvent = {
+  provider: NotificationProvider;
+  sessionId: string | null;
+  kind: NotificationKind;
+  code: NotificationCode;
+  meta: Record<string, unknown>;
+  severity: NotificationSeverity;
+  requiresUserAction: boolean;
+  dedupeKey: string | null;
+  createdAt: string;
+};
+
+type NotificationPreferencesLike = {
+  // Keyed by the mapped pref-key strings (KIND_TO_PREF_KEY's values, e.g.
+  // 'actionRequired'), not by NotificationKind directly — 'action_required'
+  // maps to the camelCase 'actionRequired' preference field.
+  events?: Partial<Record<string, boolean>>;
+  channels?: Partial<Record<string, boolean>>;
+};
+
+const KIND_TO_PREF_KEY: Partial<Record<NotificationKind, string>> = {
   action_required: 'actionRequired',
   stop: 'stop',
   error: 'error'
 };
 
-const PROVIDER_LABELS = {
+const PROVIDER_LABELS: Partial<Record<NotificationProvider, string>> = {
   claude: 'Claude',
   cursor: 'Cursor',
   codex: 'Codex',
   system: 'System'
 };
 
-const recentEventKeys = new Map();
+const recentEventKeys = new Map<string, number>();
 const DEDUPE_WINDOW_MS = 20000;
 
-const cleanupOldEventKeys = () => {
+const cleanupOldEventKeys = (): void => {
   const now = Date.now();
   for (const [key, timestamp] of recentEventKeys.entries()) {
     if (now - timestamp > DEDUPE_WINDOW_MS) {
@@ -28,14 +65,14 @@ const cleanupOldEventKeys = () => {
   }
 };
 
-function isNotificationEventEnabled(preferences, event) {
+function isNotificationEventEnabled(preferences: NotificationPreferencesLike | undefined, event: NotificationEvent): boolean {
   const prefEventKey = KIND_TO_PREF_KEY[event.kind];
   const eventEnabled = prefEventKey ? Boolean(preferences?.events?.[prefEventKey]) : true;
 
   return eventEnabled;
 }
 
-function isDuplicate(event) {
+function isDuplicate(event: NotificationEvent): boolean {
   cleanupOldEventKeys();
   const key = event.dedupeKey || `${event.provider}:${event.kind || 'info'}:${event.code || 'generic'}:${event.sessionId || 'none'}`;
   if (recentEventKeys.has(key)) {
@@ -45,19 +82,25 @@ function isDuplicate(event) {
   return false;
 }
 
-/**
- * @param {{ provider: string, sessionId?: string|null, kind?: string, code?: string, meta?: Record<string, unknown>, severity?: string, dedupeKey?: string|null, requiresUserAction?: boolean }} args
- */
 function createNotificationEvent({
   provider,
   sessionId = null,
   kind = 'info',
-  code = 'generic.info',
+  code = 'generic.info' as NotificationCode,
   meta = {},
   severity = 'info',
   dedupeKey = null,
   requiresUserAction = false
-}) {
+}: {
+  provider: NotificationProvider;
+  sessionId?: string | null;
+  kind?: NotificationKind;
+  code?: NotificationCode;
+  meta?: Record<string, unknown>;
+  severity?: NotificationSeverity;
+  dedupeKey?: string | null;
+  requiresUserAction?: boolean;
+}): NotificationEvent {
   return {
     provider,
     sessionId,
@@ -71,13 +114,13 @@ function createNotificationEvent({
   };
 }
 
-function normalizeErrorMessage(error) {
+function normalizeErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
     return error;
   }
 
-  if (error && typeof error.message === 'string') {
-    return error.message;
+  if (error && typeof (error as { message?: unknown }).message === 'string') {
+    return (error as { message: string }).message;
   }
 
   if (error == null) {
@@ -87,7 +130,7 @@ function normalizeErrorMessage(error) {
   return String(error);
 }
 
-function normalizeSessionName(sessionName) {
+function normalizeSessionName(sessionName: unknown): string | null {
   if (typeof sessionName !== 'string') {
     return null;
   }
@@ -100,11 +143,13 @@ function normalizeSessionName(sessionName) {
   return normalized.length > 80 ? `${normalized.slice(0, 77)}...` : normalized;
 }
 
-function rowMatchesProvider(row, provider) {
-  return row && (!provider || row.provider === provider);
+type SessionRow = NonNullable<ReturnType<typeof sessionsDb.getSessionById>>;
+
+function rowMatchesProvider(row: SessionRow | null, provider: string | undefined): row is SessionRow {
+  return Boolean(row) && (!provider || row?.provider === provider);
 }
 
-function resolveSessionRow(sessionId, provider) {
+function resolveSessionRow(sessionId: string | null | undefined, provider: string | undefined): SessionRow | null {
   if (!sessionId) {
     return null;
   }
@@ -122,7 +167,7 @@ function resolveSessionRow(sessionId, provider) {
   return null;
 }
 
-function normalizeNotificationSession(event) {
+function normalizeNotificationSession(event: NotificationEvent): NotificationEvent {
   if (!event?.sessionId || !event.provider || event.provider === 'system') {
     return event;
   }
@@ -138,8 +183,8 @@ function normalizeNotificationSession(event) {
   };
 }
 
-function resolveSessionName(event) {
-  const explicitSessionName = normalizeSessionName(event.meta?.sessionName);
+function resolveSessionName(event: NotificationEvent): string | null {
+  const explicitSessionName = normalizeSessionName((event.meta as { sessionName?: unknown } | undefined)?.sessionName);
   if (explicitSessionName) {
     return explicitSessionName;
   }
@@ -151,15 +196,16 @@ function resolveSessionName(event) {
   return normalizeSessionName(sessionsDb.getSessionName(event.sessionId, event.provider));
 }
 
-function buildNotificationPayload(event) {
+function buildNotificationPayload(event: NotificationEvent) {
   const normalizedEvent = normalizeNotificationSession(event);
-  const CODE_MAP = {
-    'permission.required': normalizedEvent.meta?.toolName
-      ? `Action Required: Tool "${normalizedEvent.meta.toolName}" needs approval`
+  const meta = normalizedEvent.meta as { toolName?: unknown; stopReason?: unknown; error?: unknown; message?: unknown };
+  const CODE_MAP: Partial<Record<NotificationCode, string>> = {
+    'permission.required': meta?.toolName
+      ? `Action Required: Tool "${meta.toolName}" needs approval`
       : 'Action Required: A tool needs your approval',
-    'run.stopped': normalizedEvent.meta?.stopReason || 'Run Stopped: The run has stopped',
-    'run.failed': normalizedEvent.meta?.error ? `Run Failed: ${normalizedEvent.meta.error}` : 'Run Failed: The run encountered an error',
-    'agent.notification': normalizedEvent.meta?.message ? String(normalizedEvent.meta.message) : 'You have a new notification',
+    'run.stopped': meta?.stopReason ? String(meta.stopReason) : 'Run Stopped: The run has stopped',
+    'run.failed': meta?.error ? `Run Failed: ${meta.error}` : 'Run Failed: The run encountered an error',
+    'agent.notification': meta?.message ? String(meta.message) : 'You have a new notification',
     'push.enabled': 'Push notifications are now enabled!'
   };
   const providerLabel = PROVIDER_LABELS[normalizedEvent.provider] || 'Assistant';
@@ -179,7 +225,9 @@ function buildNotificationPayload(event) {
   };
 }
 
-function sendWebPushPayload(userId, payload) {
+type NotificationPushPayload = ReturnType<typeof buildNotificationPayload>;
+
+function sendWebPushPayload(userId: number, payload: NotificationPushPayload): Promise<void> {
   const subscriptions = pushSubscriptionsDb.getSubscriptions(userId);
   if (!subscriptions.length) return Promise.resolve();
 
@@ -200,7 +248,7 @@ function sendWebPushPayload(userId, payload) {
   ).then((results) => {
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
-        const statusCode = result.reason?.statusCode;
+        const statusCode = (result.reason as { statusCode?: number } | undefined)?.statusCode;
         if (statusCode === 410 || statusCode === 404) {
           pushSubscriptionsDb.removeSubscription(subscriptions[index].endpoint);
         }
@@ -209,7 +257,13 @@ function sendWebPushPayload(userId, payload) {
   });
 }
 
-const notificationChannels = [
+type NotificationChannel = {
+  id: string;
+  isEnabled: (preferences: NotificationPreferencesLike | undefined) => boolean;
+  send: (args: { userId: number; payload: NotificationPushPayload }) => Promise<unknown>;
+};
+
+const notificationChannels: NotificationChannel[] = [
   {
     id: 'webPush',
     // TODO: Web push still uses push_subscriptions. Do not remove that table until
@@ -220,17 +274,18 @@ const notificationChannels = [
   {
     id: 'desktop',
     isEnabled: (preferences) => Boolean(preferences?.channels?.desktop),
-    send: ({ userId, payload }) => sendDesktopNotificationToClients(userId, payload)
+    send: ({ userId, payload }) => Promise.resolve(sendDesktopNotificationToClients(userId, payload))
   }
 ];
 
-function notifyUserIfEnabled({ userId, event }) {
+function notifyUserIfEnabled({ userId, event }: { userId: number | string | null | undefined; event: NotificationEvent | null | undefined }): void {
   if (!userId || !event) {
     return;
   }
 
+  const numericUserId = Number(userId);
   const normalizedEvent = normalizeNotificationSession(event);
-  const preferences = notificationPreferencesDb.getPreferences(userId);
+  const preferences = notificationPreferencesDb.getPreferences(numericUserId);
   if (!isNotificationEventEnabled(preferences, normalizedEvent)) {
     return;
   }
@@ -243,16 +298,25 @@ function notifyUserIfEnabled({ userId, event }) {
     if (!channel.isEnabled(preferences)) {
       continue;
     }
-    Promise.resolve(channel.send({ userId, event: normalizedEvent, payload })).catch((err) => {
+    Promise.resolve(channel.send({ userId: numericUserId, payload })).catch((err) => {
       console.error(`Notification channel "${channel.id}" send error:`, err);
     });
   }
 }
 
-/**
- * @param {{ userId: number|string|null, provider: string, sessionId?: string|null, stopReason?: string, sessionName?: string|null }} args
- */
-function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'completed', sessionName = null }) {
+function notifyRunStopped({
+  userId,
+  provider,
+  sessionId = null,
+  stopReason = 'completed',
+  sessionName = null
+}: {
+  userId: number | string | null;
+  provider: NotificationProvider;
+  sessionId?: string | null;
+  stopReason?: string;
+  sessionName?: string | null;
+}): void {
   notifyUserIfEnabled({
     userId,
     event: createNotificationEvent({
@@ -267,10 +331,19 @@ function notifyRunStopped({ userId, provider, sessionId = null, stopReason = 'co
   });
 }
 
-/**
- * @param {{ userId: number|string|null, provider: string, sessionId?: string|null, error?: unknown, sessionName?: string|null }} args
- */
-function notifyRunFailed({ userId, provider, sessionId = null, error, sessionName = null }) {
+function notifyRunFailed({
+  userId,
+  provider,
+  sessionId = null,
+  error,
+  sessionName = null
+}: {
+  userId: number | string | null;
+  provider: NotificationProvider;
+  sessionId?: string | null;
+  error?: unknown;
+  sessionName?: string | null;
+}): void {
   const errorMessage = normalizeErrorMessage(error);
 
   notifyUserIfEnabled({

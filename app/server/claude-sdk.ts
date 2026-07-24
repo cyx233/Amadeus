@@ -565,7 +565,7 @@ async function queryClaudeSDK(command: string, options: SpawnClaudeOptions = {},
   let capturedSessionId = sessionId;
   let sessionCreatedSent = false;
 
-  const emitNotification = (event: unknown) => {
+  const emitNotification = (event: ReturnType<typeof createNotificationEvent>) => {
     // `notifyUserIfEnabled` destructures only { userId, event } — a `writer`
     // field here was never read (verified against its definition in
     // notification-orchestrator.service.js), so it's dropped rather than
