@@ -162,6 +162,7 @@ export default tseslint.config(
             "server/shared/frontmatter.ts",
             "server/shared/claude-cli-path.ts",
             "server/shared/image-attachments.ts",
+            "server/shared/runtime-effort.js",
             "server/shared/secret-crypto.ts",
             // Shared runtime helpers used by the legacy agent runtimes (e.g.
             // claude-sdk.js) — not tied to any one provider module.

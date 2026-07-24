@@ -23,6 +23,7 @@ import { buildClaudeUserContent, normalizeImageDescriptors } from './shared/imag
 import { CLAUDE_FALLBACK_MODELS } from './modules/providers/list/claude/claude-models.provider.js';
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { resolveClaudeCodeExecutablePath } from './shared/claude-cli-path.js';
+import { resolveRuntimeEffort } from './shared/runtime-effort.js';
 import {
   createNotificationEvent,
   notifyRunFailed,
@@ -46,12 +47,7 @@ const TOOL_APPROVAL_TIMEOUT_MS = parseInt(process.env.CLAUDE_TOOL_APPROVAL_TIMEO
 const TOOLS_REQUIRING_INTERACTION = new Set(['AskUserQuestion', 'ExitPlanMode']);
 
 function resolveClaudeEffort(model, effort, modelsDefinition = CLAUDE_FALLBACK_MODELS) {
-  const selectedModel = modelsDefinition?.OPTIONS?.find((option) => option.value === model) || null;
-  const allowedEfforts = selectedModel?.effort?.values
-    ?.map((value) => value.value) || [];
-  return typeof effort === 'string' && effort !== 'default' && allowedEfforts.includes(effort)
-    ? effort
-    : undefined;
+  return resolveRuntimeEffort(model, effort, modelsDefinition);
 }
 
 function createRequestId() {
@@ -274,14 +270,6 @@ function getSession(sessionId) {
 }
 
 /**
- * Gets all active session IDs
- * @returns {Array<string>} Array of active session IDs
- */
-function getAllSessions() {
-  return Array.from(activeSessions.keys());
-}
-
-/**
  * Transforms SDK messages to WebSocket format expected by frontend
  * @param {Object} sdkMessage - SDK message object
  * @returns {Object} Transformed message ready for WebSocket
@@ -311,9 +299,13 @@ function readNumber(value) {
  */
 // The model's real context window comes from the SDK's `modelUsage[model]`
 // (its `contextWindow` field reflects the actual model — 1M for opus[1m]/
-// sonnet[1m], 200K otherwise). Only fall back to CONTEXT_WINDOW/a default when
-// the SDK didn't report it, so the usage bar isn't pinned to a wrong fixed size.
-function resolveContextWindow(sdkMessage) {
+// sonnet[1m], 200K otherwise). That field is only present on the terminal
+// `result` message, so mid-run `assistant` messages have to fall back — and a
+// fixed 200K there pinned the live usage bar to the wrong size for a 1M run
+// until the final result landed (or forever if the socket dropped first). The
+// model string is authoritative for the ceiling, so derive it: a `[1m]` suffix
+// means a 1M window. Only then fall back to CONTEXT_WINDOW / 200K.
+function resolveContextWindow(sdkMessage, model) {
   const modelUsage = sdkMessage?.modelUsage;
   if (modelUsage && typeof modelUsage === 'object') {
     for (const entry of Object.values(modelUsage)) {
@@ -323,10 +315,13 @@ function resolveContextWindow(sdkMessage) {
       }
     }
   }
+  if (typeof model === 'string' && model.includes('[1m]')) {
+    return 1_000_000;
+  }
   return parseInt(process.env.CONTEXT_WINDOW, 10) || 200_000;
 }
 
-function extractTokenBudget(sdkMessage) {
+function extractTokenBudget(sdkMessage, model) {
   if (!sdkMessage || typeof sdkMessage !== 'object') {
     return null;
   }
@@ -351,7 +346,7 @@ function extractTokenBudget(sdkMessage) {
       outputTokens += readNumber(entry.outputTokens ?? entry.cumulativeOutputTokens);
     }
     inputTokens += cacheReadTokens + cacheCreationTokens;
-    const contextWindow = resolveContextWindow(sdkMessage);
+    const contextWindow = resolveContextWindow(sdkMessage, model);
     return {
       used: inputTokens + outputTokens,
       total: contextWindow,
@@ -375,7 +370,7 @@ function extractTokenBudget(sdkMessage) {
     const cacheTokens = cacheCreationTokens + cacheReadTokens;
     const inputTokens = directInputTokens + cacheTokens;
     const outputTokens = readNumber(messageUsage.output_tokens ?? messageUsage.outputTokens);
-    const contextWindow = resolveContextWindow(sdkMessage);
+    const contextWindow = resolveContextWindow(sdkMessage, model);
 
     return {
       used: inputTokens + outputTokens,
@@ -712,7 +707,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
       // value. `result` carries the authoritative cumulative usage; a non-partial
       // `assistant` carries its completed turn's usage.
       if (message.type === 'result' || message.type === 'assistant') {
-        const tokenBudgetData = extractTokenBudget(message);
+        const tokenBudgetData = extractTokenBudget(message, resolvedModel || options.model);
         if (tokenBudgetData) {
           ws.send(createNormalizedMessage({ kind: 'status', text: 'token_budget', tokenBudget: tokenBudgetData, sessionId: capturedSessionId || sessionId || null, provider: 'claude' }));
         }
@@ -847,14 +842,6 @@ function isClaudeSDKSessionActive(sessionId) {
 }
 
 /**
- * Gets all active SDK session IDs
- * @returns {Array<string>} Array of active session IDs
- */
-function getActiveClaudeSDKSessions() {
-  return getAllSessions();
-}
-
-/**
  * Get pending tool approvals for a specific session.
  * @param {string} sessionId - The session ID
  * @returns {Array} Array of pending permission request objects
@@ -876,28 +863,11 @@ function getPendingApprovalsForSession(sessionId) {
   return pending;
 }
 
-/**
- * Reconnect a session's WebSocketWriter to a new raw WebSocket.
- * Called when client reconnects (e.g. page refresh) while SDK is still running.
- * @param {string} sessionId - The session ID
- * @param {Object} newRawWs - The new raw WebSocket connection
- * @returns {boolean} True if writer was successfully reconnected
- */
-function reconnectSessionWriter(sessionId, newRawWs) {
-  const session = getSession(sessionId);
-  if (!session?.writer?.updateWebSocket) return false;
-  session.writer.updateWebSocket(newRawWs);
-  console.log(`[RECONNECT] Writer swapped for session ${sessionId}`);
-  return true;
-}
-
 // Export public API
 export {
   queryClaudeSDK,
   abortClaudeSDKSession,
   isClaudeSDKSessionActive,
-  getActiveClaudeSDKSessions,
   resolveToolApproval,
   getPendingApprovalsForSession,
-  reconnectSessionWriter
 };
