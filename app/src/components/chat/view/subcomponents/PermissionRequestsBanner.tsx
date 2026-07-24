@@ -4,7 +4,6 @@ import { ShieldAlertIcon } from 'lucide-react';
 import type { PendingPermissionRequest } from '../../types/types';
 import { buildClaudeToolPermissionEntry, formatToolInputForDisplay } from '../../utils/chatPermissions';
 import { getClaudeSettings } from '../../utils/chatStorage';
-import { getPermissionPanel, registerPermissionPanel } from '../../tools/configs/permissionPanelRegistry';
 import { AskUserQuestionPanel } from '../../tools/components/InteractiveRenderers';
 import {
   Confirmation,
@@ -13,8 +12,6 @@ import {
   ConfirmationActions,
   ConfirmationAction,
 } from '../../../../shared/view/ui';
-
-registerPermissionPanel('AskUserQuestion', AskUserQuestionPanel);
 
 interface PermissionRequestsBannerProps {
   pendingPermissionRequests: PendingPermissionRequest[];
@@ -42,10 +39,11 @@ export default function PermissionRequestsBanner({
   return (
     <div className="mb-3 space-y-2">
       {filteredRequests.map((request) => {
-        const CustomPanel = getPermissionPanel(request.toolName);
-        if (CustomPanel) {
+        // AskUserQuestion renders its own interactive panel; every other tool
+        // uses the generic allow/deny confirmation below.
+        if (request.toolName === 'AskUserQuestion') {
           return (
-            <CustomPanel
+            <AskUserQuestionPanel
               key={request.requestId}
               request={request}
               onDecision={handlePermissionDecision}
