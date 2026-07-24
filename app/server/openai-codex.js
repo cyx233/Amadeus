@@ -233,11 +233,10 @@ export async function queryCodex(command, options = {}, ws) {
     permissionMode = 'default'
   } = options;
 
-  const resolvedModel = await providerModelsService.resolveSessionModel(
-    'codex',
-    sessionId,
-    model,
-  );
+  // options.model is the final model, resolved upstream by the caller keyed by
+  // the app session id; the runtime never re-resolves (sessionId here is the
+  // provider-native resume id, not the override's key).
+  const resolvedModel = model;
 
   const workingDirectory = cwd || projectPath || process.cwd();
   const { sandboxMode, approvalPolicy } = mapPermissionModeToCodexOptions(permissionMode);

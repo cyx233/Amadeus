@@ -503,11 +503,12 @@ async function queryClaudeSDK(command, options = {}, ws) {
   };
 
   try {
-    const resolvedModel = await providerModelsService.resolveSessionModel(
-      'claude',
-      sessionId,
-      options.model,
-    );
+    // options.model is already the final model: the caller (WS chat.send /
+    // agent.js / one-shot generation) resolved it via resolveEffectiveModel,
+    // keyed by the APP session id. The runtime never re-resolves — options.sessionId
+    // here is the provider-native id (for resume), which is NOT the key the
+    // in-session model override is stored under, so resolving here would miss it.
+    const resolvedModel = options.model;
     let effortModels = CLAUDE_FALLBACK_MODELS;
     try {
       effortModels = (await providerModelsService.getProviderModels('claude')).models;
@@ -517,7 +518,7 @@ async function queryClaudeSDK(command, options = {}, ws) {
 
     const sdkOptions = mapCliOptionsToSDK({
       ...options,
-      model: resolvedModel || options.model,
+      model: resolvedModel,
       effortModels,
     });
 

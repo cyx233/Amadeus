@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { WebSocket } from 'ws';
 
 import { sessionsDb } from '@/modules/database/index.js';
-import { providerModelsService } from '@/modules/providers/index.js';
+import { resolveEffectiveModel } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import { getGlobalImageAssetsDir, normalizeImageDescriptors } from '@/shared/image-attachments.js';
@@ -197,18 +197,22 @@ async function handleChatSend(
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
 
-  // Resolve the model HERE, keyed by the APP session id. The in-session model
-  // override (`/model` picker → active-model) is written under the app id, but
-  // the runtime is handed the provider-native id below (for resume), so if the
-  // runtime resolved the override itself it would look under the wrong key and
-  // always miss — a picked model silently reverted to the preference default.
-  // This layer is the only one holding both ids, so it does the lookup and
-  // passes the concrete model down as options.model.
+  // Resolve the model HERE — this is the single resolution point for a chat
+  // send, and the only layer holding BOTH ids. Keyed by the APP session id
+  // (what the in-session `/model` override and the user's Model Preference are
+  // stored under); the provider-native id below is for resume only. The runtimes
+  // never re-resolve — they'd only have the provider id, look the override up
+  // under the wrong key, and miss. Same resolver the HTTP agent path uses, so
+  // both entry points converge on preference → override → requested.
   const requestedModel = typeof clientOptions.model === 'string' ? clientOptions.model : undefined;
   let resolvedModel = requestedModel;
   try {
-    resolvedModel = await providerModelsService.resolveSessionModel(provider, sessionId, requestedModel)
-      ?? requestedModel;
+    const effective = await resolveEffectiveModel(userId, 'chat', {
+      provider,
+      sessionId,
+      requested: requestedModel ?? null,
+    });
+    resolvedModel = effective.model ?? requestedModel;
   } catch (error) {
     console.warn('[Chat] Model resolution failed; using requested model', { sessionId, error });
   }
