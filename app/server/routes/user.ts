@@ -159,7 +159,7 @@ router.get('/models', authenticateToken, async (req, res) => {
     const userId = getAuthUser(req).id;
     const bypassCache = req.query.refresh === '1' || req.query.refresh === 'true';
     const prefs = modelPreferencesDb.getAll(userId);
-    const providers = await Promise.all((CHAT_PROVIDERS as LLMProvider[]).map(async (provider) => {
+    const providers = await Promise.all(CHAT_PROVIDERS.map(async (provider) => {
       const cat = await providerCatalog(provider, bypassCache);
       return {
         provider,
@@ -207,7 +207,7 @@ router.put('/models', authenticateToken, async (req, res) => {
     }
 
     if (typeof globalProvider === 'string') {
-      if (!CHAT_PROVIDERS.includes(globalProvider)) {
+      if (!(CHAT_PROVIDERS as readonly string[]).includes(globalProvider)) {
         return res.status(400).json({ error: `Unknown provider: ${globalProvider}` });
       }
       modelPreferencesDb.set(userId, prefKeys.globalProvider(), globalProvider);
@@ -215,7 +215,7 @@ router.put('/models', authenticateToken, async (req, res) => {
     }
 
     // Provider must be a known chat provider for anything model-related below.
-    if (typeof provider !== 'string' || !CHAT_PROVIDERS.includes(provider)) {
+    if (typeof provider !== 'string' || !(CHAT_PROVIDERS as readonly string[]).includes(provider)) {
       return res.status(400).json({ error: `Unknown provider: ${provider}` });
     }
 

@@ -19,17 +19,20 @@ const DEFAULT_TIMEOUT_MS = 60_000;
 // A one-shot just concatenates whatever assistant text a streaming provider
 // emits. Text lands in different fields across providers (stream_delta.content,
 // cursor-output, assistant blocks, plain text), so grab the common ones.
-function collectText(data, append) {
-  const parsed = typeof data === 'string'
+function collectText(data: unknown, append: (text: string) => void): void {
+  const parsedValue = typeof data === 'string'
     ? (() => { try { return JSON.parse(data); } catch { return null; } })()
     : data;
-  if (!parsed || typeof parsed !== 'object') return;
+  if (!parsedValue || typeof parsedValue !== 'object') return;
+  const parsed = parsedValue as Record<string, unknown>;
   for (const field of ['output', 'text', 'content', 'delta']) {
-    if (typeof parsed[field] === 'string' && parsed[field]) append(parsed[field]);
+    const value = parsed[field];
+    if (typeof value === 'string' && value) append(value);
   }
-  const msgContent = parsed.message?.content;
+  const message = parsed.message as { content?: unknown } | undefined;
+  const msgContent = message?.content;
   if (Array.isArray(msgContent)) {
-    for (const block of msgContent) {
+    for (const block of msgContent as Array<{ type?: string; text?: unknown }>) {
       if (block?.type === 'text' && typeof block.text === 'string') append(block.text);
     }
   }
@@ -47,7 +50,21 @@ function collectText(data, append) {
  * @returns {Promise<{ text: string, provider: string, model: string|null }>}
  *   text is '' on failure/timeout — callers decide the fallback.
  */
-export async function generateOnce({ userId, feature, prompt, cwd, provider: providerPin, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+export async function generateOnce({
+  userId,
+  feature,
+  prompt,
+  cwd,
+  provider: providerPin,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+}: {
+  userId: number;
+  feature: string;
+  prompt: string;
+  cwd?: string;
+  provider?: string;
+  timeoutMs?: number;
+}): Promise<{ text: string; provider: string; model: string | null }> {
   const { provider, model } = await resolveModel(userId, feature, { provider: providerPin });
   const modelArg = model ?? undefined; // null = use the provider's own default
 
@@ -62,7 +79,7 @@ export async function generateOnce({ userId, feature, prompt, cwd, provider: pro
     const runner = getProviderRunner(provider);
     if (!runner) throw new Error(`Unsupported provider for one-shot generation: ${provider}`);
     let text = '';
-    const writer = { send: (d) => collectText(d, (t) => { text += t; }), setSessionId: () => {} };
+    const writer = { send: (d: unknown) => collectText(d, (t: string) => { text += t; }), setSessionId: () => {} };
     const opts = { cwd, model: modelArg, skipPermissions: true, permissionMode: 'bypassPermissions' };
     const timeout = new Promise((_, reject) => {
       abort.signal.addEventListener('abort', () => reject(new Error(`${feature} generation timed out`)));

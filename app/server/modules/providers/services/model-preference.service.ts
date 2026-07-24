@@ -14,10 +14,12 @@
  */
 
 import { modelPreferencesDb } from '../../database/index.js';
+import type { LLMProvider } from '../../../shared/types.js';
+
 import { providerModelsService } from './provider-models.service.js';
 
-export const CHAT_PROVIDERS = ['claude', 'cursor', 'codex', 'opencode'];
-const FALLBACK_PROVIDER = 'claude';
+export const CHAT_PROVIDERS: LLMProvider[] = ['claude', 'cursor', 'codex', 'opencode'];
+const FALLBACK_PROVIDER: LLMProvider = 'claude';
 
 // Features that resolve a model independently and can be overridden per-feature.
 // (chat isn't here: it's provider-pinned by the agent the user picks. task-gen
@@ -32,13 +34,13 @@ export const MODEL_FEATURES = [
 // Key builders — the single place that knows the KV layout.
 export const prefKeys = {
   globalProvider: () => 'global:provider',
-  providerModel: (provider) => `provider:${provider}:model`,
-  featureProvider: (feature) => `feature:${feature}:provider`,
-  featureModel: (feature) => `feature:${feature}:model`,
+  providerModel: (provider: string) => `provider:${provider}:model`,
+  featureProvider: (feature: string) => `feature:${feature}:provider`,
+  featureModel: (feature: string) => `feature:${feature}:model`,
 };
 
-async function catalogDefaultSentinel(provider) {
-  const catalog = (await providerModelsService.getProviderModels(provider)).models;
+async function catalogDefaultSentinel(provider: string): Promise<string> {
+  const catalog = (await providerModelsService.getProviderModels(provider as LLMProvider)).models;
   return catalog.DEFAULT;
 }
 
@@ -59,10 +61,17 @@ async function catalogDefaultSentinel(provider) {
  *   knows which agent the user picked); skips provider resolution.
  * @returns {Promise<{ provider: string, model: string | null }>}
  */
-export async function resolveModel(userId, feature, opts = {}) {
-  const prefs = modelPreferencesDb.getAll(userId);
+export async function resolveModel(
+  userId: number | string | null,
+  feature: string,
+  opts: { provider?: string } = {},
+): Promise<{ provider: string; model: string | null }> {
+  // null (unauthenticated / platform mode) has no stored prefs by definition —
+  // matches the old `WHERE user_id = NULL` behavior (never matches a row)
+  // without actually passing null into a `number` param.
+  const prefs = userId === null ? {} : modelPreferencesDb.getAll(Number(userId));
 
-  const provider = opts.provider
+  const provider: string = opts.provider
     || prefs[prefKeys.featureProvider(feature)]
     || prefs[prefKeys.globalProvider()]
     || FALLBACK_PROVIDER;
@@ -93,15 +102,19 @@ export async function resolveModel(userId, feature, opts = {}) {
  * @param {{ provider?: string, sessionId?: string|null, requested?: string|null }} [opts]
  * @returns {Promise<{ provider: string, model: string | null }>}
  */
-export async function resolveEffectiveModel(userId, feature, opts = {}) {
+export async function resolveEffectiveModel(
+  userId: number | string | null,
+  feature: string,
+  opts: { provider?: string; sessionId?: string | null; requested?: string | null } = {},
+): Promise<{ provider: string; model: string | null }> {
   const pref = await resolveModel(userId, feature, { provider: opts.provider });
 
   // Session override (or, with no session, the requested model) wins over the
   // preference default. resolveSessionModel returns undefined when neither
   // applies, so we fall through to the preference.
   const sessionModel = await providerModelsService.resolveSessionModel(
-    pref.provider,
-    opts.sessionId,
+    pref.provider as LLMProvider,
+    opts.sessionId ?? undefined,
     opts.requested,
   );
   if (sessionModel) {
