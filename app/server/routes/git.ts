@@ -5,6 +5,7 @@ import path from 'path';
 import spawn from 'cross-spawn';
 import express from 'express';
 
+import { getAuthUser } from '../shared/authed.js';
 import type {
   GitStatusResponse,
   GitBranchesResponse,
@@ -1174,8 +1175,7 @@ router.post('/generate-commit-message', async (req, res) => {
     // project like "-...-EventOperator-src-EKSEventController". The diff is
     // already in the prompt, so the agent doesn't need to sit in the repo.
     const projectRootPath = await projectsDb.getProjectPathById(project);
-    const authenticatedUser = (req as typeof req & { user?: { id?: number } }).user;
-    const message = await generateCommitMessageWithAI(Number(authenticatedUser?.id), files, diffContext, projectRootPath || projectPath);
+    const message = await generateCommitMessageWithAI(getAuthUser(req).id, files, diffContext, projectRootPath || projectPath);
 
     res.json({ message });
   } catch (error) {

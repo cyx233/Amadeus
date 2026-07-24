@@ -57,6 +57,22 @@ export type AuthenticatedWebSocketRequest = IncomingMessage & {
   user?: AuthenticatedWebSocketUser;
 };
 
+/**
+ * The authenticated user attached to a REST request by `authenticateToken`.
+ * Mirrors the public user columns (`users.getUserById`) — no password hash.
+ *
+ * The Express `Request.user` on a protected route is guaranteed non-null: the
+ * middleware is fail-closed (missing/invalid token → 401/403). The
+ * `AuthenticatedRequest` type + `authed()` wrapper (server/middleware/auth)
+ * carry that guarantee into handlers so `req.user` needs no cast or `?.`.
+ */
+export type AuthenticatedUser = {
+  id: number;
+  username: string;
+  created_at?: string;
+  last_login?: string | null;
+};
+
 // ---------------------------
 //----------------- PROVIDER MESSAGE MODEL ------------
 /**

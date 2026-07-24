@@ -1,5 +1,6 @@
 import express from 'express';
 
+import { getAuthUser } from '@/shared/authed.js';
 import { createProject, updateProjectDisplayName } from '@/modules/projects/services/project-management.service.js';
 import { startCloneProject } from '@/modules/projects/services/project-clone.service.js';
 import { getProjectTaskMaster } from '@/modules/projects/services/projects-has-taskmaster.service.js';
@@ -9,10 +10,6 @@ import { deleteOrArchiveProject, restoreArchivedProject } from '@/modules/projec
 import { applyLegacyStarredProjectIds, toggleProjectStar } from '@/modules/projects/services/project-star.service.js';
 
 const router = express.Router();
-
-type AuthenticatedUser = {
-  id?: number | string;
-};
 
 function readQueryStringValue(value: unknown): string {
   if (typeof value === 'string') {
@@ -190,14 +187,7 @@ router.get('/clone-progress', async (req, res) => {
     const githubTokenId = readOptionalNumericQueryValue(queryParams.githubTokenId);
     const newGithubToken = readQueryStringValue(queryParams.newGithubToken) || null;
 
-    const authenticatedUser = (req as typeof req & { user?: AuthenticatedUser }).user;
-    const userId = authenticatedUser?.id;
-    if (userId === undefined || userId === null) {
-      throw new AppError('Authenticated user is required', {
-        code: 'AUTHENTICATION_REQUIRED',
-        statusCode: 401,
-      });
-    }
+    const userId = getAuthUser(req).id;
 
     cloneOperation = await startCloneProject(
       {
