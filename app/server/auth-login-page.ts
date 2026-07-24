@@ -3,7 +3,7 @@
 // inline styles so the thin auth server has zero frontend dependencies.
 // On success the server has set the amadeus_token cookie; we reload to '/',
 // and the gateway routes the now-authenticated request to the user's backend.
-export function renderLoginPage() {
+export function renderLoginPage(): string {
   return `<!doctype html>
 <html lang="en">
 <head>
