@@ -225,7 +225,11 @@ async function spawnOpenCode(command, options = {}, ws) {
       }
     };
 
-    void providerModelsService.resolveSessionModel('opencode', sessionId, model).then(async (resolvedModel) => {
+    // options.model is the final model, resolved upstream by the caller keyed by
+    // the app session id; the runtime never re-resolves (sessionId here is the
+    // provider-native resume id, not the override's key). Kept as a resolved
+    // promise so the existing async body + .catch(reject) error path are unchanged.
+    void Promise.resolve(model).then(async (resolvedModel) => {
       let effortModels = null;
       try {
         effortModels = (await providerModelsService.getProviderModels('opencode')).models;

@@ -52,7 +52,8 @@ async function catalogDefaultSentinel(provider) {
  * provider's own default", so no consumer needs to know provider-specific
  * sentinels.
  *
- * @param {number} userId
+ * @param {number|string|null} userId  null/unauthenticated (platform mode) just
+ *   yields no stored prefs → the catalog default, which is the intended behavior.
  * @param {string} feature  e.g. 'commit-message', 'chat', 'task-gen'
  * @param {{ provider?: string }} [opts]  pin the provider (e.g. chat already
  *   knows which agent the user picked); skips provider resolution.
@@ -87,7 +88,7 @@ export async function resolveModel(userId, feature, opts = {}) {
  *     preference default.
  *   - null → the caller uses the provider's own default.
  *
- * @param {number} userId
+ * @param {number|string|null} userId
  * @param {string} feature
  * @param {{ provider?: string, sessionId?: string|null, requested?: string|null }} [opts]
  * @returns {Promise<{ provider: string, model: string | null }>}
