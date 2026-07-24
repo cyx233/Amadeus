@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { WebSocket } from 'ws';
 
 import { sessionsDb } from '@/modules/database/index.js';
+import { providerModelsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import { getGlobalImageAssetsDir, normalizeImageDescriptors } from '@/shared/image-attachments.js';
@@ -196,12 +197,29 @@ async function handleChatSend(
   const clientOptions = (data.options ?? {}) as AnyRecord;
   const command = typeof data.content === 'string' ? data.content : '';
 
+  // Resolve the model HERE, keyed by the APP session id. The in-session model
+  // override (`/model` picker → active-model) is written under the app id, but
+  // the runtime is handed the provider-native id below (for resume), so if the
+  // runtime resolved the override itself it would look under the wrong key and
+  // always miss — a picked model silently reverted to the preference default.
+  // This layer is the only one holding both ids, so it does the lookup and
+  // passes the concrete model down as options.model.
+  const requestedModel = typeof clientOptions.model === 'string' ? clientOptions.model : undefined;
+  let resolvedModel = requestedModel;
+  try {
+    resolvedModel = await providerModelsService.resolveSessionModel(provider, sessionId, requestedModel)
+      ?? requestedModel;
+  } catch (error) {
+    console.warn('[Chat] Model resolution failed; using requested model', { sessionId, error });
+  }
+
   // The provider runtimes receive the provider-native session id (that is the
   // id their CLI/SDK understands for resume). Brand-new sessions have no
   // provider id yet, so the runtime starts fresh and announces one, which the
   // gateway writer captures and maps back to the app session id.
   const runtimeOptions: AnyRecord = {
     ...clientOptions,
+    model: resolvedModel,
     // Image attachments are re-validated server-side: only files inside the
     // global upload store may reach the provider runtimes' file reads.
     images: filterImagesToUploadStore(clientOptions.images),
