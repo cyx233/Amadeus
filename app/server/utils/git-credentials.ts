@@ -40,11 +40,19 @@ const GIT_CREDENTIALS_FILE = path.join(os.homedir(), '.git-credentials');
 const BLOCK_BEGIN = '# >>> amadeus-managed github credential >>>';
 const BLOCK_END = '# <<< amadeus-managed github credential <<<';
 
-function runGit(args) {
-  return new Promise((resolve, reject) => {
+class GitCommandError extends Error {
+  code: number | null;
+  constructor(message: string, code: number | null) {
+    super(message);
+    this.code = code;
+  }
+}
+
+function runGit(args: string[]): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
     const child = spawn('git', args, { shell: false });
     let stderr = '';
-    child.stderr.on('data', (data) => {
+    child.stderr?.on('data', (data) => {
       stderr += data.toString();
     });
     child.on('error', reject);
@@ -53,9 +61,7 @@ function runGit(args) {
         resolve();
         return;
       }
-      const error = new Error(`git ${args.join(' ')} failed (exit ${code}): ${stderr.trim()}`);
-      error.code = code;
-      reject(error);
+      reject(new GitCommandError(`git ${args.join(' ')} failed (exit ${code}): ${stderr.trim()}`, code));
     });
   });
 }
@@ -64,19 +70,19 @@ function runGit(args) {
  * Reads `~/.git-credentials` and returns its lines with any previously
  * app-managed block stripped out. Missing file → empty list.
  */
-async function readForeignCredentialLines() {
-  let raw;
+async function readForeignCredentialLines(): Promise<string[]> {
+  let raw: string;
   try {
     raw = await fs.readFile(GIT_CREDENTIALS_FILE, 'utf8');
   } catch (error) {
-    if (error.code === 'ENOENT') {
+    if ((error as { code?: string } | null)?.code === 'ENOENT') {
       return [];
     }
     throw error;
   }
 
   const lines = raw.split(/\r?\n/);
-  const kept = [];
+  const kept: string[] = [];
   let insideManagedBlock = false;
   for (const line of lines) {
     if (line === BLOCK_BEGIN) {
@@ -94,7 +100,7 @@ async function readForeignCredentialLines() {
   return kept;
 }
 
-async function writeCredentialsFile(foreignLines, managedEntry) {
+async function writeCredentialsFile(foreignLines: string[], managedEntry: string | null): Promise<void> {
   const parts = [...foreignLines];
   if (managedEntry) {
     parts.push(BLOCK_BEGIN, managedEntry, BLOCK_END);
@@ -155,7 +161,8 @@ export async function syncGitCredentials() {
 
     return { configured: true };
   } catch (error) {
-    console.error('[git-credentials] Failed to sync git credentials:', error.message);
-    return { configured: false, reason: error.message };
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[git-credentials] Failed to sync git credentials:', message);
+    return { configured: false, reason: message };
   }
 }

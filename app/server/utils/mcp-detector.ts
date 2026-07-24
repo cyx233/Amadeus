@@ -10,6 +10,21 @@ import { promises as fsPromises } from 'fs';
 import path from 'path';
 import os from 'os';
 
+// Parsed from ~/.claude.json / ~/.claude/settings.json — external, unvalidated
+// config the Claude CLI owns. Fields are loose on purpose; this file only
+// probes for a task-master-ai entry, it doesn't assume a full schema.
+type McpServerEntry = {
+    command?: string;
+    args?: string[];
+    url?: string;
+    env?: Record<string, string>;
+};
+
+type ClaudeConfigData = {
+    mcpServers?: Record<string, McpServerEntry>;
+    projects?: Record<string, { mcpServers?: Record<string, McpServerEntry> }>;
+};
+
 /**
  * Check if task-master-ai MCP server is configured
  * Reads directly from Claude configuration files like claude-cli.js does
@@ -23,9 +38,9 @@ export async function detectTaskMasterMCPServer() {
             path.join(homeDir, '.claude.json'),
             path.join(homeDir, '.claude', 'settings.json')
         ];
-        
-        let configData = null;
-        let configPath = null;
+
+        let configData: ClaudeConfigData | null = null;
+        let configPath: string | null = null;
         
         // Try to read from either config file
         for (const filepath of configPaths) {
@@ -49,7 +64,7 @@ export async function detectTaskMasterMCPServer() {
         }
 
         // Look for task-master-ai in user-scoped MCP servers
-        let taskMasterServer = null;
+        let taskMasterServer: { name: string; scope: string; projectPath?: string; config: McpServerEntry; type: string } | null = null;
         if (configData.mcpServers && typeof configData.mcpServers === 'object') {
             const serverEntry = Object.entries(configData.mcpServers).find(([name, config]) => 
                 name === 'task-master-ai' || 
@@ -109,7 +124,7 @@ export async function detectTaskMasterMCPServer() {
                     command: taskMasterServer.config?.command,
                     args: taskMasterServer.config?.args || [],
                     url: taskMasterServer.config?.url,
-                    envVars: hasEnvVars ? Object.keys(taskMasterServer.config.env) : [],
+                    envVars: taskMasterServer.config.env ? Object.keys(taskMasterServer.config.env) : [],
                     type: taskMasterServer.type
                 }
             };
@@ -139,7 +154,7 @@ export async function detectTaskMasterMCPServer() {
         console.error('Error detecting MCP server config:', error);
         return {
             hasMCPServer: false,
-            reason: `Error checking MCP config: ${error.message}`,
+            reason: `Error checking MCP config: ${error instanceof Error ? error.message : String(error)}`,
             hasConfig: false
         };
     }

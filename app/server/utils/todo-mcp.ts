@@ -1,3 +1,4 @@
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 
@@ -5,7 +6,7 @@ import { readTodos, addTodo, updateTodo, removeTodo } from './todo-store.js';
 
 // In-process MCP server exposing the user-level global TODO to the agent.
 // Same store as the REST route / sidebar panel — "加到待办" writes here.
-const ok = (payload) => ({ content: [{ type: 'text', text: JSON.stringify(payload) }] });
+const ok = (payload: unknown): CallToolResult => ({ content: [{ type: 'text', text: JSON.stringify(payload) }] });
 
 export const todoMcpServer = createSdkMcpServer({
   name: 'todo',

@@ -1,10 +1,12 @@
 /**
  * TASKMASTER WEBSOCKET UTILITIES
  * ==============================
- * 
+ *
  * Utilities for broadcasting TaskMaster state changes via WebSocket.
  * Integrates with the existing WebSocket system to provide real-time updates.
  */
+
+import type { WebSocket, WebSocketServer } from 'ws';
 
 /**
  * Broadcast TaskMaster project update to all connected clients.
@@ -17,7 +19,7 @@
  * @param {string} projectId - DB id of the updated project
  * @param {Object} [taskMasterData] - Updated TaskMaster data (optional; clients refetch on notify)
  */
-export function broadcastTaskMasterProjectUpdate(wss, projectId, taskMasterData) {
+export function broadcastTaskMasterProjectUpdate(wss: WebSocketServer, projectId: string, taskMasterData?: Record<string, unknown>): void {
     if (!wss || !projectId) {
         console.warn('TaskMaster WebSocket broadcast: Missing wss or projectId');
         return;
@@ -31,7 +33,7 @@ export function broadcastTaskMasterProjectUpdate(wss, projectId, taskMasterData)
     };
 
     
-    wss.clients.forEach((client) => {
+    wss.clients.forEach((client: WebSocket) => {
         if (client.readyState === 1) { // WebSocket.OPEN
             try {
                 client.send(JSON.stringify(message));
@@ -49,7 +51,7 @@ export function broadcastTaskMasterProjectUpdate(wss, projectId, taskMasterData)
  * @param {string} projectId - DB id of the project with updated tasks
  * @param {Object} [tasksData] - Updated tasks data (optional; clients refetch on notify)
  */
-export function broadcastTaskMasterTasksUpdate(wss, projectId, tasksData) {
+export function broadcastTaskMasterTasksUpdate(wss: WebSocketServer, projectId: string, tasksData?: Record<string, unknown>): void {
     if (!wss || !projectId) {
         console.warn('TaskMaster WebSocket broadcast: Missing wss or projectId');
         return;
@@ -63,7 +65,7 @@ export function broadcastTaskMasterTasksUpdate(wss, projectId, tasksData) {
     };
 
     
-    wss.clients.forEach((client) => {
+    wss.clients.forEach((client: WebSocket) => {
         if (client.readyState === 1) { // WebSocket.OPEN
             try {
                 client.send(JSON.stringify(message));
@@ -79,7 +81,7 @@ export function broadcastTaskMasterTasksUpdate(wss, projectId, tasksData) {
  * @param {WebSocket.Server} wss - WebSocket server instance
  * @param {Object} mcpStatus - Updated MCP server status
  */
-export function broadcastMCPStatusChange(wss, mcpStatus) {
+export function broadcastMCPStatusChange(wss: WebSocketServer, mcpStatus: Record<string, unknown>): void {
     if (!wss) {
         console.warn('TaskMaster WebSocket broadcast: Missing wss');
         return;
@@ -92,7 +94,7 @@ export function broadcastMCPStatusChange(wss, mcpStatus) {
     };
 
     
-    wss.clients.forEach((client) => {
+    wss.clients.forEach((client: WebSocket) => {
         if (client.readyState === 1) { // WebSocket.OPEN
             try {
                 client.send(JSON.stringify(message));
@@ -109,7 +111,7 @@ export function broadcastMCPStatusChange(wss, mcpStatus) {
  * @param {string} updateType - Type of update (e.g., 'initialization', 'configuration')
  * @param {Object} data - Additional data about the update
  */
-export function broadcastTaskMasterUpdate(wss, updateType, data = {}) {
+export function broadcastTaskMasterUpdate(wss: WebSocketServer, updateType: string, data: Record<string, unknown> = {}): void {
     if (!wss || !updateType) {
         console.warn('TaskMaster WebSocket broadcast: Missing wss or updateType');
         return;
@@ -123,7 +125,7 @@ export function broadcastTaskMasterUpdate(wss, updateType, data = {}) {
     };
 
     
-    wss.clients.forEach((client) => {
+    wss.clients.forEach((client: WebSocket) => {
         if (client.readyState === 1) { // WebSocket.OPEN
             try {
                 client.send(JSON.stringify(message));
