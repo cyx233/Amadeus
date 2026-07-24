@@ -12,6 +12,7 @@
  * - isCodexSessionActive(sessionId) - Check if a session is running
  */
 
+import type { ApprovalMode, SandboxMode, Thread, ThreadEvent } from '@openai/codex-sdk';
 import { Codex } from '@openai/codex-sdk';
 
 import { buildCodexInputItems, normalizeImageDescriptors } from './shared/image-attachments.js';
@@ -21,16 +22,58 @@ import { providerAuthService } from './modules/providers/services/provider-auth.
 import { providerModelsService } from './modules/providers/services/provider-models.service.js';
 import { createCompleteMessage, createNormalizedMessage } from './shared/utils.js';
 
-const activeCodexSessions = new Map();
+/**
+ * The writer a provider runtime sends normalized messages through. Both
+ * shapes it may take (`ChatSessionWriter` for websocket chat, and a
+ * possible SSE stream writer — checked for but no longer wired up since the
+ * headless /api/agent route it served was removed) are covered as a loose
+ * union; `sendMessage` feature-detects between them at the call site.
+ */
+type CodexWriter = {
+  send: (data: unknown) => void;
+  setSessionId?: (sessionId: string) => void;
+  userId?: number | string | null;
+  isSSEStreamWriter?: boolean;
+  isWebSocketWriter?: boolean;
+};
 
-function readUsageNumber(value) {
+type SpawnCodexOptions = {
+  sessionId?: string | null;
+  sessionSummary?: string;
+  cwd?: string;
+  projectPath?: string;
+  model?: string;
+  effort?: string;
+  images?: unknown;
+  permissionMode?: string;
+};
+
+type ActiveCodexSession = {
+  thread: Thread;
+  codex: Codex;
+  status: 'running' | 'aborted' | 'completed';
+  abortController: AbortController;
+  startedAt: string;
+};
+
+const activeCodexSessions = new Map<string, ActiveCodexSession>();
+
+function readUsageNumber(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function extractCodexTokenBudget(event) {
-  const info = event?.info || event?.payload?.info || event?.usage?.info;
-  const usage = info?.total_token_usage || event?.usage?.total_token_usage || event?.usage;
+/**
+ * Reads token usage off a `turn.completed` event. The SDK's own `Usage` type
+ * only declares input/output/reasoning token counts, but real payloads carry
+ * extra undocumented fields (`info`, `model_context_window`,
+ * `total_token_usage`) this reaches for — so `event` stays loosely typed
+ * here rather than pinned to the SDK's `TurnCompletedEvent`.
+ */
+function extractCodexTokenBudget(event: unknown) {
+  const e = event as Record<string, any> | null | undefined;
+  const info = e?.info || e?.payload?.info || e?.usage?.info;
+  const usage = info?.total_token_usage || e?.usage?.total_token_usage || e?.usage;
   if (!usage || typeof usage !== 'object') {
     return null;
   }
@@ -41,7 +84,7 @@ function extractCodexTokenBudget(event) {
 
   return {
     used,
-    total: readUsageNumber(info?.model_context_window || event?.usage?.model_context_window) || 200000,
+    total: readUsageNumber(info?.model_context_window || e?.usage?.model_context_window) || 200000,
     inputTokens,
     outputTokens,
     breakdown: {
@@ -51,12 +94,8 @@ function extractCodexTokenBudget(event) {
   };
 }
 
-/**
- * Transform Codex SDK event to WebSocket message format
- * @param {object} event - SDK event
- * @returns {object} - Transformed event for WebSocket
- */
-function transformCodexEvent(event) {
+/** Transform a Codex SDK thread event into this module's WebSocket message shape. */
+function transformCodexEvent(event: ThreadEvent): Record<string, unknown> {
   // Map SDK event types to a consistent format
   switch (event.type) {
     case 'item.started':
@@ -144,12 +183,16 @@ function transformCodexEvent(event) {
             }
           };
 
-        default:
+        default: {
+          // Defensive fallback for any future item type the SDK adds —
+          // unreachable against the current ThreadItem union.
+          const unknownItem = item as { type: string };
           return {
             type: 'item',
-            itemType: item.type,
-            item: item
+            itemType: unknownItem.type,
+            item: unknownItem
           };
+        }
       }
 
     case 'turn.started':
@@ -172,7 +215,7 @@ function transformCodexEvent(event) {
     case 'thread.started':
       return {
         type: 'thread_started',
-        threadId: event.thread_id || event.id
+        threadId: event.thread_id
       };
 
     case 'error':
@@ -181,20 +224,21 @@ function transformCodexEvent(event) {
         message: event.message
       };
 
-    default:
+    default: {
+      // Defensive fallback for any future event type the SDK adds that this
+      // switch doesn't know about yet — unreachable against the current
+      // ThreadEvent union, hence the cast.
+      const unknownEvent = event as { type: string };
       return {
-        type: event.type,
-        data: event
+        type: unknownEvent.type,
+        data: unknownEvent
       };
+    }
   }
 }
 
-/**
- * Map permission mode to Codex SDK options
- * @param {string} permissionMode - 'default', 'acceptEdits', or 'bypassPermissions'
- * @returns {object} - { sandboxMode, approvalPolicy }
- */
-function mapPermissionModeToCodexOptions(permissionMode) {
+/** Map the UI's permission mode ('default' | 'acceptEdits' | 'bypassPermissions') to Codex SDK thread options. */
+function mapPermissionModeToCodexOptions(permissionMode: string | undefined): { sandboxMode: SandboxMode; approvalPolicy: ApprovalMode } {
   switch (permissionMode) {
     case 'acceptEdits':
       return {
@@ -217,11 +261,8 @@ function mapPermissionModeToCodexOptions(permissionMode) {
 
 /**
  * Execute a Codex query with streaming
- * @param {string} command - The prompt to send
- * @param {object} options - Options including cwd, sessionId, model, permissionMode
- * @param {WebSocket|object} ws - WebSocket connection or response writer
  */
-export async function queryCodex(command, options = {}, ws) {
+export async function queryCodex(command: string, options: SpawnCodexOptions = {}, ws: CodexWriter): Promise<void> {
   const {
     sessionId,
     sessionSummary,
@@ -247,11 +288,11 @@ export async function queryCodex(command, options = {}, ws) {
     ? effort
     : undefined;
 
-  let codex;
-  let thread;
-  let capturedSessionId = sessionId;
+  let codex: Codex | undefined;
+  let thread: Thread | undefined;
+  let capturedSessionId: string | null | undefined = sessionId;
   let sessionCreatedSent = false;
-  let terminalFailure = null;
+  let terminalFailure: Error | string | { message: string } | null = null;
   const abortController = new AbortController();
 
   try {
@@ -263,7 +304,7 @@ export async function queryCodex(command, options = {}, ws) {
       sandboxMode,
       approvalPolicy,
       model: resolvedModel,
-      modelReasoningEffort: resolvedEffort,
+      modelReasoningEffort: resolvedEffort as import('@openai/codex-sdk').ModelReasoningEffort | undefined,
     };
 
     if (sessionId) {
@@ -272,13 +313,19 @@ export async function queryCodex(command, options = {}, ws) {
       thread = codex.startThread(threadOptions);
     }
 
-    const registerSession = (id) => {
+    // Narrowed locals: same objects as the outer `thread`/`codex`, captured
+    // here (right after both are definitely assigned above) so the closure
+    // below doesn't see the outer bindings' `| undefined` from before the
+    // thread was started.
+    const startedThread = thread;
+    const startedCodex = codex;
+    const registerSession = (id: string | null) => {
       if (!id) {
         return;
       }
       activeCodexSessions.set(id, {
-        thread,
-        codex,
+        thread: startedThread,
+        codex: startedCodex,
         status: 'running',
         abortController,
         startedAt: new Date().toISOString()
@@ -301,7 +348,7 @@ export async function queryCodex(command, options = {}, ws) {
     for await (const event of streamedTurn.events) {
       // Capture thread/session id lazily from the stream (Codex emits this asynchronously).
       if (event.type === 'thread.started') {
-        const discoveredSessionId = event.thread_id || event.id || null;
+        const discoveredSessionId: string | null = event.thread_id || null;
         if (discoveredSessionId && !capturedSessionId) {
           capturedSessionId = discoveredSessionId;
           registerSession(capturedSessionId);
@@ -383,11 +430,12 @@ export async function queryCodex(command, options = {}, ws) {
     }
 
   } catch (error) {
+    const errObj = error as { name?: string; message?: string } | null;
     const session = capturedSessionId ? activeCodexSessions.get(capturedSessionId) : null;
     const wasAborted =
       session?.status === 'aborted' ||
-      error?.name === 'AbortError' ||
-      String(error?.message || '').toLowerCase().includes('aborted');
+      errObj?.name === 'AbortError' ||
+      String(errObj?.message || '').toLowerCase().includes('aborted');
 
     if (!wasAborted) {
       console.error('[Codex] Error:', error);
@@ -396,7 +444,7 @@ export async function queryCodex(command, options = {}, ws) {
       const installed = await providerAuthService.isProviderInstalled('codex');
       const errorContent = !installed
         ? 'Codex CLI is not configured. Please set up authentication first.'
-        : error.message;
+        : errObj?.message;
 
       sendMessage(ws, createNormalizedMessage({ kind: 'error', content: errorContent, sessionId: capturedSessionId || sessionId || null, provider: 'codex' }));
       sendMessage(ws, createCompleteMessage({
@@ -431,7 +479,7 @@ export async function queryCodex(command, options = {}, ws) {
  * @param {string} sessionId - Session ID to abort
  * @returns {boolean} - Whether abort was successful
  */
-export function abortCodexSession(sessionId) {
+export function abortCodexSession(sessionId: string): boolean {
   const session = activeCodexSessions.get(sessionId);
 
   if (!session) {
@@ -453,7 +501,7 @@ export function abortCodexSession(sessionId) {
  * @param {string} sessionId - Session ID to check
  * @returns {boolean} - Whether session is active
  */
-export function isCodexSessionActive(sessionId) {
+export function isCodexSessionActive(sessionId: string): boolean {
   const session = activeCodexSessions.get(sessionId);
   return session?.status === 'running';
 }
@@ -463,7 +511,7 @@ export function isCodexSessionActive(sessionId) {
  * @param {WebSocket|object} ws - WebSocket or response writer
  * @param {object} data - Data to send
  */
-function sendMessage(ws, data) {
+function sendMessage(ws: CodexWriter, data: unknown): void {
   try {
     if (ws.isSSEStreamWriter || ws.isWebSocketWriter) {
       // Writer handles stringification (SSEStreamWriter or WebSocketWriter)
