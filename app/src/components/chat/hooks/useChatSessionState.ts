@@ -321,7 +321,7 @@ export function useChatSessionState({
   }, [storeMessages, viewHiddenCount, pendingUserMessage]);
 
   /* ---------------------------------------------------------------- */
-  /*  addMessage / clearMessages / rewindMessages                     */
+  /*  addMessage                                                      */
   /* ---------------------------------------------------------------- */
 
   const addMessage = useCallback((msg: ChatMessage) => {
@@ -336,13 +336,6 @@ export function useChatSessionState({
       sessionStore.appendRealtime(activeSessionId, normalized);
     }
   }, [activeSessionId, sessionStore]);
-
-  const clearMessages = useCallback(() => {
-    if (!activeSessionId) return;
-    sessionStore.clearRealtime(activeSessionId);
-  }, [activeSessionId, sessionStore]);
-
-  const rewindMessages = useCallback((count: number) => setViewHiddenCount(count), []);
 
   const scrollToBottom = useCallback(() => {
     const container = scrollContainerRef.current;
@@ -876,8 +869,6 @@ export function useChatSessionState({
   return {
     chatMessages,
     addMessage,
-    clearMessages,
-    rewindMessages,
     sessionActivity,
     isProcessing,
     canAbortSession,
