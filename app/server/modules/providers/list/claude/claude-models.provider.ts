@@ -254,6 +254,34 @@ function toModelsDefinition(models: SupportedModelInfo[]): ProviderModelsDefinit
       option.effort = { default: 'high', values: m.supportedEffortLevels.map((v) => ({ value: v })) };
     }
     OPTIONS.push(option);
+
+    // The SDK lists Opus only at its 200K context (value 'opus' →
+    // us.anthropic.claude-opus-4-8), even though Bedrock accepts the same id
+    // with a [1m] suffix for the 1M window (verified: the run reports
+    // contextWindow=1000000). It never surfaces that as a pickable option, so
+    // synthesize it next to the base entry — otherwise there's no way to select
+    // 1M Opus. Only for Bedrock-style full ids that don't already carry [1m].
+    const resolved = typeof m?.resolvedModel === 'string' ? m.resolvedModel : '';
+    if (
+      resolved.startsWith('us.anthropic.claude-opus')
+      && !resolved.includes('[1m]')
+      && !value.includes('[1m]')
+    ) {
+      const oneMValue = `${resolved}[1m]`;
+      // Guard against dupes: several aliases ('default', 'opus') can resolve to
+      // the same opus id, and each would otherwise synthesize the same [1m]
+      // option. Only add it if nothing (listed OR already synthesized) has it.
+      const alreadyPresent = models.some((other) => other?.value === oneMValue)
+        || OPTIONS.some((o) => o.value === oneMValue);
+      if (!alreadyPresent) {
+        OPTIONS.push({
+          value: oneMValue,
+          label: 'Opus (1M context)',
+          description: '1M token context window',
+          effort: option.effort,
+        });
+      }
+    }
   }
   // Prefer the SDK's own default sentinel ('default') when present; else the first option.
   const DEFAULT = OPTIONS.some((o) => o.value === 'default') ? 'default' : (OPTIONS[0]?.value ?? 'default');
@@ -262,6 +290,7 @@ function toModelsDefinition(models: SupportedModelInfo[]): ProviderModelsDefinit
 
 type SupportedModelInfo = {
   value?: string;
+  resolvedModel?: string;
   displayName?: string;
   description?: string;
   supportsEffort?: boolean;
