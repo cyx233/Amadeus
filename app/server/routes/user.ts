@@ -1,36 +1,48 @@
 import express from 'express';
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
 import spawn from 'cross-spawn';
+
+import { getAuthUser } from '../shared/authed.js';
 import { userDb, modelPreferencesDb } from '../modules/database/index.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { getSystemGitConfig } from '../utils/gitConfig.js';
 import { providerModelsService } from '../modules/providers/services/provider-models.service.js';
 import { CHAT_PROVIDERS, MODEL_FEATURES, prefKeys, resolveEffectiveModel } from '../modules/providers/services/model-preference.service.js';
+import type { LLMProvider } from '../shared/types.js';
 
 const router = express.Router();
 
-function spawnAsync(command, args, options = {}) {
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+type SpawnResult = { stdout: string; stderr: string };
+
+class SpawnError extends Error {
+  code: number | null; stdout: string; stderr: string;
+  constructor(msg: string, code: number | null, stdout: string, stderr: string) {
+    super(msg); this.code = code; this.stdout = stdout; this.stderr = stderr;
+  }
+}
+
+function spawnAsync(command: string, args: string[], options: { cwd?: string } = {}): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { ...options, shell: false });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (data) => { stdout += data.toString(); });
-    child.stderr.on('data', (data) => { stderr += data.toString(); });
+    let stdout = ''; let stderr = '';
+    child.stdout?.on('data', (data) => { stdout += data.toString(); });
+    child.stderr?.on('data', (data) => { stderr += data.toString(); });
     child.on('error', (error) => { reject(error); });
     child.on('close', (code) => {
       if (code === 0) { resolve({ stdout, stderr }); return; }
-      const error = new Error(`Command failed: ${command} ${args.join(' ')}`);
-      error.code = code;
-      error.stdout = stdout;
-      error.stderr = stderr;
-      reject(error);
+      reject(new SpawnError(`Command failed: ${command} ${args.join(' ')}`, code, stdout, stderr));
     });
   });
 }
 
 router.get('/git-config', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = getAuthUser(req).id;
     let gitConfig = userDb.getGitConfig(userId);
 
     // If database is empty, try to get from system git config
@@ -39,7 +51,7 @@ router.get('/git-config', authenticateToken, async (req, res) => {
 
       // If system has values, save them to database for this user
       if (systemConfig.git_name || systemConfig.git_email) {
-        userDb.updateGitConfig(userId, systemConfig.git_name, systemConfig.git_email);
+        userDb.updateGitConfig(userId, systemConfig.git_name ?? '', systemConfig.git_email ?? '');
         gitConfig = systemConfig;
         console.log(`Auto-populated git config from system for user ${userId}: ${systemConfig.git_name} <${systemConfig.git_email}>`);
       }
@@ -59,7 +71,7 @@ router.get('/git-config', authenticateToken, async (req, res) => {
 // Apply git config globally via git config --global
 router.post('/git-config', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = getAuthUser(req).id;
     const { gitName, gitEmail } = req.body;
 
     if (!gitName || !gitEmail) {
@@ -95,7 +107,7 @@ router.post('/git-config', authenticateToken, async (req, res) => {
 
 router.post('/complete-onboarding', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = getAuthUser(req).id;
     userDb.completeOnboarding(userId);
 
     res.json({
@@ -110,7 +122,7 @@ router.post('/complete-onboarding', authenticateToken, async (req, res) => {
 
 router.get('/onboarding-status', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = getAuthUser(req).id;
     const hasCompleted = userDb.hasCompletedOnboarding(userId);
 
     res.json({
@@ -127,7 +139,7 @@ router.get('/onboarding-status', authenticateToken, async (req, res) => {
 // fallback and optional per-feature override — the single source of truth that
 // keeps features model-id agnostic. Keys are owned by the model-preference
 // service (prefKeys); catalogs come from providerModelsService.
-async function providerCatalog(provider, bypassCache = false) {
+async function providerCatalog(provider: LLMProvider, bypassCache = false) {
   const catalog = (await providerModelsService.getProviderModels(provider, { bypassCache })).models;
   return {
     provider,
@@ -144,10 +156,10 @@ async function providerCatalog(provider, bypassCache = false) {
 // so its newly-available models show up instead of the stale cached list).
 router.get('/models', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = getAuthUser(req).id;
     const bypassCache = req.query.refresh === '1' || req.query.refresh === 'true';
     const prefs = modelPreferencesDb.getAll(userId);
-    const providers = await Promise.all(CHAT_PROVIDERS.map(async (provider) => {
+    const providers = await Promise.all((CHAT_PROVIDERS as LLMProvider[]).map(async (provider) => {
       const cat = await providerCatalog(provider, bypassCache);
       return {
         provider,
@@ -184,7 +196,7 @@ router.get('/models', authenticateToken, async (req, res) => {
 //   { feature, model, provider }                -> a feature's model override (provider names the catalog to validate against)
 router.put('/models', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = getAuthUser(req).id;
     const { globalProvider, provider, model, feature, clear } = req.body;
 
     // Clear a per-feature override → revert to the defaults.
@@ -208,7 +220,7 @@ router.put('/models', authenticateToken, async (req, res) => {
     }
 
     if (typeof model === 'string' && model.trim()) {
-      const cat = await providerCatalog(provider);
+      const cat = await providerCatalog(provider as LLMProvider);
       if (!cat.allowed.has(model)) {
         return res.status(400).json({ error: `Unknown model for ${provider}: ${model}` });
       }
@@ -243,7 +255,7 @@ router.get('/effective-model', authenticateToken, async (req, res) => {
     const sessionId = typeof req.query.sessionId === 'string' && req.query.sessionId.trim() ? req.query.sessionId.trim() : null;
 
     // One resolver composes preference + session ordering (no hand-rolled steps).
-    const resolved = await resolveEffectiveModel(req.user.id, feature, {
+    const resolved = await resolveEffectiveModel(getAuthUser(req).id, feature, {
       provider: providerPin,
       sessionId,
     });
