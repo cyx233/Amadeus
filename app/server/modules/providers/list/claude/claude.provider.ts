@@ -1,4 +1,5 @@
 import { AbstractProvider } from '@/modules/providers/shared/base/abstract.provider.js';
+import { ClaudeProviderAgent } from '@/modules/providers/list/claude/claude-agent.provider.js';
 import { ClaudeProviderAuth } from '@/modules/providers/list/claude/claude-auth.provider.js';
 import { ClaudeProviderModels } from '@/modules/providers/list/claude/claude-models.provider.js';
 import { ClaudeMcpProvider } from '@/modules/providers/list/claude/claude-mcp.provider.js';
@@ -6,6 +7,7 @@ import { ClaudeSessionSynchronizer } from '@/modules/providers/list/claude/claud
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { ClaudeSkillsProvider } from '@/modules/providers/list/claude/claude-skills.provider.js';
 import type {
+  IProviderAgent,
   IProviderAuth,
   IProviderModels,
   IProviderSessionSynchronizer,
@@ -20,6 +22,7 @@ export class ClaudeProvider extends AbstractProvider {
   readonly skills: IProviderSkills = new ClaudeSkillsProvider();
   readonly sessions: IProviderSessions = new ClaudeSessionsProvider();
   readonly sessionSynchronizer: IProviderSessionSynchronizer = new ClaudeSessionSynchronizer();
+  readonly agent: IProviderAgent = new ClaudeProviderAgent();
 
   constructor() {
     super('claude');

@@ -15,33 +15,17 @@ import mime from 'mime-types';
 
 import { AppError, dataDir } from '@/shared/utils.js';
 import { closeSessionsWatcher, initializeSessionsWatcher, sessionsService } from '@/modules/providers/index.js';
+import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { createWebSocketServer, type ProviderSpawnFn } from '@/modules/websocket/index.js';
+import type { LLMProvider } from '@/shared/types.js';
 
 import { getConnectableHost } from '../shared/networkHosts.js';
 
 import { findAppRoot, getModuleDir } from './utils/runtime-paths.js';
 import {
-    queryClaudeSDK,
-    abortClaudeSDKSession,
-    isClaudeSDKSessionActive,
     resolveToolApproval,
     getPendingApprovalsForSession,
 } from './claude-sdk.js';
-import {
-    spawnCursor,
-    abortCursorSession,
-    isCursorSessionActive,
-} from './cursor-cli.js';
-import {
-    queryCodex,
-    abortCodexSession,
-    isCodexSessionActive,
-} from './openai-codex.js';
-import {
-    spawnOpenCode,
-    abortOpenCodeSession,
-    isOpenCodeSessionActive,
-} from './opencode-cli.js';
 import {
     stripAnsiSequences,
     normalizeDetectedUrl,
@@ -109,6 +93,24 @@ console.log('SERVER_PORT from env:', process.env.SERVER_PORT);
 const app = express();
 const server = http.createServer(app);
 
+// Interactive chat dispatches through the same per-provider IProviderAgent
+// that provider-runtime.service.ts uses for one-shot generation — these three
+// maps are just id-keyed views over providerRegistry's already-constructed
+// agents, not separate references to the CLI/SDK adapters.
+const chatProviders = providerRegistry.listProviders();
+const spawnFns = Object.fromEntries(
+    chatProviders.map(({ id, agent }) => [id, agent.run.bind(agent)]),
+) as Record<LLMProvider, ProviderSpawnFn>;
+const abortFns = Object.fromEntries(
+    chatProviders.map(({ id, agent }) => [id, agent.abort.bind(agent)]),
+) as Record<LLMProvider, (providerSessionId: string) => boolean | Promise<boolean>>;
+// Runtime liveness by provider — lets chat.subscribe verify whether a run
+// marked `running` is truly alive, so a run whose process died without a
+// terminal `complete` is reported idle instead of spinning forever.
+const isActiveFns = Object.fromEntries(
+    chatProviders.map(({ id, agent }) => [id, agent.isActive.bind(agent)]),
+) as Record<LLMProvider, (providerSessionId: string) => boolean>;
+
 // Single WebSocket server that handles chat and shell paths.
 const wss = createWebSocketServer(server, {
     verifyClient: {
@@ -116,31 +118,9 @@ const wss = createWebSocketServer(server, {
         authenticateWebSocket,
     },
     chat: {
-        // Each runtime's real writer parameter is narrower than ProviderSpawnFn's
-        // `writer: unknown` (same variance every runtime hits — see
-        // provider-runtime.service.ts, which casts identically for the one-shot
-        // generation dispatch path).
-        spawnFns: {
-            claude: queryClaudeSDK as ProviderSpawnFn,
-            cursor: spawnCursor as ProviderSpawnFn,
-            codex: queryCodex as ProviderSpawnFn,
-            opencode: spawnOpenCode as ProviderSpawnFn,
-        },
-        abortFns: {
-            claude: abortClaudeSDKSession,
-            cursor: abortCursorSession,
-            codex: abortCodexSession,
-            opencode: abortOpenCodeSession,
-        },
-        // Runtime liveness by provider — lets chat.subscribe verify whether a run
-        // marked `running` is truly alive, so a run whose process died without a
-        // terminal `complete` is reported idle instead of spinning forever.
-        isActiveFns: {
-            claude: isClaudeSDKSessionActive,
-            cursor: isCursorSessionActive,
-            codex: isCodexSessionActive,
-            opencode: isOpenCodeSessionActive,
-        },
+        spawnFns,
+        abortFns,
+        isActiveFns,
         resolveToolApproval,
         getPendingApprovalsForSession,
     },

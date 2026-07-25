@@ -369,4 +369,38 @@ export const createProviderModelsService = (dependencies: ProviderModelsServiceD
   };
 };
 
-export const providerModelsService = createProviderModelsService();
+// Deferred (not `createProviderModelsService()` called eagerly at module
+// load): this module is imported by every provider's CLI adapter (e.g.
+// claude-sdk.ts), which is in turn imported by that provider's
+// `IProviderAgent` wrapper (claude-agent.provider.ts), which is constructed
+// by `providerRegistry` while building `ClaudeProvider` — closing a cycle
+// back into this very module. `createProviderModelsService`'s default
+// `resolveProvider` reads `providerRegistry.resolveProvider` (see above), so
+// calling it eagerly here throws "Cannot access 'providerRegistry' before
+// initialization" the moment any provider's agent wrapper is on the import
+// graph. Constructing lazily — on first real method call, well after every
+// module has finished initializing — breaks the cycle without changing this
+// service's public shape or `createProviderModelsService`'s own behavior
+// (still eager/synchronous for direct callers, e.g. this file's test suite).
+let providerModelsServiceInstance: ReturnType<typeof createProviderModelsService> | null = null;
+const getProviderModelsServiceInstance = (): ReturnType<typeof createProviderModelsService> => {
+  if (!providerModelsServiceInstance) {
+    providerModelsServiceInstance = createProviderModelsService();
+  }
+  return providerModelsServiceInstance;
+};
+
+export const providerModelsService = {
+  getProviderModels: (...args: Parameters<ReturnType<typeof createProviderModelsService>['getProviderModels']>) =>
+    getProviderModelsServiceInstance().getProviderModels(...args),
+  getCurrentActiveModel: (...args: Parameters<ReturnType<typeof createProviderModelsService>['getCurrentActiveModel']>) =>
+    getProviderModelsServiceInstance().getCurrentActiveModel(...args),
+  getChangedActiveModel: (...args: Parameters<ReturnType<typeof createProviderModelsService>['getChangedActiveModel']>) =>
+    getProviderModelsServiceInstance().getChangedActiveModel(...args),
+  changeActiveModel: (...args: Parameters<ReturnType<typeof createProviderModelsService>['changeActiveModel']>) =>
+    getProviderModelsServiceInstance().changeActiveModel(...args),
+  resolveSessionModel: (...args: Parameters<ReturnType<typeof createProviderModelsService>['resolveSessionModel']>) =>
+    getProviderModelsServiceInstance().resolveSessionModel(...args),
+  clearCache: (...args: Parameters<ReturnType<typeof createProviderModelsService>['clearCache']>) =>
+    getProviderModelsServiceInstance().clearCache(...args),
+};

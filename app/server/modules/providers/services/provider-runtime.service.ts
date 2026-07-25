@@ -1,40 +1,35 @@
 /**
  * Provider runtime dispatch — the single source for "given a provider, which
- * agent runtime runs it". One-shot generation (text-generation.service.js)
+ * agent runtime runs it". One-shot generation (text-generation.service.ts)
  * resolves the runner here instead of hand-writing an
  * `if provider === 'claude' … else if …` switch. (Interactive chat wires the
- * same runners in directly as websocket spawnFns; see server/index.ts.)
+ * same `IProviderAgent.run` methods in directly as websocket spawnFns; see
+ * server/index.ts.)
  *
  * Every runner shares the same shape: fn(message, options, writer), where
  * options carries { projectPath, cwd, sessionId, model, effort, permissionMode,
  * skipPermissions }. Callers pass only what a given flow needs.
  */
 
-import type { AnyRecord, LLMProvider } from '../../../shared/types.js';
-import { queryClaudeSDK } from '../../../claude-sdk.js';
-import { spawnCursor } from '../../../cursor-cli.js';
-import { queryCodex } from '../../../openai-codex.js';
-import { spawnOpenCode } from '../../../opencode-cli.js';
+import { providerRegistry } from '@/modules/providers/provider.registry.js';
+import type { AnyRecord } from '@/shared/types.js';
 
-/**
- * Common shape every provider runtime exports. `options`/`writer` stay loose
- * here: each runtime declares its own concrete `Spawn*Options`/`*Writer`
- * types (they differ per provider — e.g. only Claude has `toolsSettings`),
- * and callers of `getProviderRunner` (currently one-shot generation) only
- * ever pass the small subset every runtime actually reads. Each entry below
- * is cast to this common shape since every runtime's real writer parameter
- * is necessarily narrower than `unknown`.
- */
 type ProviderRunner = (command: string, options: AnyRecord, writer: unknown) => Promise<void>;
 
-const PROVIDER_RUNNERS: Record<LLMProvider, ProviderRunner> = {
-  claude: queryClaudeSDK as ProviderRunner,
-  cursor: spawnCursor as ProviderRunner,
-  codex: queryCodex as ProviderRunner,
-  opencode: spawnOpenCode as ProviderRunner,
-};
-
-/** The streaming agent runtime for a provider, or undefined if unknown. */
+/**
+ * The streaming agent runtime for a provider, or undefined if unknown.
+ *
+ * Unlike `providerRegistry.resolveProvider`, this returns `undefined` rather
+ * than throwing on an unrecognized provider — preserved from before this was
+ * routed through `IProviderAgent`, so the one existing caller
+ * (text-generation.service.ts) keeps its own explicit "unsupported provider"
+ * error rather than surfacing `providerRegistry`'s `AppError` shape.
+ */
 export function getProviderRunner(provider: string): ProviderRunner | undefined {
-  return provider in PROVIDER_RUNNERS ? PROVIDER_RUNNERS[provider as LLMProvider] : undefined;
+  try {
+    const agent = providerRegistry.resolveProvider(provider).agent;
+    return agent.run.bind(agent);
+  } catch {
+    return undefined;
+  }
 }

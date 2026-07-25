@@ -1,4 +1,5 @@
 import type {
+  AnyRecord,
   ExtractedToolMetadata,
   FetchHistoryOptions,
   FetchHistoryResult,
@@ -34,6 +35,7 @@ export interface IProvider {
   readonly skills: IProviderSkills;
   readonly sessions: IProviderSessions;
   readonly sessionSynchronizer: IProviderSessionSynchronizer;
+  readonly agent: IProviderAgent;
 }
 
 // ---------------------------
@@ -74,6 +76,51 @@ export interface IProviderModels {
   changeActiveModel(
     input: ProviderChangeActiveModelInput,
   ): Promise<ProviderSessionActiveModelChange>;
+}
+
+// ---------------------------
+//----------------- PROVIDER AGENT INTERFACE ------------
+/**
+ * Streaming agent-runtime contract for one provider — the interactive-chat
+ * counterpart to `IProviderSessions` (which reads history/normalizes
+ * messages, but never drives a live run).
+ *
+ * Unlike every other `IProvider*` interface, implementations are NOT safe to
+ * hold per-run state on `this`: `providerRegistry` constructs one `IProvider`
+ * instance per provider for the life of the process, shared across every
+ * concurrent user/session. `run` must be fully re-entrant — any state for a
+ * single run (sequencing, buffering, the provider-native session id) lives
+ * in the caller-supplied `writer`/registry, never on the provider instance.
+ */
+export interface IProviderAgent {
+  /**
+   * Runs one turn against the provider's CLI/SDK, streaming normalized
+   * messages to `writer` as they arrive. Resolves when the turn completes,
+   * fails, or is aborted — never returns a value; all output goes through
+   * `writer`. `options`/`writer` stay loosely typed here (`AnyRecord`/
+   * `unknown`) because each provider's real shapes differ (only Claude has
+   * `toolsSettings`, for example) and are declared concretely in each
+   * provider's own runtime module — this interface only fixes the common
+   * (command, options, writer) calling convention every provider shares.
+   */
+  run(command: string, options: AnyRecord, writer: unknown): Promise<void>;
+
+  /**
+   * Aborts an in-progress run addressed by its provider-native session id
+   * (not the app-facing session id — this is how each runtime keys its
+   * process/session map internally). Returns whether a live run was found
+   * and signaled; sync for CLI runtimes that kill a child process
+   * synchronously, async for SDK runtimes that await a cancellation.
+   */
+  abort(providerSessionId: string): boolean | Promise<boolean>;
+
+  /**
+   * Reports whether a run is still alive for the given provider-native
+   * session id. Used to detect a runtime that vanished (crash, OOM, SIGKILL)
+   * without emitting its terminal `complete` event, so a stuck "processing"
+   * state can be corrected without a manual refresh.
+   */
+  isActive(providerSessionId: string): boolean;
 }
 
 // ---------------------------
