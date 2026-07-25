@@ -221,6 +221,15 @@ export const chatRunRegistry = {
       return null;
     }
 
+    // `writer` is filled in immediately below — it can't be constructed
+    // first, since its own callbacks (onProviderSessionId,
+    // decorateOutboundEvent) close over `run`. This placeholder is never
+    // observable: `run` isn't stored in `runs` or returned to any caller
+    // until after the real writer is assigned a few lines down. Kept as a
+    // non-nullable `ChatSessionWriter` (not `ChatSessionWriter | null`) so
+    // the 5 real call sites that read `run.writer` elsewhere don't each
+    // need their own null-check for a state that can never actually occur
+    // by the time they run.
     const run: ChatRun = {
       appSessionId: input.appSessionId,
       provider: input.provider,
