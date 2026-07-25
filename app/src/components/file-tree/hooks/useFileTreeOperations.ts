@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { api } from '../../../utils/api';
+import { copyTextToClipboard } from '../../../utils/clipboard';
 import type { FileTreeNode } from '../types/types';
 import type { Project } from '../../../types/app';
 
@@ -50,7 +51,7 @@ export type UseFileTreeOperationsResult = {
   setNewItemName: (name: string) => void;
 
   // Other operations
-  handleCopyPath: (item: FileTreeNode) => void;
+  handleCopyPath: (item: FileTreeNode) => Promise<void>;
   handleDownload: (item: FileTreeNode) => Promise<void>;
 
   // Loading state
@@ -238,13 +239,18 @@ export function useFileTreeOperations({
   }, [selectedProject, newItemParent, newItemType, newItemName, validateFilename, showToast, t, onRefresh, handleCancelCreate]);
 
   // Copy path to clipboard
-  const handleCopyPath = useCallback((item: FileTreeNode) => {
-    navigator.clipboard.writeText(item.path).catch(() => {
-      // Clipboard API may fail in some contexts (e.g., non-HTTPS)
-      showToast(t('fileTree.toast.copyFailed', 'Failed to copy path'), 'error');
-      return;
-    });
-    showToast(t('fileTree.toast.pathCopied', 'Path copied to clipboard'), 'success');
+  const handleCopyPath = useCallback(async (item: FileTreeNode) => {
+    // navigator.clipboard is undefined outside secure contexts (e.g. a LAN IP
+    // over plain HTTP, how this app is commonly reached) — calling
+    // .writeText on it throws synchronously, before any .catch can attach.
+    // copyTextToClipboard guards that and falls back to execCommand('copy').
+    const didCopy = await copyTextToClipboard(item.path);
+    showToast(
+      didCopy
+        ? t('fileTree.toast.pathCopied', 'Path copied to clipboard')
+        : t('fileTree.toast.copyFailed', 'Failed to copy path'),
+      didCopy ? 'success' : 'error',
+    );
   }, [showToast, t]);
 
   const triggerBrowserDownload = useCallback((blob: Blob, fileName: string) => {
