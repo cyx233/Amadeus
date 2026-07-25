@@ -57,17 +57,41 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     expandDirectories,
   });
 
+  // The root refresh only re-fetches the top two levels (see useFileTreeData /
+  // the backend's lazy getFileTree) and replaces the whole tree wholesale, so
+  // any deeper directory the user had expanded via on-demand loadDirChildren
+  // loses its cached children — it renders open but empty until manually
+  // collapsed and re-expanded. Re-fetch every currently expanded directory
+  // afterward to restore that content.
+  const rehydrateExpandedDirectories = useCallback(async (dirPaths: Iterable<string>) => {
+    // Ancestors must resolve (and dispatch their setFiles update) before
+    // descendants: a descendant's target node isn't present in the
+    // freshly-fetched tree until its parent's refresh adds it back, so
+    // refreshing out of order makes the child's update a no-op.
+    const sortedPaths = Array.from(dirPaths).sort(
+      (a, b) => a.split('/').length - b.split('/').length,
+    );
+    for (const dirPath of sortedPaths) {
+      await loadDirChildren(dirPath);
+    }
+  }, [loadDirChildren]);
+
+  const handleRefresh = useCallback(async () => {
+    await refreshFiles();
+    await rehydrateExpandedDirectories(expandedDirs);
+  }, [refreshFiles, rehydrateExpandedDirectories, expandedDirs]);
+
   // File operations
   const operations = useFileTreeOperations({
     selectedProject,
-    onRefresh: refreshFiles,
+    onRefresh: handleRefresh,
     showToast,
   });
 
   // File upload (drag and drop)
   const upload = useFileTreeUpload({
     selectedProject,
-    onRefresh: refreshFiles,
+    onRefresh: handleRefresh,
     showToast,
   });
   const operationLoading = operations.operationLoading || upload.operationLoading;
@@ -158,7 +182,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         onUploadFiles={upload.handleFileSelect}
         onNewFile={() => operations.handleStartCreate('', 'file')}
         onNewFolder={() => operations.handleStartCreate('', 'directory')}
-        onRefresh={refreshFiles}
+        onRefresh={handleRefresh}
         onCollapseAll={collapseAll}
         loading={loading}
         operationLoading={operationLoading}
@@ -220,7 +244,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           onNewFolder={(path) => operations.handleStartCreate(path, 'directory')}
           onCopyPath={operations.handleCopyPath}
           onDownload={operations.handleDownload}
-          onRefresh={refreshFiles}
+          onRefresh={handleRefresh}
           // Pass rename state and handlers for inline editing
           renamingItem={operations.renamingItem}
           renameValue={operations.renameValue}

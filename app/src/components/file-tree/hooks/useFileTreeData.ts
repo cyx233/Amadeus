@@ -6,7 +6,7 @@ import type { FileTreeNode } from '../types/types';
 type UseFileTreeDataResult = {
   files: FileTreeNode[];
   loading: boolean;
-  refreshFiles: () => void;
+  refreshFiles: () => Promise<void>;
   loadDirChildren: (dirPath: string) => Promise<void>;
   loadingDirs: Set<string>;
 };
@@ -36,12 +36,46 @@ function setChildrenAtPath(
 export function useFileTreeData(selectedProject: Project | null): UseFileTreeDataResult {
   const [files, setFiles] = useState<FileTreeNode[]>([]);
   const [loading, setLoading] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [loadingDirs, setLoadingDirs] = useState<Set<string>>(() => new Set());
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const refreshFiles = useCallback(() => {
-    setRefreshKey((prev) => prev + 1);
+  // Shared by the mount/project-change effect and `refreshFiles` so both go
+  // through identical request/abort handling. Guards state updates with
+  // `signal.aborted` (rather than a closure flag) so a request superseded by
+  // a newer one — project switch or manual refresh — never clobbers state a
+  // later request already set.
+  const fetchRootFiles = useCallback(async (projectId: string, signal: AbortSignal) => {
+    setLoading(true);
+    try {
+      const response = await api.getFiles(projectId, { signal });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('File fetch failed:', response.status, errorText);
+        if (!signal.aborted) {
+          setFiles([]);
+        }
+        return;
+      }
+
+      const data = (await response.json()) as FileTreeNode[];
+      if (!signal.aborted) {
+        setFiles(data);
+      }
+    } catch (error) {
+      if ((error as { name?: string }).name === 'AbortError') {
+        return;
+      }
+
+      console.error('Error fetching files:', error);
+      if (!signal.aborted) {
+        setFiles([]);
+      }
+    } finally {
+      if (!signal.aborted) {
+        setLoading(false);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -59,54 +93,30 @@ export function useFileTreeData(selectedProject: Project | null): UseFileTreeDat
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    abortControllerRef.current = new AbortController();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-    // Track mount state so aborted or late responses do not enqueue stale state updates.
-    let isActive = true;
-
-    const fetchFiles = async () => {
-      if (isActive) {
-        setLoading(true);
-      }
-      try {
-        const response = await api.getFiles(projectId, { signal: abortControllerRef.current!.signal });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('File fetch failed:', response.status, errorText);
-          if (isActive) {
-            setFiles([]);
-          }
-          return;
-        }
-
-        const data = (await response.json()) as FileTreeNode[];
-        if (isActive) {
-          setFiles(data);
-        }
-      } catch (error) {
-        if ((error as { name?: string }).name === 'AbortError') {
-          return;
-        }
-
-        console.error('Error fetching files:', error);
-        if (isActive) {
-          setFiles([]);
-        }
-      } finally {
-        if (isActive) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void fetchFiles();
+    void fetchRootFiles(projectId, controller.signal);
 
     return () => {
-      isActive = false;
-      abortControllerRef.current?.abort();
+      controller.abort();
     };
-  }, [selectedProject?.projectId, refreshKey]);
+  }, [selectedProject?.projectId, fetchRootFiles]);
+
+  const refreshFiles = useCallback(async () => {
+    const projectId = selectedProject?.projectId;
+    if (!projectId) {
+      return;
+    }
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    await fetchRootFiles(projectId, controller.signal);
+  }, [selectedProject?.projectId, fetchRootFiles]);
 
   const loadDirChildren = useCallback(
     async (dirPath: string) => {
