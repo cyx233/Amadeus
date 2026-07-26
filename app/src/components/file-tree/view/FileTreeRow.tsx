@@ -123,11 +123,11 @@ export default function FileTreeRow({ item, depth, viewMode, context, title, arr
             >
               {nameAndIcon}
             </TitleContainer>
-            <div className="col-span-2 text-sm tabular-nums text-muted-foreground">
+            <div className="col-span-2 min-w-0 truncate whitespace-nowrap text-sm tabular-nums text-muted-foreground">
               {item.data.type === 'file' ? formatFileSize(item.data.size) : ''}
             </div>
-            <div className="col-span-3 text-sm text-muted-foreground">{formatRelativeTime(item.data.modified, t)}</div>
-            <div className="col-span-2 font-mono text-sm text-muted-foreground">{item.data.permissionsRwx || ''}</div>
+            <div className="col-span-3 min-w-0 truncate whitespace-nowrap text-sm text-muted-foreground">{formatRelativeTime(item.data.modified, t)}</div>
+            <div className="col-span-2 min-w-0 truncate whitespace-nowrap font-mono text-sm text-muted-foreground">{item.data.permissionsRwx || ''}</div>
           </>
         ) : viewMode === 'compact' ? (
           <>
@@ -138,7 +138,7 @@ export default function FileTreeRow({ item, depth, viewMode, context, title, arr
             >
               {nameAndIcon}
             </TitleContainer>
-            <div className="ml-2 flex flex-shrink-0 items-center gap-3 text-sm text-muted-foreground">
+            <div className="ml-2 flex flex-shrink-0 items-center gap-3 whitespace-nowrap text-sm text-muted-foreground">
               {item.data.type === 'file' && (
                 <>
                   <span className="tabular-nums">{formatFileSize(item.data.size)}</span>
