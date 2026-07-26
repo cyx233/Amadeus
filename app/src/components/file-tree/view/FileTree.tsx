@@ -129,6 +129,10 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
 
   const refreshFiles = useCallback(async () => {
     if (!dataProvider) return;
+    // invalidateChildren itself emits the change notification that makes
+    // UncontrolledTreeEnvironment re-fetch and re-render — no separate
+    // setViewState nudge needed (see invalidateChildren's own comment for
+    // why that emit has to happen for a refresh to be visible at all).
     dataProvider.invalidateChildren(ROOT_ITEM_INDEX);
     // Re-invalidate every directory currently expanded so a refresh picks up
     // changes at any depth the user has drilled into, not just the root —
@@ -136,7 +140,6 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     for (const index of treeViewState?.expandedItems ?? []) {
       dataProvider.invalidateChildren(index);
     }
-    setViewState((previous) => ({ ...previous }));
 
     const rootItem = await dataProvider.getTreeItem(ROOT_ITEM_INDEX);
     setRootStatus((rootItem.children?.length ?? 0) > 0 ? 'ready' : 'empty');
@@ -322,7 +325,14 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           viewState={viewState}
           canDragAndDrop
           canDropOnFolder
-          canReorderItems={false}
+          // The filesystem has no ordering concept, so a same-directory drag
+          // is never treated as a real reorder (dataProvider.onChangeItemChildren
+          // ignores the new order when nothing was actually added — see there
+          // for why). This stays true anyway: with it false, the library never
+          // computes the between-items gap above the first / below the last
+          // top-level row, which is the ONLY drop target that resolves to the
+          // tree root — so root would be permanently undroppable otherwise.
+          canReorderItems
           canSearch
           canSearchByStartingTyping
           doesSearchMatchItem={(search, item) =>

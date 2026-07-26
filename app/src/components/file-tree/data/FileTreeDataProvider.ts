@@ -200,7 +200,25 @@ export class FileTreeDataProvider implements TreeDataProvider<FileTreeItemData> 
       }
     }
 
-    parent.children = newChildrenIndices;
+    // Only adopt the incoming order/membership when the member SET actually
+    // changed (something added and/or removed). canReorderItems is on (see
+    // FileTree.tsx for why — it's the only way to make the tree root a
+    // reachable drop target), so same-directory drags now also reach here
+    // with an identical member set in a new order — the library reporting a
+    // pure visual reorder with no matching UncontrolledTreeEnvironment "move
+    // out" call. The filesystem has no ordering concept to persist for that
+    // case, so skip adopting it: keep the existing children order rather
+    // than a new one that would silently revert on the next fetch and look
+    // like the drag "undid itself." A real cross-parent move — even the
+    // "moved OUT, nothing added" side of it, where droppedInIndices is also
+    // empty — still needs the membership change applied, hence comparing
+    // sets rather than checking droppedInIndices alone.
+    const sameMembership =
+      previousChildren.size === incomingChildren.size &&
+      [...previousChildren].every((id) => incomingChildren.has(id));
+    if (!sameMembership) {
+      parent.children = newChildrenIndices;
+    }
     this.emitChange([itemId, ...droppedInIndices]);
 
     if (failures.length > 0) {
@@ -384,8 +402,8 @@ export class FileTreeDataProvider implements TreeDataProvider<FileTreeItemData> 
       }),
     );
 
+    // invalidateChildren emits its own change notification.
     this.invalidateChildren(targetParentIndex);
-    this.emitChange([targetParentIndex]);
 
     if (failureCount > 0) {
       throw new Error(`${failureCount} item(s) failed to copy`);
@@ -395,11 +413,22 @@ export class FileTreeDataProvider implements TreeDataProvider<FileTreeItemData> 
   // Invalidates a directory's cached children so the next getTreeItem
   // re-fetches from the backend — used after create/delete, which change a
   // directory's contents outside of react-complex-tree's own onRenameItem/
-  // onChangeItemChildren hooks.
+  // onChangeItemChildren hooks. Must emitChange, not just clear the local
+  // cache: UncontrolledTreeEnvironment keeps its OWN snapshot of every
+  // item (populated once on mount, then only ever updated by
+  // onDidChangeTreeData) — clearing node.children here is invisible to it
+  // until something calls emitChange, which is the only thing that makes it
+  // re-call getTreeItem and pick up the refetch. Without this, the refresh
+  // button silently no-ops: the provider's internal maps end up correct
+  // after the next getTreeItem call, but the tree keeps rendering its
+  // stale pre-refresh snapshot — including now-wrong `data.path` values for
+  // anything that moved outside the tree's own drag/rename/paste flows —
+  // until something else (e.g. a full page reload) remounts the tree.
   invalidateChildren(index: TreeItemIndex): void {
     const node = this.nodesByIndex.get(index);
     if (node) {
       node.children = undefined;
+      this.emitChange([index]);
     }
   }
 }
