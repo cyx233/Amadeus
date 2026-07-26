@@ -831,6 +831,109 @@ app.put('/api/projects/:projectId/files/rename', authenticateToken, async (req, 
     }
 });
 
+// PUT /api/projects/:projectId/files/move - Move file or directory to a different parent directory
+app.put('/api/projects/:projectId/files/move', authenticateToken, async (req, res) => {
+    try {
+        const { projectId } = req.params;
+        const { sourcePath, targetParentPath } = req.body;
+
+        if (!sourcePath || !targetParentPath) {
+            return res.status(400).json({ error: 'sourcePath and targetParentPath are required' });
+        }
+
+        const projectRoot = await projectsDb.getProjectPathById(projectId);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const sourceValidation = validatePathInProject(projectRoot, sourcePath);
+        if (!sourceValidation.valid) {
+            return res.status(403).json({ error: sourceValidation.error });
+        }
+        const resolvedSource = sourceValidation.resolved;
+
+        const targetValidation = validatePathInProject(projectRoot, targetParentPath);
+        if (!targetValidation.valid) {
+            return res.status(403).json({ error: targetValidation.error });
+        }
+        const resolvedTargetParent = targetValidation.resolved;
+
+        // Check source exists
+        try {
+            await fsPromises.access(resolvedSource);
+        } catch {
+            return res.status(404).json({ error: 'File or directory not found' });
+        }
+
+        // Target parent must exist and be a directory
+        let targetParentStat;
+        try {
+            targetParentStat = await fsPromises.stat(resolvedTargetParent);
+        } catch {
+            return res.status(404).json({ error: 'Target directory not found' });
+        }
+        if (!targetParentStat.isDirectory()) {
+            return res.status(400).json({ error: 'Target parent must be a directory' });
+        }
+
+        // Can't move a directory into itself or one of its own descendants
+        if (
+            resolvedTargetParent === resolvedSource ||
+            resolvedTargetParent.startsWith(resolvedSource + path.sep)
+        ) {
+            return res.status(400).json({ error: 'Cannot move a directory into itself or a subdirectory of itself' });
+        }
+
+        const resolvedNewPath = path.join(resolvedTargetParent, path.basename(resolvedSource));
+
+        // Dropped back into its current parent — no-op, not an error
+        if (resolvedNewPath === resolvedSource) {
+            return res.json({
+                success: true,
+                oldPath: resolvedSource,
+                newPath: resolvedSource,
+                message: 'Already in the target directory',
+            });
+        }
+
+        // New path must still resolve under the project root (defensive — targetParentPath
+        // was already validated, but basename could theoretically introduce traversal via a
+        // crafted sourcePath name).
+        const newPathValidation = validatePathInProject(projectRoot, resolvedNewPath);
+        if (!newPathValidation.valid) {
+            return res.status(403).json({ error: newPathValidation.error });
+        }
+
+        // Check destination doesn't already have an entry with this name
+        try {
+            await fsPromises.access(resolvedNewPath);
+            return res.status(409).json({ error: 'A file or directory with this name already exists in the target directory' });
+        } catch {
+            // Doesn't exist, which is what we want
+        }
+
+        await fsPromises.rename(resolvedSource, resolvedNewPath);
+
+        res.json({
+            success: true,
+            oldPath: resolvedSource,
+            newPath: resolvedNewPath,
+            message: 'Moved successfully',
+        });
+    } catch (error) {
+        console.error('Error moving file/directory:', error);
+        if (errorCode(error) === 'EACCES') {
+            res.status(403).json({ error: 'Permission denied' });
+        } else if (errorCode(error) === 'ENOENT') {
+            res.status(404).json({ error: 'File or directory not found' });
+        } else if (errorCode(error) === 'EXDEV') {
+            res.status(400).json({ error: 'Cannot move across different filesystems' });
+        } else {
+            res.status(500).json({ error: errorMessage(error) });
+        }
+    }
+});
+
 // DELETE /api/projects/:projectId/files - Delete file or directory
 app.delete('/api/projects/:projectId/files', authenticateToken, async (req, res) => {
     try {

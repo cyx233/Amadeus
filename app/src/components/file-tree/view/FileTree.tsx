@@ -1,28 +1,38 @@
-import { useCallback, useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
+import { AlertTriangle, Check, X, Loader2, Folder, Search, Upload } from 'lucide-react';
+import {
+  UncontrolledTreeEnvironment,
+  Tree,
+  type TreeItem,
+  type TreeRef,
+  type TreeViewState,
+} from 'react-complex-tree';
 
 import { cn } from '../../../lib/utils';
 import { ICON_SIZE_CLASS, getFileIconData } from '../constants/fileIcons';
-import { useExpandedDirectories } from '../hooks/useExpandedDirectories';
-import { useFileTreeData } from '../hooks/useFileTreeData';
+import { FileTreeDataProvider, ROOT_ITEM_INDEX } from '../data/FileTreeDataProvider';
 import { useFileTreeOperations } from '../hooks/useFileTreeOperations';
-import { useFileTreeSearch } from '../hooks/useFileTreeSearch';
 import { useFileTreeViewMode } from '../hooks/useFileTreeViewMode';
 import { useFileTreeUpload } from '../hooks/useFileTreeUpload';
-import type { FileTreeImageSelection, FileTreeNode } from '../types/types';
-import { formatFileSize, formatRelativeTime, isImageFile } from '../utils/fileTreeUtils';
+import type { FileTreeImageSelection, FileTreeItemData } from '../types/types';
+import { isImageFile } from '../utils/fileTreeUtils';
 import { Project } from '../../../types/app';
-import { ScrollArea, Input } from '../../../shared/view/ui';
+import { Input } from '../../../shared/view/ui';
 
-import FileTreeBody from './FileTreeBody';
+import FileContextMenu from './FileContextMenu';
 import FileTreeDetailedColumns from './FileTreeDetailedColumns';
+import FileTreeEmptyState from './FileTreeEmptyState';
 import FileTreeHeader from './FileTreeHeader';
 import FileTreeLoadingState from './FileTreeLoadingState';
+import FileTreeRow from './FileTreeRow';
 import FileTreeUploadProgress from './FileTreeUploadProgress';
 import ImageViewer from './ImageViewer';
 
+type FileTreeItem = TreeItem<FileTreeItemData>;
+
+const TREE_ID = 'project-files';
 
 type FileTreeProps = {
   selectedProject: Project | null;
@@ -34,14 +44,15 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
   const [selectedImage, setSelectedImage] = useState<FileTreeImageSelection | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
-  const renameInputRef = useRef<HTMLInputElement>(null);
+  // setSearch lives on the Tree instance's own imperative handle, not as a
+  // top-level UncontrolledTreeEnvironment prop — this ref is how the header's
+  // search button starts a search from outside the tree.
+  const treeRef = useRef<TreeRef<FileTreeItemData>>(null);
 
-  // Show toast notification
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
   }, []);
 
-  // Auto-hide toast
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 3000);
@@ -49,54 +60,86 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     }
   }, [toast]);
 
-  const { files, loading, refreshFiles, loadDirChildren, loadingDirs } = useFileTreeData(selectedProject);
   const { viewMode, changeViewMode } = useFileTreeViewMode();
-  const { expandedDirs, toggleDirectory, expandDirectories, collapseAll } = useExpandedDirectories();
-  const { searchQuery, setSearchQuery, filteredFiles } = useFileTreeSearch({
-    files,
-    expandDirectories,
-  });
 
-  // The root refresh only re-fetches the top two levels (see useFileTreeData /
-  // the backend's lazy getFileTree) and replaces the whole tree wholesale, so
-  // any deeper directory the user had expanded via on-demand loadDirChildren
-  // loses its cached children — it renders open but empty until manually
-  // collapsed and re-expanded. Re-fetch every currently expanded directory
-  // afterward to restore that content.
-  const rehydrateExpandedDirectories = useCallback(async (dirPaths: Iterable<string>) => {
-    // Ancestors must resolve (and dispatch their setFiles update) before
-    // descendants: a descendant's target node isn't present in the
-    // freshly-fetched tree until its parent's refresh adds it back, so
-    // refreshing out of order makes the child's update a no-op.
-    const sortedPaths = Array.from(dirPaths).sort(
-      (a, b) => a.split('/').length - b.split('/').length,
-    );
-    for (const dirPath of sortedPaths) {
-      await loadDirChildren(dirPath);
+  // One provider instance per project — it owns the index<->path mapping, so
+  // switching projects must start a fresh mapping rather than reusing a
+  // stale one keyed to the previous project's paths. Deliberately keyed only
+  // on projectId (not the whole selectedProject object): a new object with
+  // the same id — e.g. the parent re-fetching project metadata — must NOT
+  // rebuild the provider and lose everything it has already indexed.
+  const dataProvider = useMemo(
+    () => (selectedProject ? new FileTreeDataProvider(selectedProject.projectId) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedProject?.projectId],
+  );
+
+  // react-complex-tree has no built-in "initial load" concept — each item
+  // fetches independently on first render. Root is special-cased here so the
+  // tree can show a loading state up front and an empty state if the
+  // project genuinely has nothing, matching what the old useFileTreeData-
+  // driven UI showed before this rewrite.
+  const [rootStatus, setRootStatus] = useState<'loading' | 'empty' | 'ready'>('loading');
+
+  useEffect(() => {
+    if (!dataProvider) return;
+    setRootStatus('loading');
+    let cancelled = false;
+
+    dataProvider.getTreeItem(ROOT_ITEM_INDEX).then((rootItem) => {
+      if (cancelled) return;
+      setRootStatus((rootItem.children?.length ?? 0) > 0 ? 'ready' : 'empty');
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dataProvider]);
+
+  const [viewState, setViewState] = useState<TreeViewState<never>>({});
+  const treeViewState = viewState[TREE_ID];
+
+  const selectedItems = useMemo(
+    () =>
+      (treeViewState?.selectedItems ?? [])
+        .map((index) => dataProvider?.getNodeForIndex(index))
+        .filter((node): node is NonNullable<typeof node> => Boolean(node))
+        .map((node): FileTreeItem => ({
+          index: node.index,
+          isFolder: node.type === 'directory',
+          data: { name: node.name, type: node.type, path: node.path, size: node.size, modified: node.modified, permissionsRwx: node.permissionsRwx },
+        })),
+    [treeViewState?.selectedItems, dataProvider],
+  );
+
+  const refreshFiles = useCallback(async () => {
+    if (!dataProvider) return;
+    dataProvider.invalidateChildren(ROOT_ITEM_INDEX);
+    // Re-invalidate every directory currently expanded so a refresh picks up
+    // changes at any depth the user has drilled into, not just the root —
+    // mirrors the old useFileTreeData rehydration behavior this replaces.
+    for (const index of treeViewState?.expandedItems ?? []) {
+      dataProvider.invalidateChildren(index);
     }
-  }, [loadDirChildren]);
+    setViewState((previous) => ({ ...previous }));
 
-  const handleRefresh = useCallback(async () => {
-    await refreshFiles();
-    await rehydrateExpandedDirectories(expandedDirs);
-  }, [refreshFiles, rehydrateExpandedDirectories, expandedDirs]);
+    const rootItem = await dataProvider.getTreeItem(ROOT_ITEM_INDEX);
+    setRootStatus((rootItem.children?.length ?? 0) > 0 ? 'ready' : 'empty');
+  }, [dataProvider, treeViewState?.expandedItems]);
 
-  // File operations
   const operations = useFileTreeOperations({
     selectedProject,
-    onRefresh: handleRefresh,
+    onRefresh: refreshFiles,
     showToast,
   });
 
-  // File upload (drag and drop)
   const upload = useFileTreeUpload({
     selectedProject,
-    onRefresh: handleRefresh,
+    onRefresh: refreshFiles,
     showToast,
   });
   const operationLoading = operations.operationLoading || upload.operationLoading;
 
-  // Focus input when creating new item
   useEffect(() => {
     if (operations.isCreating && newItemInputRef.current) {
       newItemInputRef.current.focus();
@@ -104,57 +147,41 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     }
   }, [operations.isCreating]);
 
-  // Focus input when renaming
-  useEffect(() => {
-    if (operations.renamingItem && renameInputRef.current) {
-      renameInputRef.current.focus();
-      renameInputRef.current.select();
-    }
-  }, [operations.renamingItem]);
-
-  const renderFileIcon = useCallback((filename: string) => {
-    const { icon: Icon, color } = getFileIconData(filename);
-    return <Icon className={cn(ICON_SIZE_CLASS, color)} />;
-  }, []);
-
-  // Centralized click behavior keeps file actions identical across all presentation modes.
-  const handleItemClick = useCallback(
-    (item: FileTreeNode) => {
-      if (item.type === 'directory') {
-        // If we're opening (not currently expanded) a directory whose children
-        // haven't been fetched yet, load them on demand and cache in the tree.
-        const isOpening = !expandedDirs.has(item.path);
-        if (isOpening && item.children === undefined && item.hasChildren) {
-          void loadDirChildren(item.path);
-        }
-        toggleDirectory(item.path);
+  const handlePrimaryAction = useCallback(
+    (item: FileTreeItem) => {
+      if (item.data.type === 'directory') {
         return;
       }
 
-      if (isImageFile(item.name) && selectedProject) {
+      if (isImageFile(item.data.name) && selectedProject) {
         setSelectedImage({
-          name: item.name,
-          path: item.path,
+          name: item.data.name,
+          path: item.data.path,
           projectPath: selectedProject.path,
-          // Image URL uses the DB projectId so ImageViewer can hit the
-          // /api/projects/:projectId/files/content endpoint directly.
           projectId: selectedProject.projectId,
         });
         return;
       }
 
-      onFileOpen?.(item.path);
+      onFileOpen?.(item.data.path);
     },
-    [onFileOpen, selectedProject, toggleDirectory, expandedDirs, loadDirChildren],
+    [onFileOpen, selectedProject],
   );
 
-  const formatRelativeTimeLabel = useCallback(
-    (date?: string) => formatRelativeTime(date, t),
-    [t],
+  const handleStartCreateAtRoot = useCallback(
+    (type: 'file' | 'directory') => operations.handleStartCreate('', type),
+    [operations],
   );
 
-  if (loading) {
-    return <FileTreeLoadingState />;
+  const collapseAll = useCallback(() => {
+    setViewState((previous) => ({
+      ...previous,
+      [TREE_ID]: { ...previous[TREE_ID], expandedItems: [] },
+    }));
+  }, []);
+
+  if (!dataProvider) {
+    return null;
   }
 
   return (
@@ -166,7 +193,6 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
       onDragLeave={upload.handleDragLeave}
       onDrop={upload.handleDrop}
     >
-      {/* Drag overlay */}
       {upload.isDragOver && (
         <div className="absolute inset-0 z-50 flex items-center justify-center border-2 border-dashed border-blue-500 bg-blue-500/10">
           <div className="flex items-center gap-3 rounded-lg bg-background/95 px-6 py-4 shadow-lg">
@@ -180,11 +206,11 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         viewMode={viewMode}
         onViewModeChange={changeViewMode}
         onUploadFiles={upload.handleFileSelect}
-        onNewFile={() => operations.handleStartCreate('', 'file')}
-        onNewFolder={() => operations.handleStartCreate('', 'directory')}
-        onRefresh={handleRefresh}
+        onNewFile={() => handleStartCreateAtRoot('file')}
+        onNewFolder={() => handleStartCreateAtRoot('directory')}
+        onRefresh={refreshFiles}
         onCollapseAll={collapseAll}
-        loading={loading}
+        onStartSearch={() => treeRef.current?.setSearch('')}
         operationLoading={operationLoading}
         isUploading={upload.uploadProgress?.status === 'uploading'}
         uploadProgress={upload.uploadProgress?.progress ?? null}
@@ -192,10 +218,9 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
 
       <FileTreeUploadProgress upload={upload.uploadProgress} />
 
-      {viewMode === 'detailed' && filteredFiles.length > 0 && <FileTreeDetailedColumns />}
+      {viewMode === 'detailed' && <FileTreeDetailedColumns />}
 
-      <ScrollArea className="flex-1 px-2 py-1">
-        {/* New item input */}
+      <div className="flex-1 overflow-auto px-2 py-1">
         {operations.isCreating && (
           <div
             className="mb-1 flex items-center gap-1.5 py-[3px] pr-2"
@@ -204,7 +229,10 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
             {operations.newItemType === 'directory' ? (
               <Folder className={cn(ICON_SIZE_CLASS, 'text-blue-500')} />
             ) : (
-              <span className="ml-[18px]">{renderFileIcon(operations.newItemName)}</span>
+              <span className="ml-[18px]">{(() => {
+                const { icon: Icon, color } = getFileIconData(operations.newItemName);
+                return <Icon className={cn(ICON_SIZE_CLASS, color)} />;
+              })()}</span>
             )}
             <Input
               ref={newItemInputRef}
@@ -227,34 +255,127 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           </div>
         )}
 
-        <FileTreeBody
-          files={files}
-          filteredFiles={filteredFiles}
-          searchQuery={searchQuery}
-          viewMode={viewMode}
-          expandedDirs={expandedDirs}
-          loadingDirs={loadingDirs}
-          onItemClick={handleItemClick}
-          renderFileIcon={renderFileIcon}
-          formatFileSize={formatFileSize}
-          formatRelativeTime={formatRelativeTimeLabel}
-          onRename={operations.handleStartRename}
-          onDelete={operations.handleStartDelete}
-          onNewFile={(path) => operations.handleStartCreate(path, 'file')}
-          onNewFolder={(path) => operations.handleStartCreate(path, 'directory')}
-          onCopyPath={operations.handleCopyPath}
-          onDownload={operations.handleDownload}
-          onRefresh={handleRefresh}
-          // Pass rename state and handlers for inline editing
-          renamingItem={operations.renamingItem}
-          renameValue={operations.renameValue}
-          setRenameValue={operations.setRenameValue}
-          handleConfirmRename={operations.handleConfirmRename}
-          handleCancelRename={operations.handleCancelRename}
-          renameInputRef={renameInputRef}
-          operationLoading={operationLoading}
-        />
-      </ScrollArea>
+        {rootStatus === 'loading' && <FileTreeLoadingState />}
+        {rootStatus === 'empty' && (
+          <FileTreeEmptyState
+            icon={Folder}
+            title={t('fileTree.noFilesFound', 'No files found')}
+            description={t('fileTree.checkProjectPath', 'Check if the project path is accessible')}
+          />
+        )}
+        {/* Mounting only once the root's children are known to be non-empty
+            is cheap, not wasteful: the getTreeItem call in the rootStatus
+            effect above already populated the provider's node map, so this
+            mount's own getTreeItem(root) call is a cache hit, not a
+            second fetch. */}
+        {rootStatus === 'ready' && (
+        <UncontrolledTreeEnvironment<FileTreeItemData>
+          dataProvider={dataProvider}
+          getItemTitle={(item) => item.data.name}
+          viewState={viewState}
+          canDragAndDrop
+          canDropOnFolder
+          canReorderItems={false}
+          canSearch
+          canSearchByStartingTyping
+          doesSearchMatchItem={(search, item) =>
+            item.data.name.toLowerCase().includes(search.toLowerCase())
+          }
+          onExpandItem={(item) =>
+            setViewState((previous) => ({
+              ...previous,
+              [TREE_ID]: {
+                ...previous[TREE_ID],
+                expandedItems: [...(previous[TREE_ID]?.expandedItems ?? []), item.index],
+              },
+            }))
+          }
+          onCollapseItem={(item) =>
+            setViewState((previous) => ({
+              ...previous,
+              [TREE_ID]: {
+                ...previous[TREE_ID],
+                expandedItems: (previous[TREE_ID]?.expandedItems ?? []).filter((id) => id !== item.index),
+              },
+            }))
+          }
+          onSelectItems={(items) =>
+            setViewState((previous) => ({
+              ...previous,
+              [TREE_ID]: { ...previous[TREE_ID], selectedItems: items },
+            }))
+          }
+          onFocusItem={(item) =>
+            setViewState((previous) => ({
+              ...previous,
+              [TREE_ID]: { ...previous[TREE_ID], focusedItem: item.index },
+            }))
+          }
+          onPrimaryAction={handlePrimaryAction}
+          onDrop={(_items, target) => {
+            // The actual move happens in dataProvider.onChangeItemChildren
+            // (react-complex-tree calls it as part of completing this drop);
+            // this only surfaces failures the provider throws (partial
+            // multi-selection move failures) as a toast.
+            void target;
+          }}
+          renderItemArrow={({ item, context }) => (
+            <span
+              {...context.arrowProps}
+              className={cn(
+                'flex h-4 w-4 flex-shrink-0 items-center justify-center text-muted-foreground/70 transition-transform duration-150',
+                context.isExpanded && 'rotate-90',
+                !item.isFolder && 'invisible',
+              )}
+            >
+              {item.isFolder && <ChevronRightIcon />}
+            </span>
+          )}
+          renderItemTitle={({ title }) => <>{title}</>}
+          renderItem={({ item, depth, children, title, arrow, context }) => (
+            <FileContextMenu
+              item={item}
+              selectedItems={selectedItems}
+              onStartRename={context.startRenamingItem}
+              onDelete={(items) => operations.handleStartDelete(items)}
+              onNewFile={(path) => operations.handleStartCreate(path, 'file')}
+              onNewFolder={(path) => operations.handleStartCreate(path, 'directory')}
+              onCopyPath={operations.handleCopyPath}
+              onDownload={operations.handleDownload}
+            >
+              <FileTreeRow item={item} depth={depth} viewMode={viewMode} context={context} title={title} arrow={arrow}>
+                {children}
+              </FileTreeRow>
+            </FileContextMenu>
+          )}
+          renderRenameInput={({ inputProps, inputRef, formProps }) => (
+            <form {...formProps} className="flex-1">
+              <Input ref={inputRef} {...inputProps} className="h-6 flex-1 text-sm" disabled={operationLoading} />
+            </form>
+          )}
+          renderSearchInput={({ inputProps }) => (
+            <div className="flex items-center gap-1.5 border-b border-border bg-background px-3 py-1.5">
+              <Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+              <Input
+                {...inputProps}
+                placeholder={t('fileTree.searchPlaceholder', 'Search files and folders...')}
+                className="h-6 flex-1 border-0 px-0 text-sm shadow-none focus-visible:ring-0"
+              />
+            </div>
+          )}
+          renderItemsContainer={({ children, containerProps }) => (
+            <ul {...containerProps} className="relative">
+              {children}
+            </ul>
+          )}
+          renderTreeContainer={({ children, containerProps }) => (
+            <div {...containerProps}>{children}</div>
+          )}
+        >
+          <Tree ref={treeRef} treeId={TREE_ID} rootItem={ROOT_ITEM_INDEX} treeLabel={t('fileTree.files', 'Files')} />
+        </UncontrolledTreeEnvironment>
+        )}
+      </div>
 
       {selectedImage && (
         <ImageViewer
@@ -265,7 +386,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
 
       {/* Delete Confirmation Dialog — portaled to body so `fixed` positions against
           the viewport, not the blur-filtered sidebar ancestor (which would clip it). */}
-      {operations.deleteConfirmation.isOpen && operations.deleteConfirmation.item && createPortal(
+      {operations.deleteConfirmation.isOpen && operations.deleteConfirmation.items.length > 0 && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
           <div className="mx-4 max-w-sm rounded-lg border border-border bg-background p-4 shadow-lg">
             <div className="mb-4 flex items-center gap-3">
@@ -274,19 +395,25 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
               </div>
               <div>
                 <h3 className="font-medium text-foreground">
-                  {t('fileTree.delete.title', 'Delete {{type}}', {
-                    type: operations.deleteConfirmation.item.type === 'directory' ? 'Folder' : 'File'
-                  })}
+                  {operations.deleteConfirmation.items.length === 1
+                    ? t('fileTree.delete.title', 'Delete {{type}}', {
+                        type: operations.deleteConfirmation.items[0].data.type === 'directory' ? 'Folder' : 'File',
+                      })
+                    : t('fileTree.delete.titleMultiple', 'Delete {{count}} items', {
+                        count: operations.deleteConfirmation.items.length,
+                      })}
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  {operations.deleteConfirmation.item.name}
+                  {operations.deleteConfirmation.items.length === 1
+                    ? operations.deleteConfirmation.items[0].data.name
+                    : operations.deleteConfirmation.items.map((deleteItem) => deleteItem.data.name).join(', ')}
                 </p>
               </div>
             </div>
             <p className="mb-4 text-sm text-muted-foreground">
-              {operations.deleteConfirmation.item.type === 'directory'
+              {operations.deleteConfirmation.items.length === 1 && operations.deleteConfirmation.items[0].data.type === 'directory'
                 ? t('fileTree.delete.folderWarning', 'This folder and all its contents will be permanently deleted.')
-                : t('fileTree.delete.fileWarning', 'This file will be permanently deleted.')}
+                : t('fileTree.delete.fileWarning', 'This will be permanently deleted.')}
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -330,5 +457,13 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         document.body,
       )}
     </div>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3l5 5-5 5" />
+    </svg>
   );
 }

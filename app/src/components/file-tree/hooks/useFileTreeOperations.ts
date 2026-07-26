@@ -1,9 +1,13 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { TreeItem } from 'react-complex-tree';
+
 import { api } from '../../../utils/api';
 import { copyTextToClipboard } from '../../../utils/clipboard';
-import type { FileTreeNode } from '../types/types';
+import type { FileTreeItemData } from '../types/types';
 import type { Project } from '../../../types/app';
+
+type FileTreeItem = TreeItem<FileTreeItemData>;
 
 // Invalid filename characters
 const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\x00-\x1f]/;
@@ -16,7 +20,10 @@ export type ToastMessage = {
 
 export type DeleteConfirmation = {
   isOpen: boolean;
-  item: FileTreeNode | null;
+  // Right-click on an unselected item passes just that one item; right-click
+  // (or a delete shortcut) on a multi-selection passes the whole selection —
+  // the tree's data model treats both as "the set of items to delete."
+  items: FileTreeItem[];
 };
 
 export type UseFileTreeOperationsOptions = {
@@ -26,17 +33,9 @@ export type UseFileTreeOperationsOptions = {
 };
 
 export type UseFileTreeOperationsResult = {
-  // Rename operations
-  renamingItem: FileTreeNode | null;
-  renameValue: string;
-  handleStartRename: (item: FileTreeNode) => void;
-  handleCancelRename: () => void;
-  handleConfirmRename: () => Promise<void>;
-  setRenameValue: (value: string) => void;
-
   // Delete operations
   deleteConfirmation: DeleteConfirmation;
-  handleStartDelete: (item: FileTreeNode) => void;
+  handleStartDelete: (items: FileTreeItem[]) => void;
   handleCancelDelete: () => void;
   handleConfirmDelete: () => Promise<void>;
 
@@ -51,13 +50,16 @@ export type UseFileTreeOperationsResult = {
   setNewItemName: (name: string) => void;
 
   // Other operations
-  handleCopyPath: (item: FileTreeNode) => Promise<void>;
-  handleDownload: (item: FileTreeNode) => Promise<void>;
+  handleCopyPath: (item: FileTreeItem) => Promise<void>;
+  handleDownload: (item: FileTreeItem) => Promise<void>;
 
   // Loading state
   operationLoading: boolean;
 
-  // Validation
+  // Validation — also used by the view layer's rename/create input forms
+  // (react-complex-tree owns the rename lifecycle itself; this hook no
+  // longer holds renamingItem/renameValue state) before submitting, so a
+  // bad name never reaches the API.
   validateFilename: (name: string) => string | null;
 };
 
@@ -69,11 +71,9 @@ export function useFileTreeOperations({
   const { t } = useTranslation();
 
   // State
-  const [renamingItem, setRenamingItem] = useState<FileTreeNode | null>(null);
-  const [renameValue, setRenameValue] = useState('');
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation>({
     isOpen: false,
-    item: null,
+    items: [],
   });
   const [isCreating, setIsCreating] = useState(false);
   const [newItemParent, setNewItemParent] = useState('');
@@ -98,83 +98,41 @@ export function useFileTreeOperations({
     return null;
   }, [t]);
 
-  // Rename operations
-  const handleStartRename = useCallback((item: FileTreeNode) => {
-    setRenamingItem(item);
-    setRenameValue(item.name);
-    setIsCreating(false);
-  }, []);
-
-  const handleCancelRename = useCallback(() => {
-    setRenamingItem(null);
-    setRenameValue('');
-  }, []);
-
-  const handleConfirmRename = useCallback(async () => {
-    if (!renamingItem || !selectedProject) return;
-
-    const error = validateFilename(renameValue);
-    if (error) {
-      showToast(error, 'error');
-      return;
-    }
-
-    if (renameValue === renamingItem.name) {
-      handleCancelRename();
-      return;
-    }
-
-    setOperationLoading(true);
-    try {
-      const response = await api.renameFile(selectedProject.projectId, {
-        oldPath: renamingItem.path,
-        newName: renameValue,
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to rename');
-      }
-
-      showToast(t('fileTree.toast.renamed', 'Renamed successfully'), 'success');
-      onRefresh();
-      handleCancelRename();
-    } catch (err) {
-      showToast((err as Error).message, 'error');
-    } finally {
-      setOperationLoading(false);
-    }
-  }, [renamingItem, renameValue, selectedProject, validateFilename, showToast, t, onRefresh, handleCancelRename]);
-
   // Delete operations
-  const handleStartDelete = useCallback((item: FileTreeNode) => {
-    setDeleteConfirmation({ isOpen: true, item });
+  const handleStartDelete = useCallback((items: FileTreeItem[]) => {
+    if (items.length === 0) return;
+    setDeleteConfirmation({ isOpen: true, items });
   }, []);
 
   const handleCancelDelete = useCallback(() => {
-    setDeleteConfirmation({ isOpen: false, item: null });
+    setDeleteConfirmation({ isOpen: false, items: [] });
   }, []);
 
   const handleConfirmDelete = useCallback(async () => {
-    const { item } = deleteConfirmation;
-    if (!item || !selectedProject) return;
+    const { items } = deleteConfirmation;
+    if (items.length === 0 || !selectedProject) return;
 
     setOperationLoading(true);
     try {
-      const response = await api.deleteFile(selectedProject.projectId, {
-        path: item.path,
-        type: item.type,
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to delete');
-      }
+      const results = await Promise.all(
+        items.map(async (item) => {
+          const response = await api.deleteFile(selectedProject.projectId, {
+            path: item.data.path,
+            type: item.data.type,
+          });
+          if (!response.ok) {
+            const data = await response.json().catch(() => ({}));
+            throw new Error((data as { error?: string }).error || `Failed to delete ${item.data.name}`);
+          }
+        }),
+      );
 
       showToast(
-        item.type === 'directory'
-          ? t('fileTree.toast.folderDeleted', 'Folder deleted')
-          : t('fileTree.toast.fileDeleted', 'File deleted'),
+        items.length === 1
+          ? (items[0].data.type === 'directory'
+            ? t('fileTree.toast.folderDeleted', 'Folder deleted')
+            : t('fileTree.toast.fileDeleted', 'File deleted'))
+          : t('fileTree.toast.itemsDeleted', '{{count}} items deleted', { count: results.length }),
         'success'
       );
       onRefresh();
@@ -192,7 +150,6 @@ export function useFileTreeOperations({
     setNewItemType(type);
     setNewItemName(type === 'file' ? 'untitled.txt' : 'new-folder');
     setIsCreating(true);
-    setRenamingItem(null);
   }, []);
 
   const handleCancelCreate = useCallback(() => {
@@ -239,12 +196,12 @@ export function useFileTreeOperations({
   }, [selectedProject, newItemParent, newItemType, newItemName, validateFilename, showToast, t, onRefresh, handleCancelCreate]);
 
   // Copy path to clipboard
-  const handleCopyPath = useCallback(async (item: FileTreeNode) => {
+  const handleCopyPath = useCallback(async (item: FileTreeItem) => {
     // navigator.clipboard is undefined outside secure contexts (e.g. a LAN IP
     // over plain HTTP, how this app is commonly reached) — calling
     // .writeText on it throws synchronously, before any .catch can attach.
     // copyTextToClipboard guards that and falls back to execCommand('copy').
-    const didCopy = await copyTextToClipboard(item.path);
+    const didCopy = await copyTextToClipboard(item.data.path);
     showToast(
       didCopy
         ? t('fileTree.toast.pathCopied', 'Path copied to clipboard')
@@ -267,17 +224,47 @@ export function useFileTreeOperations({
     URL.revokeObjectURL(url);
   }, []);
 
+  // Download a single file
+  const downloadSingleFile = useCallback(async (item: FileTreeItem) => {
+    if (!selectedProject) return;
+
+    // Use the binary streaming endpoint so downloads preserve raw bytes.
+    const response = await api.readFileBlob(selectedProject.projectId, item.data.path);
+
+    if (!response.ok) {
+      throw new Error('Failed to download file');
+    }
+
+    const blob = await response.blob();
+    triggerBrowserDownload(blob, item.data.name);
+  }, [selectedProject, triggerBrowserDownload]);
+
+  // Download a folder as a server-built tar.gz. The backend streams the whole
+  // subtree via `tar`, so the archive is complete regardless of which nodes the
+  // lazily-loaded tree has expanded (the old client-side zip only saw loaded
+  // children and silently dropped the rest).
+  const downloadFolderAsZip = useCallback(async (folder: FileTreeItem) => {
+    if (!selectedProject) return;
+
+    const response = await api.downloadFolder(selectedProject.projectId, folder.data.path);
+    if (!response.ok) {
+      throw new Error('Failed to download folder');
+    }
+    const blob = await response.blob();
+    triggerBrowserDownload(blob, `${folder.data.name}.tar.gz`);
+
+    showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded'), 'success');
+  }, [selectedProject, showToast, t, triggerBrowserDownload]);
+
   // Download file or folder
-  const handleDownload = useCallback(async (item: FileTreeNode) => {
+  const handleDownload = useCallback(async (item: FileTreeItem) => {
     if (!selectedProject) return;
 
     setOperationLoading(true);
     try {
-      if (item.type === 'directory') {
-        // Download folder as ZIP
+      if (item.data.type === 'directory') {
         await downloadFolderAsZip(item);
       } else {
-        // Download single file
         await downloadSingleFile(item);
       }
     } catch (err) {
@@ -285,49 +272,9 @@ export function useFileTreeOperations({
     } finally {
       setOperationLoading(false);
     }
-  }, [selectedProject, showToast]);
-
-  // Download a single file
-  const downloadSingleFile = useCallback(async (item: FileTreeNode) => {
-    if (!selectedProject) return;
-
-    // Use the binary streaming endpoint so downloads preserve raw bytes.
-    const response = await api.readFileBlob(selectedProject.projectId, item.path);
-
-    if (!response.ok) {
-      throw new Error('Failed to download file');
-    }
-
-    const blob = await response.blob();
-    triggerBrowserDownload(blob, item.name);
-  }, [selectedProject, triggerBrowserDownload]);
-
-  // Download a folder as a server-built tar.gz. The backend streams the whole
-  // subtree via `tar`, so the archive is complete regardless of which nodes the
-  // lazily-loaded tree has expanded (the old client-side zip only saw loaded
-  // children and silently dropped the rest).
-  const downloadFolderAsZip = useCallback(async (folder: FileTreeNode) => {
-    if (!selectedProject) return;
-
-    const response = await api.downloadFolder(selectedProject.projectId, folder.path);
-    if (!response.ok) {
-      throw new Error('Failed to download folder');
-    }
-    const blob = await response.blob();
-    triggerBrowserDownload(blob, `${folder.name}.tar.gz`);
-
-    showToast(t('fileTree.toast.folderDownloaded', 'Folder downloaded'), 'success');
-  }, [selectedProject, showToast, t, triggerBrowserDownload]);
+  }, [selectedProject, showToast, downloadFolderAsZip, downloadSingleFile]);
 
   return {
-    // Rename operations
-    renamingItem,
-    renameValue,
-    handleStartRename,
-    handleCancelRename,
-    handleConfirmRename,
-    setRenameValue,
-
     // Delete operations
     deleteConfirmation,
     handleStartDelete,

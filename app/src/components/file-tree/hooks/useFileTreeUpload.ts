@@ -248,7 +248,6 @@ export const useFileTreeUpload = ({
   showToast,
 }: UseFileTreeUploadOptions) => {
   const [isDragOver, setIsDragOver] = useState(false);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [operationLoading, setOperationLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<FileTreeUploadProgressState | null>(null);
   const treeRef = useRef<HTMLDivElement>(null);
@@ -292,7 +291,6 @@ export const useFileTreeUpload = ({
   const uploadFiles = useCallback(
     async (files: File[], targetPath = '') => {
       if (files.length === 0) {
-        setDropTarget(null);
         return;
       }
 
@@ -362,7 +360,6 @@ export const useFileTreeUpload = ({
         setUploadError(message, files.length, targetPath, fileName, latestProgress);
       } finally {
         setOperationLoading(false);
-        setDropTarget(null);
       }
     },
     [
@@ -399,47 +396,35 @@ export const useFileTreeUpload = ({
     // Only set isDragOver to false if we're leaving the entire tree
     if (treeRef.current && !treeRef.current.contains(e.relatedTarget as Node)) {
       setIsDragOver(false);
-      setDropTarget(null);
     }
   }, []);
 
+  // Uploads dropped OS files to the project root. This only fires for drops
+  // react-complex-tree's own item drag-and-drop (moving existing tree nodes)
+  // didn't already claim — see FileTree.tsx, which checks
+  // dragAndDropContext.draggingItems before calling this, so an in-tree node
+  // drag never double-fires as an upload.
   const handleDrop = useCallback(
     async (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
 
-      const targetPath = dropTarget || '';
-
       try {
         const files = await collectDroppedFiles(e.dataTransfer);
-        await uploadFiles(files, targetPath);
+        await uploadFiles(files, '');
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Could not read dropped files';
         console.error('Upload error:', err);
         showToast(message, 'error');
-        setUploadError(message, 0, targetPath);
-        setDropTarget(null);
+        setUploadError(message, 0, '');
       }
     },
-    [dropTarget, setUploadError, showToast, uploadFiles],
+    [setUploadError, showToast, uploadFiles],
   );
-
-  const handleItemDragOver = useCallback((e: DragEvent, itemPath: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDropTarget(itemPath);
-  }, []);
-
-  const handleItemDrop = useCallback((e: DragEvent, itemPath: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDropTarget(itemPath);
-  }, []);
 
   return {
     isDragOver,
-    dropTarget,
     operationLoading,
     uploadProgress,
     treeRef,
@@ -448,8 +433,5 @@ export const useFileTreeUpload = ({
     handleDragOver,
     handleDragLeave,
     handleDrop,
-    handleItemDragOver,
-    handleItemDrop,
-    setDropTarget,
   };
 };
