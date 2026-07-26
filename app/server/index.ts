@@ -646,8 +646,8 @@ function validatePathInProject(projectRoot: string, targetPath: string): PathVal
     const resolved = path.isAbsolute(targetPath)
         ? path.resolve(targetPath)
         : path.resolve(projectRoot, targetPath);
-    const normalizedRoot = path.resolve(projectRoot) + path.sep;
-    if (!resolved.startsWith(normalizedRoot)) {
+    const normalizedRoot = path.resolve(projectRoot);
+    if (resolved !== normalizedRoot && !resolved.startsWith(normalizedRoot + path.sep)) {
         return { valid: false, error: 'Path must be under project root' };
     }
     return { valid: true, resolved };
@@ -928,6 +928,115 @@ app.put('/api/projects/:projectId/files/move', authenticateToken, async (req, re
             res.status(404).json({ error: 'File or directory not found' });
         } else if (errorCode(error) === 'EXDEV') {
             res.status(400).json({ error: 'Cannot move across different filesystems' });
+        } else {
+            res.status(500).json({ error: errorMessage(error) });
+        }
+    }
+});
+
+/**
+ * Finds a name for `desiredPath` inside `parentDir` that doesn't collide with
+ * an existing entry, following the "file (copy).ext", "file (copy 2).ext", ...
+ * convention most desktop file managers use for paste-into-same-directory.
+ */
+async function resolveNonCollidingCopyPath(parentDir: string, desiredName: string): Promise<string> {
+    const ext = path.extname(desiredName);
+    const base = desiredName.slice(0, desiredName.length - ext.length);
+
+    let candidateName = desiredName;
+    let attempt = 0;
+    while (true) {
+        const candidatePath = path.join(parentDir, candidateName);
+        try {
+            await fsPromises.access(candidatePath);
+        } catch {
+            return candidatePath;
+        }
+        attempt += 1;
+        candidateName = attempt === 1 ? `${base} (copy)${ext}` : `${base} (copy ${attempt})${ext}`;
+    }
+}
+
+// POST /api/projects/:projectId/files/copy - Copy file or directory
+app.post('/api/projects/:projectId/files/copy', authenticateToken, async (req, res) => {
+    try {
+        const { projectId } = req.params;
+        const { sourcePath, targetParentPath } = req.body;
+
+        if (!sourcePath || !targetParentPath) {
+            return res.status(400).json({ error: 'sourcePath and targetParentPath are required' });
+        }
+
+        const projectRoot = await projectsDb.getProjectPathById(projectId);
+        if (!projectRoot) {
+            return res.status(404).json({ error: 'Project not found' });
+        }
+
+        const sourceValidation = validatePathInProject(projectRoot, sourcePath);
+        if (!sourceValidation.valid) {
+            return res.status(403).json({ error: sourceValidation.error });
+        }
+        const resolvedSource = sourceValidation.resolved;
+
+        const targetValidation = validatePathInProject(projectRoot, targetParentPath);
+        if (!targetValidation.valid) {
+            return res.status(403).json({ error: targetValidation.error });
+        }
+        const resolvedTargetParent = targetValidation.resolved;
+
+        // Check source exists
+        try {
+            await fsPromises.access(resolvedSource);
+        } catch {
+            return res.status(404).json({ error: 'File or directory not found' });
+        }
+
+        // Target parent must exist and be a directory
+        let targetParentStat;
+        try {
+            targetParentStat = await fsPromises.stat(resolvedTargetParent);
+        } catch {
+            return res.status(404).json({ error: 'Target directory not found' });
+        }
+        if (!targetParentStat.isDirectory()) {
+            return res.status(400).json({ error: 'Target parent must be a directory' });
+        }
+
+        // Can't copy a directory into itself or one of its own descendants —
+        // unlike move this wouldn't literally infinite-loop (cp snapshots the
+        // source tree first), but it's never what a user pasting into the same
+        // subtree actually wants.
+        if (
+            resolvedTargetParent === resolvedSource ||
+            resolvedTargetParent.startsWith(resolvedSource + path.sep)
+        ) {
+            return res.status(400).json({ error: 'Cannot copy a directory into itself or a subdirectory of itself' });
+        }
+
+        // Unlike move, a same-directory or same-name collision is the common
+        // case (copy-paste in place) rather than an error — auto-rename to
+        // "name (copy).ext", incrementing until a free name is found.
+        const resolvedNewPath = await resolveNonCollidingCopyPath(resolvedTargetParent, path.basename(resolvedSource));
+
+        const newPathValidation = validatePathInProject(projectRoot, resolvedNewPath);
+        if (!newPathValidation.valid) {
+            return res.status(403).json({ error: newPathValidation.error });
+        }
+
+        await fsPromises.cp(resolvedSource, resolvedNewPath, { recursive: true, errorOnExist: true });
+
+        res.json({
+            success: true,
+            sourcePath: resolvedSource,
+            newPath: resolvedNewPath,
+            message: 'Copied successfully',
+        });
+    } catch (error) {
+        console.error('Error copying file/directory:', error);
+        if (errorCode(error) === 'EACCES') {
+            res.status(403).json({ error: 'Permission denied' });
+        } else if (errorCode(error) === 'ENOENT') {
+            res.status(404).json({ error: 'File or directory not found' });
         } else {
             res.status(500).json({ error: errorMessage(error) });
         }

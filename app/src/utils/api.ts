@@ -191,6 +191,12 @@ export const api = {
       body: JSON.stringify({ sourcePath, targetParentPath }),
     }),
 
+  copyFile: (projectId: string, { sourcePath, targetParentPath }: { sourcePath: string; targetParentPath: string }) =>
+    authenticatedFetch(`/api/projects/${projectId}/files/copy`, {
+      method: 'POST',
+      body: JSON.stringify({ sourcePath, targetParentPath }),
+    }),
+
   deleteFile: (projectId: string, { path, type }: { path: string; type: string }) =>
     authenticatedFetch(`/api/projects/${projectId}/files`, {
       method: 'DELETE',
