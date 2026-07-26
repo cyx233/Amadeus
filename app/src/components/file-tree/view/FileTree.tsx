@@ -144,6 +144,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
 
   const operations = useFileTreeOperations({
     selectedProject,
+    dataProvider,
     onRefresh: refreshFiles,
     showToast,
   });
@@ -195,6 +196,35 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
       [TREE_ID]: { ...previous[TREE_ID], expandedItems: [] },
     }));
   }, []);
+
+  // Ctrl/Cmd+C and Ctrl/Cmd+V for the tree — react-complex-tree has no
+  // built-in copy/paste keyboard binding (only rename/select/navigate), so
+  // this is bound at the tree container level rather than through the
+  // library's keyboardBindings config. Guarded on the active element so a
+  // real text selection (rename input, new-item input, the tree's own
+  // search box, or any input elsewhere on the page) keeps using the
+  // browser's native copy/paste instead of being hijacked.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+
+      if (e.key === 'c' || e.key === 'C') {
+        if (selectedItems.length === 0) return;
+        e.preventDefault();
+        operations.handleCopyToClipboard(selectedItems);
+      } else if (e.key === 'v' || e.key === 'V') {
+        if (!operations.clipboard || !dataProvider) return;
+        e.preventDefault();
+        const targetDir = dataProvider.resolvePasteTargetDir(treeViewState?.focusedItem);
+        void operations.handlePaste(targetDir);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [dataProvider, operations, selectedItems, treeViewState?.focusedItem]);
 
   if (!dataProvider) {
     return null;
@@ -359,6 +389,9 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
               onNewFolder={(path) => operations.handleStartCreate(path, 'directory')}
               onCopyPath={operations.handleCopyPath}
               onDownload={operations.handleDownload}
+              onCopy={(items) => operations.handleCopyToClipboard(items)}
+              canPaste={Boolean(operations.clipboard)}
+              onPaste={() => void operations.handlePaste(dataProvider.resolvePasteTargetDir(item.index))}
             >
               <FileTreeRow item={item} depth={depth} viewMode={viewMode} context={context} title={title} arrow={arrow}>
                 {children}

@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TreeItem } from 'react-complex-tree';
+import type { TreeItem, TreeItemIndex } from 'react-complex-tree';
 
 import { api } from '../../../utils/api';
 import { copyTextToClipboard } from '../../../utils/clipboard';
+import type { FileTreeDataProvider } from '../data/FileTreeDataProvider';
 import type { FileTreeItemData } from '../types/types';
 import type { Project } from '../../../types/app';
 
@@ -28,6 +29,7 @@ export type DeleteConfirmation = {
 
 export type UseFileTreeOperationsOptions = {
   selectedProject: Project | null;
+  dataProvider: FileTreeDataProvider | null;
   onRefresh: () => void;
   showToast: (message: string, type: 'success' | 'error') => void;
 };
@@ -53,6 +55,17 @@ export type UseFileTreeOperationsResult = {
   handleCopyPath: (item: FileTreeItem) => Promise<void>;
   handleDownload: (item: FileTreeItem) => Promise<void>;
 
+  // Clipboard (copy/paste) — items are captured by index, not by the
+  // FileTreeItem snapshot at copy time, so a paste always targets each
+  // source's current path even if it was renamed or moved after being
+  // copied. Survives a paste (like a real OS clipboard) so Ctrl+V repeated
+  // against the same or different target directories keeps working, each
+  // one landing on a fresh auto-renamed "name (copy N)" via the backend's
+  // collision handling — only replaced by the next Ctrl+C.
+  clipboard: TreeItemIndex[] | null;
+  handleCopyToClipboard: (items: FileTreeItem[]) => void;
+  handlePaste: (targetDirIndex: TreeItemIndex) => Promise<void>;
+
   // Loading state
   operationLoading: boolean;
 
@@ -65,6 +78,7 @@ export type UseFileTreeOperationsResult = {
 
 export function useFileTreeOperations({
   selectedProject,
+  dataProvider,
   onRefresh,
   showToast,
 }: UseFileTreeOperationsOptions): UseFileTreeOperationsResult {
@@ -274,6 +288,41 @@ export function useFileTreeOperations({
     }
   }, [selectedProject, showToast, downloadFolderAsZip, downloadSingleFile]);
 
+  // Copy/paste clipboard. Holds indices, not paths — pasteItems on the
+  // provider re-resolves each index's CURRENT path at paste time, so
+  // renaming or moving a copied item before pasting it still works.
+  const [clipboard, setClipboard] = useState<TreeItemIndex[] | null>(null);
+
+  const handleCopyToClipboard = useCallback((items: FileTreeItem[]) => {
+    if (items.length === 0) return;
+    setClipboard(items.map((item) => item.index));
+    showToast(
+      items.length === 1
+        ? t('fileTree.toast.itemCopied', 'Copied')
+        : t('fileTree.toast.itemsCopied', '{{count}} items copied', { count: items.length }),
+      'success',
+    );
+  }, [showToast, t]);
+
+  const handlePaste = useCallback(async (targetDirIndex: TreeItemIndex) => {
+    if (!clipboard || clipboard.length === 0 || !dataProvider) return;
+
+    setOperationLoading(true);
+    try {
+      await dataProvider.pasteItems(clipboard, targetDirIndex);
+      showToast(
+        clipboard.length === 1
+          ? t('fileTree.toast.itemPasted', 'Pasted')
+          : t('fileTree.toast.itemsPasted', '{{count}} items pasted', { count: clipboard.length }),
+        'success',
+      );
+    } catch (err) {
+      showToast((err as Error).message, 'error');
+    } finally {
+      setOperationLoading(false);
+    }
+  }, [clipboard, dataProvider, showToast, t]);
+
   return {
     // Delete operations
     deleteConfirmation,
@@ -294,6 +343,11 @@ export function useFileTreeOperations({
     // Other operations
     handleCopyPath,
     handleDownload,
+
+    // Clipboard (copy/paste)
+    clipboard,
+    handleCopyToClipboard,
+    handlePaste,
 
     // Loading state
     operationLoading,

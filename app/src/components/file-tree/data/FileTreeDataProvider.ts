@@ -21,6 +21,10 @@ type IndexedNode = {
   // Backend's cheap peek — drives whether an unfetched directory renders an
   // expand arrow at all. Independent of whether `children` has been loaded.
   hasChildren?: boolean;
+  // Set for every node except root. Lets a caller resolve "the directory a
+  // given item lives in" (e.g. paste's target when the focused item is a
+  // file, not a folder) in O(1) instead of scanning every node's children.
+  parentIndex?: TreeItemIndex;
 };
 
 let nextSyntheticIndex = 0;
@@ -172,6 +176,7 @@ export class FileTreeDataProvider implements TreeDataProvider<FileTreeItemData> 
             }
             const { newPath } = (await response.json()) as { newPath: string };
             this.applyPathPrefixChange(child.path, newPath);
+            child.parentIndex = itemId;
           } catch (error) {
             // A partially-successful multi-drop must not roll back items that
             // already moved — the filesystem operation isn't transactional,
@@ -246,7 +251,7 @@ export class FileTreeDataProvider implements TreeDataProvider<FileTreeItemData> 
     }
 
     const children = (await response.json()) as FileTreeNode[];
-    node.children = children.map((child) => this.registerNode(child));
+    node.children = children.map((child) => this.registerNode(child, node.index));
   }
 
   // Assigns a stable index to a node discovered from a backend response,
@@ -255,11 +260,12 @@ export class FileTreeDataProvider implements TreeDataProvider<FileTreeItemData> 
   // fetch of a different directory, or a previous fetch of this same
   // directory before a refresh). Recurses into any children the backend
   // included inline (getFileTree returns two real levels per call).
-  private registerNode(node: FileTreeNode): TreeItemIndex {
+  private registerNode(node: FileTreeNode, parentIndex: TreeItemIndex): TreeItemIndex {
     const existingIndex = this.indexByPath.get(node.path);
     const index = existingIndex ?? mintIndex();
 
     const indexed = toIndexedNode(node, index);
+    indexed.parentIndex = parentIndex;
     // Preserve a deeper `children` array already known for this path (from
     // an earlier on-demand fetch) if this particular response didn't itself
     // carry inline children for it — only true for depth-2 nodes that came
@@ -275,7 +281,7 @@ export class FileTreeDataProvider implements TreeDataProvider<FileTreeItemData> 
     this.indexByPath.set(node.path, index);
 
     if (node.type === 'directory' && node.children) {
-      indexed.children = node.children.map((child) => this.registerNode(child));
+      indexed.children = node.children.map((child) => this.registerNode(child, index));
     }
 
     return index;
@@ -309,6 +315,81 @@ export class FileTreeDataProvider implements TreeDataProvider<FileTreeItemData> 
 
   getNodeForIndex(index: TreeItemIndex): IndexedNode | undefined {
     return this.nodesByIndex.get(index);
+  }
+
+  // Root's path is '' but it's never routed through registerNode (it's
+  // hardcoded in the constructor), so it has no indexByPath entry — special-
+  // cased here rather than seeding indexByPath with an empty-string key.
+  getIndexForPath(path: string): TreeItemIndex | undefined {
+    if (path === '') {
+      return ROOT_ITEM_INDEX;
+    }
+    return this.indexByPath.get(path);
+  }
+
+  // Paste's target directory: `itemIndex` itself if it's already a folder
+  // (matches "right-click a folder -> Paste" / focus a folder and hit
+  // Ctrl+V), otherwise its parent (matches focusing a plain file and
+  // hitting Ctrl+V, which every desktop file manager treats as "paste next
+  // to this file," not "paste inside this file"). Falls back to root when
+  // there's nothing focused/selected to anchor on.
+  resolvePasteTargetDir(itemIndex: TreeItemIndex | undefined): TreeItemIndex {
+    if (itemIndex === undefined) {
+      return ROOT_ITEM_INDEX;
+    }
+    const node = this.nodesByIndex.get(itemIndex);
+    if (!node) {
+      return ROOT_ITEM_INDEX;
+    }
+    if (node.type === 'directory') {
+      return itemIndex;
+    }
+    return node.parentIndex ?? ROOT_ITEM_INDEX;
+  }
+
+  // Paste: copies each source onto targetParentIndex's current path. Takes
+  // indices rather than the FileTreeItem snapshots the caller's clipboard
+  // holds, and re-reads `.path` from nodesByIndex here rather than trusting
+  // a path captured at copy-time — a source renamed or moved after being
+  // copied (but before paste) is followed to its current location, the same
+  // way onChangeItemChildren's moves are. Unlike a move, a failed item is
+  // simply skipped (nothing to roll back — the source was never touched).
+  async pasteItems(sourceIndices: TreeItemIndex[], targetParentIndex: TreeItemIndex): Promise<void> {
+    const targetParent = this.nodesByIndex.get(targetParentIndex);
+    if (!targetParent) {
+      throw new Error(`Unknown file tree item: ${String(targetParentIndex)}`);
+    }
+
+    let failureCount = 0;
+    await Promise.all(
+      sourceIndices.map(async (sourceIndex) => {
+        const source = this.nodesByIndex.get(sourceIndex);
+        if (!source) {
+          failureCount += 1;
+          return;
+        }
+
+        try {
+          const response = await api.copyFile(this.projectId, {
+            sourcePath: source.path,
+            targetParentPath: targetParent.path,
+          });
+          if (!response.ok) {
+            const body = await response.json().catch(() => ({}));
+            throw new Error((body as { error?: string }).error || 'Failed to copy');
+          }
+        } catch {
+          failureCount += 1;
+        }
+      }),
+    );
+
+    this.invalidateChildren(targetParentIndex);
+    this.emitChange([targetParentIndex]);
+
+    if (failureCount > 0) {
+      throw new Error(`${failureCount} item(s) failed to copy`);
+    }
   }
 
   // Invalidates a directory's cached children so the next getTreeItem

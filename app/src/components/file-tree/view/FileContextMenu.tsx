@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Copy, Download, FileText, FolderPlus, Pencil, Search, Trash2, type LucideIcon } from 'lucide-react';
+import { ClipboardPaste, Copy, CopyPlus, Download, FileText, FolderPlus, Pencil, Search, Trash2, type LucideIcon } from 'lucide-react';
 import type { TreeItem } from 'react-complex-tree';
 
 import { cn } from '../../../lib/utils';
@@ -41,10 +41,10 @@ function calculateViewportSafePosition(clientX: number, clientY: number) {
 export default function FileContextMenu({
   children,
   item,
-  // The full current selection, used only for "Delete" so a right-click on
-  // an already-selected multi-item set deletes all of them. Every other
-  // action (rename, copy path, download) targets `item` alone — see
-  // FileTree.tsx's useFileTreeOperations wiring for why those stay
+  // The full current selection, used for "Delete" and "Copy" so a
+  // right-click on an already-selected multi-item set targets all of them.
+  // Every other action (rename, copy path, download) targets `item` alone —
+  // see FileTree.tsx's useFileTreeOperations wiring for why those stay
   // single-target.
   selectedItems,
   onStartRename,
@@ -53,6 +53,9 @@ export default function FileContextMenu({
   onNewFolder,
   onCopyPath,
   onDownload,
+  onCopy,
+  canPaste,
+  onPaste,
   className = '',
 }: {
   children: ReactNode;
@@ -64,6 +67,9 @@ export default function FileContextMenu({
   onNewFolder?: (path: string) => void;
   onCopyPath?: (item: FileTreeItem) => void;
   onDownload?: (item: FileTreeItem) => void;
+  onCopy?: (items: FileTreeItem[]) => void;
+  canPaste?: boolean;
+  onPaste?: () => void;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -89,13 +95,14 @@ export default function FileContextMenu({
   }, [closeContextMenu]);
 
   // Right-clicking an item that's part of the current multi-selection
-  // deletes the whole selection; right-clicking an unselected item deletes
-  // just that one — the same "right-click on selection vs. on a single
-  // item" convention most file managers use.
+  // deletes/copies the whole selection; right-clicking an unselected item
+  // targets just that one — the same "right-click on selection vs. on a
+  // single item" convention most file managers use.
   const deleteTargets = useMemo(
     () => (selectedItems.some((selected) => selected.index === item.index) ? selectedItems : [item]),
     [item, selectedItems],
   );
+  const copyTargets = deleteTargets;
 
   const menuActions = useMemo<ContextMenuAction[]>(() => {
     if (item.data.type === 'file') {
@@ -116,11 +123,19 @@ export default function FileContextMenu({
           isDanger: true,
         },
         {
+          key: 'copy',
+          icon: CopyPlus,
+          label: copyTargets.length > 1
+            ? t('fileTree.context.copyCount', 'Copy {{count}} items', { count: copyTargets.length })
+            : t('fileTree.context.copy', 'Copy'),
+          onSelect: () => onCopy?.(copyTargets),
+          showDividerBefore: true,
+        },
+        {
           key: 'copyPath',
           icon: Copy,
           label: t('fileTree.context.copyPath', 'Copy Path'),
           onSelect: () => onCopyPath?.(item),
-          showDividerBefore: true,
         },
         {
           key: 'download',
@@ -143,6 +158,13 @@ export default function FileContextMenu({
         icon: FolderPlus,
         label: t('fileTree.context.newFolder', 'New Folder'),
         onSelect: () => onNewFolder?.(item.data.path),
+      },
+      {
+        key: 'paste',
+        icon: ClipboardPaste,
+        label: t('fileTree.context.paste', 'Paste'),
+        onSelect: onPaste,
+        isDisabled: !canPaste,
       },
       {
         key: 'rename',
@@ -168,6 +190,14 @@ export default function FileContextMenu({
         showDividerBefore: true,
       },
       {
+        key: 'copy',
+        icon: CopyPlus,
+        label: copyTargets.length > 1
+          ? t('fileTree.context.copyCount', 'Copy {{count}} items', { count: copyTargets.length })
+          : t('fileTree.context.copy', 'Copy'),
+        onSelect: () => onCopy?.(copyTargets),
+      },
+      {
         key: 'copyPath',
         icon: Copy,
         label: t('fileTree.context.copyPath', 'Copy Path'),
@@ -180,7 +210,7 @@ export default function FileContextMenu({
         onSelect: () => onDownload?.(item),
       },
     ];
-  }, [item, deleteTargets, onCopyPath, onDelete, onDownload, onNewFile, onNewFolder, onStartRename, t]);
+  }, [item, copyTargets, deleteTargets, canPaste, onCopy, onCopyPath, onDelete, onDownload, onNewFile, onNewFolder, onPaste, onStartRename, t]);
 
   useEffect(() => {
     if (!isMenuOpen) {
