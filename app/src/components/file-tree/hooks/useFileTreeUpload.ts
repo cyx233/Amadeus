@@ -14,6 +14,12 @@ type UseFileTreeUploadOptions = {
   selectedProject: Project | null;
   onRefresh: () => void;
   showToast: (message: string, type: 'success' | 'error') => void;
+  // True while react-complex-tree is dragging an existing tree node (a move,
+  // not an OS-file drop). The browser fires the same dragenter/dragover/drop
+  // events for both — without this check, moving a node inside the tree
+  // would also flash the upload overlay and hand the tree's internal drag
+  // payload (not real File objects) to collectDroppedFiles.
+  isTreeInternalDrag: () => boolean;
 };
 
 export type FileTreeUploadProgressState = {
@@ -246,6 +252,7 @@ export const useFileTreeUpload = ({
   selectedProject,
   onRefresh,
   showToast,
+  isTreeInternalDrag,
 }: UseFileTreeUploadOptions) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [operationLoading, setOperationLoading] = useState(false);
@@ -380,32 +387,40 @@ export const useFileTreeUpload = ({
   );
 
   const handleDragEnter = useCallback((e: DragEvent) => {
+    // A tree-internal node drag already has its own drag handling (deeper in
+    // the DOM, so it ran before this bubbled up here) — leave it alone
+    // entirely rather than also flashing the upload overlay over it.
+    if (isTreeInternalDrag()) return;
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(true);
-  }, []);
+  }, [isTreeInternalDrag]);
 
   const handleDragOver = useCallback((e: DragEvent) => {
+    if (isTreeInternalDrag()) return;
     e.preventDefault();
     e.stopPropagation();
-  }, []);
+  }, [isTreeInternalDrag]);
 
   const handleDragLeave = useCallback((e: DragEvent) => {
+    if (isTreeInternalDrag()) return;
     e.preventDefault();
     e.stopPropagation();
     // Only set isDragOver to false if we're leaving the entire tree
     if (treeRef.current && !treeRef.current.contains(e.relatedTarget as Node)) {
       setIsDragOver(false);
     }
-  }, []);
+  }, [isTreeInternalDrag]);
 
-  // Uploads dropped OS files to the project root. This only fires for drops
-  // react-complex-tree's own item drag-and-drop (moving existing tree nodes)
-  // didn't already claim — see FileTree.tsx, which checks
-  // dragAndDropContext.draggingItems before calling this, so an in-tree node
-  // drag never double-fires as an upload.
+  // Uploads dropped OS files to the project root. Skipped entirely for a
+  // tree-internal node drag — react-complex-tree's own drop handling (bound
+  // deeper in the DOM, so it already ran by the time this bubbles up) has
+  // already completed the move via dataProvider.onChangeItemChildren, and
+  // e.dataTransfer here holds the tree's internal drag payload, not real
+  // File objects.
   const handleDrop = useCallback(
     async (e: DragEvent) => {
+      if (isTreeInternalDrag()) return;
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
@@ -420,7 +435,7 @@ export const useFileTreeUpload = ({
         setUploadError(message, 0, '');
       }
     },
-    [setUploadError, showToast, uploadFiles],
+    [isTreeInternalDrag, setUploadError, showToast, uploadFiles],
   );
 
   return {

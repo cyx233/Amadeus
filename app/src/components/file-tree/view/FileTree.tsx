@@ -5,6 +5,7 @@ import { AlertTriangle, Check, X, Loader2, Folder, Search, Upload } from 'lucide
 import {
   UncontrolledTreeEnvironment,
   Tree,
+  type TreeEnvironmentRef,
   type TreeItem,
   type TreeRef,
   type TreeViewState,
@@ -48,6 +49,20 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
   // top-level UncontrolledTreeEnvironment prop — this ref is how the header's
   // search button starts a search from outside the tree.
   const treeRef = useRef<TreeRef<FileTreeItemData>>(null);
+  // UncontrolledTreeEnvironment's own imperative handle — its
+  // dragAndDropContext.draggingItems is how the upload hook's outer
+  // drag/drop handlers (bound on the container div wrapping this whole
+  // environment) tell a tree-internal node drag (a move) apart from an OS
+  // file being dragged in (an upload) — the browser fires the same
+  // dragenter/dragover/drop events for both, so without this check they'd
+  // collide (the upload overlay flashing during a node drag, and
+  // handleDrop trying to read real File objects out of the tree's internal
+  // drag payload).
+  const treeEnvironmentRef = useRef<TreeEnvironmentRef<FileTreeItemData>>(null);
+  const isTreeInternalDrag = useCallback(
+    () => Boolean(treeEnvironmentRef.current?.dragAndDropContext.draggingItems?.length),
+    [],
+  );
 
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
     setToast({ message, type });
@@ -137,6 +152,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
     selectedProject,
     onRefresh: refreshFiles,
     showToast,
+    isTreeInternalDrag,
   });
   const operationLoading = operations.operationLoading || upload.operationLoading;
 
@@ -270,6 +286,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
             second fetch. */}
         {rootStatus === 'ready' && (
         <UncontrolledTreeEnvironment<FileTreeItemData>
+          ref={treeEnvironmentRef}
           dataProvider={dataProvider}
           getItemTitle={(item) => item.data.name}
           viewState={viewState}
