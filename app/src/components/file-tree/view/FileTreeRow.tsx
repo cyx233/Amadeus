@@ -89,7 +89,6 @@ export default function FileTreeRow({ item, depth, viewMode, context, title, arr
       : 'flex items-center gap-1.5 py-[3px] pr-2 rounded-sm transition-colors duration-100',
     context.isSelected ? 'bg-accent' : 'hover:bg-accent/60',
     context.isDraggingOver && 'bg-primary/10',
-    context.isSearchMatching && 'outline outline-1 outline-primary/50',
     isDirectory && context.isExpanded && 'border-l-2 border-primary/30',
     (isDirectory && !context.isExpanded) || !isDirectory ? 'border-l-2 border-transparent' : '',
   );

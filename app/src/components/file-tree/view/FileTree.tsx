@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, Check, X, Loader2, Folder, Search, Upload } from 'lucide-react';
+import { AlertTriangle, Check, X, Loader2, Folder, Upload } from 'lucide-react';
 import {
   UncontrolledTreeEnvironment,
   Tree,
   type TreeEnvironmentRef,
   type TreeItem,
-  type TreeRef,
   type TreeViewState,
 } from 'react-complex-tree';
 
@@ -45,10 +44,6 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
   const [selectedImage, setSelectedImage] = useState<FileTreeImageSelection | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
-  // setSearch lives on the Tree instance's own imperative handle, not as a
-  // top-level UncontrolledTreeEnvironment prop — this ref is how the header's
-  // search button starts a search from outside the tree.
-  const treeRef = useRef<TreeRef<FileTreeItemData>>(null);
   // UncontrolledTreeEnvironment's own imperative handle — its
   // dragAndDropContext.draggingItems is how the upload hook's outer
   // drag/drop handlers (bound on the container div wrapping this whole
@@ -259,7 +254,6 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
         onNewFolder={() => handleStartCreateAtRoot('directory')}
         onRefresh={refreshFiles}
         onCollapseAll={collapseAll}
-        onStartSearch={() => treeRef.current?.setSearch('')}
         operationLoading={operationLoading}
         isUploading={upload.uploadProgress?.status === 'uploading'}
         uploadProgress={upload.uploadProgress?.progress ?? null}
@@ -333,11 +327,6 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
           // top-level row, which is the ONLY drop target that resolves to the
           // tree root — so root would be permanently undroppable otherwise.
           canReorderItems
-          canSearch
-          canSearchByStartingTyping
-          doesSearchMatchItem={(search, item) =>
-            item.data.name.toLowerCase().includes(search.toLowerCase())
-          }
           onExpandItem={(item) =>
             setViewState((previous) => ({
               ...previous,
@@ -413,16 +402,6 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
               <Input ref={inputRef} {...inputProps} className="h-6 flex-1 text-sm" disabled={operationLoading} />
             </form>
           )}
-          renderSearchInput={({ inputProps }) => (
-            <div className="flex items-center gap-1.5 border-b border-border bg-background px-3 py-1.5">
-              <Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-              <Input
-                {...inputProps}
-                placeholder={t('fileTree.searchPlaceholder', 'Search files and folders...')}
-                className="h-6 flex-1 border-0 px-0 text-sm shadow-none focus-visible:ring-0"
-              />
-            </div>
-          )}
           renderItemsContainer={({ children, containerProps }) => (
             <ul {...containerProps} className="relative">
               {children}
@@ -432,7 +411,7 @@ export default function FileTree({ selectedProject, onFileOpen }: FileTreeProps)
             <div {...containerProps}>{children}</div>
           )}
         >
-          <Tree ref={treeRef} treeId={TREE_ID} rootItem={ROOT_ITEM_INDEX} treeLabel={t('fileTree.files', 'Files')} />
+          <Tree treeId={TREE_ID} rootItem={ROOT_ITEM_INDEX} treeLabel={t('fileTree.files', 'Files')} />
         </UncontrolledTreeEnvironment>
         )}
       </div>

@@ -5,6 +5,7 @@ import { ClipboardPaste, Copy, CopyPlus, Download, FileText, FolderPlus, Pencil,
 import type { TreeItem } from 'react-complex-tree';
 
 import { cn } from '../../../lib/utils';
+import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
 import type { FileTreeItemData } from '../types/types';
 
 type FileTreeItem = TreeItem<FileTreeItemData>;
@@ -73,6 +74,7 @@ export default function FileContextMenu({
   className?: string;
 }) {
   const { t } = useTranslation();
+  const { searchInFolder } = usePaletteOps();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
@@ -186,7 +188,7 @@ export default function FileContextMenu({
         key: 'searchInFolder',
         icon: Search,
         label: t('fileTree.context.searchInFolder', 'Search in folder'),
-        onSelect: () => (window as any).__amadeus_searchInFolder?.(item.data.path),
+        onSelect: () => searchInFolder(item.data.path),
         showDividerBefore: true,
       },
       {
@@ -210,7 +212,7 @@ export default function FileContextMenu({
         onSelect: () => onDownload?.(item),
       },
     ];
-  }, [item, copyTargets, deleteTargets, canPaste, onCopy, onCopyPath, onDelete, onDownload, onNewFile, onNewFolder, onPaste, onStartRename, t]);
+  }, [item, copyTargets, deleteTargets, canPaste, onCopy, onCopyPath, onDelete, onDownload, onNewFile, onNewFolder, onPaste, onStartRename, searchInFolder, t]);
 
   useEffect(() => {
     if (!isMenuOpen) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useDeviceSettings } from '../../../hooks/useDeviceSettings';
@@ -6,7 +6,7 @@ import { useVersionCheck } from '../../../hooks/useVersionCheck';
 import { useUiPreferences } from '../../../hooks/useUiPreferences';
 import { useSidebarController } from '../hooks/useSidebarController';
 import { useTaskMaster } from '../../../contexts/TaskMasterContext';
-import { usePaletteOps } from '../../../contexts/PaletteOpsContext';
+import { usePaletteOps, usePaletteOpsRegister } from '../../../contexts/PaletteOpsContext';
 import { useAuth } from '../../auth/context/AuthContext';
 import GitPanel from '../../git-panel/view/GitPanel';
 import type { Project } from '../../../types/app';
@@ -47,16 +47,16 @@ function Sidebar({
 }: SidebarProps & { expandedWidth?: number }) {
   const { t } = useTranslation(['sidebar', 'common']);
   const [activeView, setActiveView] = useState<SidebarView>('explorer');
-  // "Search in folder": the file tree calls the global opener, which switches
-  // to the search view scoped to that folder (VS Code's Find in Folder).
+  // "Search in folder": the file tree's context menu calls this (via
+  // PaletteOpsContext, registered here since this component owns the search
+  // view/scope state) to switch to the search view scoped to that folder
+  // (VS Code's Find in Folder).
   const [searchScope, setSearchScope] = useState<string | null>(null);
-  useEffect(() => {
-    (window as any).__amadeus_searchInFolder = (folderPath: string) => {
-      setSearchScope(folderPath || null);
-      setActiveView('search');
-    };
-    return () => { delete (window as any).__amadeus_searchInFolder; };
+  const searchInFolder = useCallback((folderPath: string) => {
+    setSearchScope(folderPath || null);
+    setActiveView('search');
   }, []);
+  usePaletteOpsRegister({ searchInFolder });
   const { isPWA } = useDeviceSettings({ trackMobile: false });
   const { updateAvailable, restartRequired, latestVersion, currentVersion, releaseInfo, installMode } = useVersionCheck(
     'cyx233',

@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import type { ChangeEvent } from 'react';
-import { AlignJustify, FileText, FolderPlus, List, ListCollapse, Loader2, RefreshCw, Search, Table2, Upload } from 'lucide-react';
+import { AlignJustify, FileText, FolderPlus, List, ListCollapse, Loader2, RefreshCw, Table2, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../../shared/view/ui';
@@ -17,7 +17,6 @@ type FileTreeHeaderProps = {
   onUploadFiles?: (files: FileList) => void;
   onRefresh?: () => void;
   onCollapseAll?: () => void;
-  onStartSearch?: () => void;
   // Loading state
   loading?: boolean;
   operationLoading?: boolean;
@@ -33,7 +32,6 @@ export default function FileTreeHeader({
   onUploadFiles,
   onRefresh,
   onCollapseAll,
-  onStartSearch,
   loading,
   operationLoading,
   isUploading,
@@ -149,18 +147,6 @@ export default function FileTreeHeader({
               aria-label={t('fileTree.collapseAll', 'Collapse All')}
             >
               <ListCollapse className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          {onStartSearch && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={onStartSearch}
-              title={t('fileTree.search', 'Search files')}
-              aria-label={t('fileTree.search', 'Search files')}
-            >
-              <Search className="h-3.5 w-3.5" />
             </Button>
           )}
           {/* Divider */}
