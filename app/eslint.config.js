@@ -168,6 +168,7 @@ export default tseslint.config(
             // Shared runtime helpers used by the legacy agent runtimes (e.g.
             // claude-sdk.ts) — not tied to any one provider module.
             "server/services/notification-orchestrator.ts",
+            "server/utils/recall-mcp.ts",
             "server/utils/todo-mcp.ts",
             "server/utils/todo-store.ts",
           ], // classify shared utility files so modules can depend on them explicitly

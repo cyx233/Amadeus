@@ -34,6 +34,7 @@ import {
 import { sessionsService } from './modules/providers/services/sessions.service.js';
 import { providerAuthService } from './modules/providers/services/provider-auth.service.js';
 import { createCompleteMessage, createNormalizedMessage, readObjectRecord } from './shared/utils.js';
+import { recallMcpServer } from './utils/recall-mcp.js';
 import { todoMcpServer } from './utils/todo-mcp.js';
 
 /** The websocket-side writer every provider runtime sends normalized messages through. */
@@ -606,9 +607,10 @@ async function queryClaudeSDK(command: string, options: SpawnClaudeOptions = {},
     });
 
     const mcpServers = await loadMcpConfig(options.cwd);
-    // Always expose the in-process global TODO server; merge user-configured
-    // MCP servers on top so their names win on collision.
-    sdkOptions.mcpServers = { todo: todoMcpServer, ...(mcpServers || {}) };
+    // Always expose the in-process global TODO server and trajectory recall
+    // ("working memory") server; merge user-configured MCP servers on top so
+    // their names win on collision.
+    sdkOptions.mcpServers = { todo: todoMcpServer, recall: recallMcpServer, ...(mcpServers || {}) };
 
     // Turns with image attachments switch to streaming input so the images
     // ride along as real content blocks. Built per query attempt because an
