@@ -50,6 +50,7 @@ import { assetsRoutes } from './modules/assets/index.js';
 import browserUseMcpRoutes from './modules/browser-use/browser-use-mcp.routes.js';
 import { browserUseService } from './modules/browser-use/browser-use.service.js';
 import { shutdown as shutdownTaskmasterMcp } from './modules/taskmaster-mcp/client.js';
+import { mountExtensions, shutdownExtensions } from './modules/extensions/index.js';
 import { initializeDatabase, projectsDb, sessionsDb } from './modules/database/index.js';
 import { createProject } from './modules/projects/services/project-management.service.js';
 import { configureWebPush } from './services/vapid-keys.js';
@@ -185,10 +186,14 @@ app.use('/api/git', authenticateToken, gitRoutes);
 // Cursor API Routes (protected)
 app.use('/api/cursor', authenticateToken, cursorRoutes);
 
-// TaskMaster API Routes (protected). TaskMaster is the first platform extension;
-// its API lives under the extension namespace /api/ext/<id> rather than a bespoke
-// top-level path. See .local/platform-extension-registry-design.md.
-app.use('/api/ext/taskmaster', authenticateToken, taskmasterRoutes);
+// Platform extensions (TaskMaster is the first). The registry mounts each
+// extension's router at /api/ext/<id> and serves /api/ext/active; index.ts (the
+// composition root) injects each extension's concrete router + MCP-client
+// teardown, since those live outside the extensions module's boundary.
+// See .local/platform-extension-registry-design.md.
+mountExtensions(app, authenticateToken, {
+  taskmaster: { router: taskmasterRoutes, mcpShutdown: shutdownTaskmasterMcp },
+});
 
 // MCP utilities
 app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);
@@ -1649,9 +1654,9 @@ async function startServer() {
                 console.error('[Browser] Error stopping sessions during shutdown:', errorMessage(err));
             }
             try {
-                await shutdownTaskmasterMcp();
+                await shutdownExtensions();
             } catch (err) {
-                console.error('[TaskMaster MCP] Error stopping resident process during shutdown:', errorMessage(err));
+                console.error('[extensions] Error during shutdown:', errorMessage(err));
             }
             try {
                 await removeLocalServerMarker();
