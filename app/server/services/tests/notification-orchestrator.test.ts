@@ -17,7 +17,7 @@ import {
 
 import { notifyRunStopped } from '../notification-orchestrator.js';
 
-async function withIsolatedDatabase(runTest) {
+async function withIsolatedDatabase(runTest: () => Promise<void>): Promise<void> {
   const previousDatabasePath = process.env.DATABASE_PATH;
   const tempDirectory = await mkdtemp(path.join(tmpdir(), 'notification-orchestrator-'));
   const databasePath = path.join(tempDirectory, 'auth.db');
@@ -41,12 +41,13 @@ async function withIsolatedDatabase(runTest) {
 
 test('push payload uses the app session id when notified with a provider session id', async () => {
   const originalSendNotification = webPush.sendNotification;
-  const sentPayloads = [];
+  const sentPayloads: Array<{ data?: { sessionId?: string; tag?: string } }> = [];
 
-  webPush.sendNotification = async (_subscription, payload) => {
+  // Stub web-push; cast to the real method type so assignment typechecks.
+  webPush.sendNotification = (async (_subscription: unknown, payload: string) => {
     sentPayloads.push(JSON.parse(payload));
     return {};
-  };
+  }) as typeof webPush.sendNotification;
 
   try {
     await withIsolatedDatabase(async () => {
@@ -72,7 +73,7 @@ test('push payload uses the app session id when notified with a provider session
 
       assert.equal(sentPayloads.length, 1);
       assert.equal(sentPayloads[0]?.data?.sessionId, 'app-session-1');
-      assert.match(sentPayloads[0]?.data?.tag, /app-session-1/);
+      assert.match(sentPayloads[0]?.data?.tag ?? '', /app-session-1/);
     });
   } finally {
     webPush.sendNotification = originalSendNotification;
