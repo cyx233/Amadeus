@@ -17,7 +17,5 @@ build.log
 .local/
 gateway/htpasswd
 gateway/user-routes.conf
-docker-compose.dev.yml
 docker-compose.multi.yml
-Dockerfile.dev
 workspace/
