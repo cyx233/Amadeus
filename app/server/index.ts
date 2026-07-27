@@ -185,8 +185,10 @@ app.use('/api/git', authenticateToken, gitRoutes);
 // Cursor API Routes (protected)
 app.use('/api/cursor', authenticateToken, cursorRoutes);
 
-// TaskMaster API Routes (protected)
-app.use('/api/taskmaster', authenticateToken, taskmasterRoutes);
+// TaskMaster API Routes (protected). TaskMaster is the first platform extension;
+// its API lives under the extension namespace /api/ext/<id> rather than a bespoke
+// top-level path. See .local/platform-extension-registry-design.md.
+app.use('/api/ext/taskmaster', authenticateToken, taskmasterRoutes);
 
 // MCP utilities
 app.use('/api/mcp-utils', authenticateToken, mcpUtilsRoutes);

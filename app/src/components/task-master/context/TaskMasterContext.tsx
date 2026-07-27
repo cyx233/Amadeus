@@ -275,7 +275,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
   }, [clearError, handleError, refreshCurrentProjectTaskMaster, token, user]);
 
   const refreshTasks = useCallback(async () => {
-    // TaskMaster tasks endpoint now lives under /api/taskmaster/tasks/:projectId.
+    // TaskMaster tasks endpoint now lives under /api/ext/taskmaster/tasks/:projectId.
     const projectId = currentProject?.projectId;
 
     if (!projectId || !user || (!token && !IS_PLATFORM)) {
@@ -291,7 +291,7 @@ export function TaskMasterProvider({ children }: { children: React.ReactNode }) 
       const tagQuery = selectedTag
         ? `?tag=${encodeURIComponent(selectedTag)}`
         : '';
-      const response = await api.get(`/taskmaster/tasks/${encodeURIComponent(projectId)}${tagQuery}`);
+      const response = await api.get(`/ext/taskmaster/tasks/${encodeURIComponent(projectId)}${tagQuery}`);
       if (!response.ok) {
         const errorPayload = (await response.json()) as { message?: string };
         throw new Error(errorPayload.message ?? 'Failed to load tasks');

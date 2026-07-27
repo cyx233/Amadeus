@@ -41,7 +41,7 @@ export const TasksSettingsProvider = ({ children }: { children: ReactNode }) => 
   useEffect(() => {
     const checkInstallation = async () => {
       try {
-        const response = await api.get('/taskmaster/installation-status');
+        const response = await api.get('/ext/taskmaster/installation-status');
         if (response.ok) {
           const data: TaskMasterInstallationStatus = await response.json();
           setInstallationStatus(data);

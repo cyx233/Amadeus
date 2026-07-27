@@ -214,13 +214,13 @@ export const api = {
   taskmaster: {
     // Initialize TaskMaster in a project
     init: (projectId: string) =>
-      authenticatedFetch(`/api/taskmaster/init/${projectId}`, {
+      authenticatedFetch(`/api/ext/taskmaster/init/${projectId}`, {
         method: 'POST',
       }),
 
     // Add a new task. `tag` targets a per-PRD task set; omit for the default set.
     addTask: (projectId: string, { prompt, title, description, priority, dependencies, tag }: { prompt?: string; title?: string; description?: string; priority?: string; dependencies?: string; tag?: string }) =>
-      authenticatedFetch(`/api/taskmaster/add-task/${projectId}`, {
+      authenticatedFetch(`/api/ext/taskmaster/add-task/${projectId}`, {
         method: 'POST',
         body: JSON.stringify({ prompt, title, description, priority, dependencies, tag }),
       }),
@@ -228,7 +228,7 @@ export const api = {
     // Parse PRD to generate tasks. `tag` scopes the generated tasks to a
     // per-PRD task set (see prdNameToTag); omit for the default (master) set.
     parsePRD: (projectId: string, { fileName, numTasks, append, tag }: { fileName?: string; numTasks?: number; append?: boolean; tag?: string }) =>
-      authenticatedFetch(`/api/taskmaster/parse-prd/${projectId}`, {
+      authenticatedFetch(`/api/ext/taskmaster/parse-prd/${projectId}`, {
         method: 'POST',
         body: JSON.stringify({ fileName, numTasks, append, tag }),
       }),
@@ -248,7 +248,7 @@ export const api = {
       if (append) params.set('append', 'true');
       if (token) params.set('token', token);
       return new EventSource(
-        `/api/taskmaster/parse-prd-progress/${encodeURIComponent(projectId)}?${params.toString()}`,
+        `/api/ext/taskmaster/parse-prd-progress/${encodeURIComponent(projectId)}?${params.toString()}`,
       );
     },
 
@@ -257,25 +257,25 @@ export const api = {
     deletePRD: (projectId: string, fileName: string, tag?: string) => {
       const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
       return authenticatedFetch(
-        `/api/taskmaster/prd/${encodeURIComponent(projectId)}/${encodeURIComponent(fileName)}${qs}`,
+        `/api/ext/taskmaster/prd/${encodeURIComponent(projectId)}/${encodeURIComponent(fileName)}${qs}`,
         { method: 'DELETE' },
       );
     },
 
     // Get available PRD templates
     getTemplates: () =>
-      authenticatedFetch('/api/taskmaster/prd-templates'),
+      authenticatedFetch('/api/ext/taskmaster/prd-templates'),
 
     // Apply a PRD template
     applyTemplate: (projectId: string, { templateId, fileName, customizations }: { templateId?: string; fileName?: string; customizations?: unknown }) =>
-      authenticatedFetch(`/api/taskmaster/apply-template/${projectId}`, {
+      authenticatedFetch(`/api/ext/taskmaster/apply-template/${projectId}`, {
         method: 'POST',
         body: JSON.stringify({ templateId, fileName, customizations }),
       }),
 
     // Update a task
     updateTask: (projectId: string, taskId: string | number, updates: unknown) =>
-      authenticatedFetch(`/api/taskmaster/update-task/${projectId}/${taskId}`, {
+      authenticatedFetch(`/api/ext/taskmaster/update-task/${projectId}/${taskId}`, {
         method: 'PUT',
         body: JSON.stringify(updates),
       }),
@@ -284,7 +284,7 @@ export const api = {
     removeTask: (projectId: string, taskId: string | number, tag?: string) => {
       const qs = tag ? `?tag=${encodeURIComponent(tag)}` : '';
       return authenticatedFetch(
-        `/api/taskmaster/task/${encodeURIComponent(projectId)}/${encodeURIComponent(taskId)}${qs}`,
+        `/api/ext/taskmaster/task/${encodeURIComponent(projectId)}/${encodeURIComponent(taskId)}${qs}`,
         { method: 'DELETE' },
       );
     },

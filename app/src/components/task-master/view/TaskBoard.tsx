@@ -81,7 +81,7 @@ export default function TaskBoard({
 
     try {
       const response = await api.get(
-        `/taskmaster/prd/${encodeURIComponent(currentProject.projectId)}/${encodeURIComponent(prd.name)}`,
+        `/ext/taskmaster/prd/${encodeURIComponent(currentProject.projectId)}/${encodeURIComponent(prd.name)}`,
       );
 
       if (!response.ok) {

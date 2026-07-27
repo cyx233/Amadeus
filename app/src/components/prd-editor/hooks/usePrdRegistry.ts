@@ -26,7 +26,7 @@ export function usePrdRegistry({ projectId }: UsePrdRegistryArgs): UsePrdRegistr
     }
 
     try {
-      const response = await api.get(`/taskmaster/prd/${encodeURIComponent(projectId)}`);
+      const response = await api.get(`/ext/taskmaster/prd/${encodeURIComponent(projectId)}`);
       if (!response.ok) {
         setExistingPrds([]);
         return;

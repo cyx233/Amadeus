@@ -36,7 +36,7 @@ export function useProjectPrdFiles({ projectId }: UseProjectPrdFilesOptions) {
 
     try {
       setIsLoadingPrdFiles(true);
-      const response = await api.get(`/taskmaster/prd/${encodeURIComponent(projectId)}`);
+      const response = await api.get(`/ext/taskmaster/prd/${encodeURIComponent(projectId)}`);
 
       if (!response.ok) {
         setPrdFiles([]);

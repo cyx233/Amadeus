@@ -60,7 +60,7 @@ export function usePrdSave({
       setSaving(true);
 
       try {
-        const response = await authenticatedFetch(`/api/taskmaster/prd/${encodeURIComponent(projectId)}`, {
+        const response = await authenticatedFetch(`/api/ext/taskmaster/prd/${encodeURIComponent(projectId)}`, {
           method: 'POST',
           body: JSON.stringify({
             fileName: finalFileName,
